@@ -1,0 +1,24 @@
+# <type>: <short summary, imperative, lowercase, no period, max ~72 chars>
+#
+# <body: what changed and why, wrapped at ~72 chars>
+#
+# Types:
+#   feat     new feature
+#   fix      bug fix
+#   docs     documentation only
+#   chore    tooling, config, housekeeping
+#   refactor code change that neither fixes a bug nor adds a feature
+#   test     adding or updating tests
+#   ci       CI/CD pipelines (GitHub Actions)
+#   build    build system, dependencies, Docker
+#   style    formatting only, no code change
+#   perf     performance improvement
+#
+# Example:
+#   feat: add task state machine
+#
+#   Enforce valid transitions (DRAFT -> ASSIGNED -> IN_PROGRESS ->
+#   SUBMITTED -> APPROVED/REJECTED) in the backend and reject invalid
+#   ones with TASK_INVALID_TRANSITION.
+#
+# Lines starting with '#' are ignored.
