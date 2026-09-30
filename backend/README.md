@@ -71,4 +71,23 @@ With the `dev` profile, the API is described with OpenAPI (springdoc):
 
 Both are turned off with the `prod` profile.
 
-Database and Docker setup are added in the next Phase 2 tasks.
+## Local Database (Docker)
+
+PostgreSQL runs in Docker, defined in
+[`docker-compose.yml`](../docker-compose.yml) at the repository root.
+Requires Docker Desktop.
+
+1. Copy `.env.example` to `.env` and set `DB_PASSWORD`.
+2. From the repository root:
+
+| Command | What it does |
+|---------|--------------|
+| `docker compose up -d` | Start PostgreSQL in the background |
+| `docker compose ps` | Show status (`healthy` when ready) |
+| `docker compose logs postgres` | Show database logs |
+| `docker compose down` | Stop it — data is kept in the `postgres-data` volume |
+| `docker compose down -v` | Stop it and **delete** all data |
+
+On Windows, if starting fails with *"bind: An attempt was made to access
+a socket in a way forbidden"*, the port is reserved by Hyper-V. Set
+`DB_PORT` in `.env` to a free port (for example `15432`).

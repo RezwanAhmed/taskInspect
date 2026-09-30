@@ -151,7 +151,7 @@ taskInspect/
 ├── docs/              # Architecture, API, database, sync and deployment docs
 │   └── decisions/     # Architecture Decision Records
 ├── .github/           # GitHub Actions workflows (planned)
-├── docker-compose.yml # Local PostgreSQL + backend (planned)
+├── docker-compose.yml # Local PostgreSQL (backend service added later)
 ├── LICENSE            # All rights reserved
 └── README.md
 ```
