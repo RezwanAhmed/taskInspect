@@ -3,6 +3,7 @@ package com.taskinspect.auth;
 import com.taskinspect.auth.dto.CurrentUserResponse;
 import com.taskinspect.auth.dto.LoginRequest;
 import com.taskinspect.auth.dto.LoginResponse;
+import com.taskinspect.auth.dto.RefreshRequest;
 import com.taskinspect.common.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,6 +34,14 @@ public class AuthController {
             description = "Returns a short-lived access token to send as `Authorization: Bearer <token>`.")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request.email(), request.password());
+    }
+
+    @PostMapping("/refresh")
+    @Operation(summary = "Get new tokens with a refresh token",
+            description = "Returns a new access token and a new refresh token. "
+                    + "The refresh token that was sent can not be used again.")
+    public LoginResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request.refreshToken());
     }
 
     @GetMapping("/me")

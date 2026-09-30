@@ -33,6 +33,8 @@ taskinspect:
     secret: ${JWT_SECRET:}
     issuer: taskinspect
     access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+  refresh-token:
+    ttl: ${REFRESH_TOKEN_TTL:30d}
   # First administrator, created on startup if no administrator exists yet
   admin:
     email: ${ADMIN_EMAIL:}
