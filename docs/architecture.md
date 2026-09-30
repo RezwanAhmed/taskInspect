@@ -2,8 +2,7 @@
 
 This document describes how TaskInspect is put together: the main
 components, what each one is responsible for, and how they talk to each
-other. More sections (backend architecture and offline sync) are added
-as the project grows.
+other. The offline sync section is added as the project grows.
 
 ## System Overview
 
@@ -312,3 +311,143 @@ Because each layer depends only on interfaces, it can be tested on its
 own: use cases and BLoCs with mocked repositories, repositories with
 mocked data sources, and screens with widget tests. Dependencies are
 wired in one place with dependency injection, so tests can swap in fakes.
+
+## Backend Architecture
+
+The backend is a single Spring Boot application (a modular monolith). It
+is organised **by feature**: each module owns its controllers, services,
+repositories, entities and DTOs, and inside every module the code follows
+the same layers.
+
+### Layers
+
+| Layer | Contains | Responsibility |
+|-------|----------|----------------|
+| Controller | `@RestController` classes, request / response DTOs | HTTP only: validate the request body, check the caller's role, call a service, return a DTO. No business logic. |
+| Service | `@Service` classes | Business rules and transactions: the task state machine, ownership checks ("is this the assigned worker?"), writing status history and audit entries. |
+| Repository | Spring Data JPA interfaces | Database access for the module's entities. |
+| Domain | JPA entities, enums (`TaskStatus`, `RequirementType`) | The data model. Entities are never returned from the API; controllers map them to DTOs. |
+
+Larger modules such as tasks can later grow into a richer structure
+(application service → domain → repository interface → infrastructure);
+the module boundary stays the same.
+
+### Modules
+
+| Module | Responsibility | Built in |
+|--------|----------------|----------|
+| `auth` | Login, JWT access tokens, refresh tokens, logout | 2.12-2.19 |
+| `users` | Users and roles (administrator, manager, worker) | 2.9-2.11, 2.20 |
+| `tasks` | Tasks, assignment, state machine, status history | 3.1-3.6, 3.9-3.10, 3.12 |
+| `requirements` | Requirements and their options | 3.7-3.8 |
+| `responses` | Workers' answers to requirements | 3.11 |
+| `reviews` | Submit, approve, reject, request correction, resubmit | 7.1-7.4 |
+| `evidence` | Evidence metadata and upload flow | 5.17, 8.2 |
+| `filestorage` | Wrapper around S3 (pre-signed URLs), replaceable in tests | 8.1-8.2 |
+| `sync` | Idempotent push / pull endpoints for the mobile app | 6.4, 6.6 |
+| `notifications` | Device tokens and push notifications through FCM | 8.5-8.6 |
+| `audit` | Audit log of important actions | 3.13 |
+| `common` | Security config, error handling, request ID logging, OpenAPI | 2.7-2.8, 2.13, 2.21 |
+
+Organizations (multi-tenant support, spec section 14) are not part of
+the first release.
+
+Modules use each other only through services — for example the reviews
+module calls `TaskService` to change a task's state, never
+`TaskRepository` directly — so each rule lives in exactly one place.
+
+### Package Structure
+
+```text
+backend/src/main/java/<base package>/
+├── auth/
+├── users/
+├── tasks/
+│   ├── TaskController.java
+│   ├── TaskService.java
+│   ├── TaskStateMachine.java
+│   ├── TaskRepository.java
+│   ├── Task.java
+│   ├── TaskStatus.java
+│   └── dto/
+├── requirements/
+├── responses/
+├── reviews/
+├── evidence/
+├── filestorage/
+├── sync/
+├── notifications/
+├── audit/
+└── common/
+    ├── config/
+    ├── error/      # error response format + global exception handler
+    ├── security/   # security config, JWT filter
+    └── logging/    # request ID / correlation ID
+backend/src/main/resources/
+├── application.yml
+└── db/migration/   # Flyway migrations (V1__..., V2__...)
+```
+
+The base package is chosen when the project is generated (task 2.1).
+
+### Request Flow: Approving a Task
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as Mobile app
+    participant F as Filters<br/>(request ID, JWT)
+    participant C as Controller
+    participant S as ReviewService
+    participant DB as PostgreSQL
+    participant N as Notifications
+
+    App->>F: POST /api/tasks/{id}/approve<br/>Authorization: Bearer JWT
+    F->>F: Add request ID, validate JWT,<br/>load user + roles
+    F->>C: Authenticated request
+    C->>C: Check role (manager / reviewer)
+    C->>S: approve(taskId, user)
+    S->>DB: Load task
+    S->>S: State machine: SUBMITTED → APPROVED?<br/>Reviewer is not the assignee?
+    S->>DB: Update task, insert review,<br/>status history and audit log (one transaction)
+    S-->>C: Approved task
+    C-->>App: 200 OK + task DTO
+    S--)N: After commit: notify worker
+```
+
+If any check fails, the service throws a business exception (for example
+`TASK_INVALID_TRANSITION`) and nothing is written. A global exception
+handler turns every error into the same JSON shape:
+
+```json
+{
+  "timestamp": "2026-10-01T09:30:00Z",
+  "status": 409,
+  "code": "TASK_INVALID_TRANSITION",
+  "message": "Task cannot be approved in status IN_PROGRESS",
+  "requestId": "3f2a9c1e"
+}
+```
+
+### Cross-cutting Concerns
+
+- **Security** — stateless Spring Security: a JWT filter authenticates
+  every request except login and refresh; roles are checked on each
+  endpoint; passwords are hashed with BCrypt; secure headers are on.
+- **Validation** — request DTOs use Bean Validation (`@NotBlank`,
+  `@Size`, ...); invalid input returns `400` with a `VALIDATION_ERROR`
+  code and the failing fields.
+- **Transactions** — each service method that changes data runs in one
+  transaction, so a state change, its history row and its audit entry are
+  saved together or not at all. Notifications are sent only after the
+  transaction commits.
+- **Database** — PostgreSQL with Flyway migrations; the schema is never
+  changed by Hibernate (`ddl-auto=validate`). Tables use UUID primary
+  keys, created / updated timestamps and indexes on frequently filtered
+  columns (status, assignee, due date).
+- **Configuration** — settings and secrets come from environment
+  variables (`.env` locally, never committed).
+- **Observability** — structured logs with a request ID on every line,
+  Spring Boot Actuator health checks, and CloudWatch in production.
+- **API documentation** — OpenAPI / Swagger UI generated from the
+  controllers.
