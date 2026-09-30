@@ -60,5 +60,15 @@ Spring Boot Actuator exposes only the health and info endpoints:
 | http://localhost:8080/actuator/health/liveness | The app is running (for container restarts) |
 | http://localhost:8080/actuator/health/readiness | The app is ready to receive traffic |
 
-Database, configuration and Docker setup are added in the next Phase 2
-tasks.
+## API Documentation
+
+With the `dev` profile, the API is described with OpenAPI (springdoc):
+
+| URL | What it shows |
+|-----|---------------|
+| http://localhost:8080/swagger-ui.html | Swagger UI — browse and try the endpoints |
+| http://localhost:8080/v3/api-docs | The OpenAPI description as JSON |
+
+Both are turned off with the `prod` profile.
+
+Database and Docker setup are added in the next Phase 2 tasks.

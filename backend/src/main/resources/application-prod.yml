@@ -8,3 +8,10 @@ server:
   error:
     include-message: never
     include-stacktrace: never
+
+# API documentation is for development only
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
