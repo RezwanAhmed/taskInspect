@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,6 +28,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ErrorResponse> handleApiException(ApiException ex) {
         return respond(ex.getStatus(), new ErrorResponse(ex.getStatus().value(), ex.getCode(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ErrorResponse> handleUnauthenticated(AuthenticationException ex) {
+        HttpStatus status = HttpStatus.UNAUTHORIZED;
+        return respond(status, new ErrorResponse(status.value(), ErrorCode.UNAUTHORIZED,
+                "Authentication is required"));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        HttpStatus status = HttpStatus.FORBIDDEN;
+        return respond(status, new ErrorResponse(status.value(), ErrorCode.FORBIDDEN,
+                "You are not allowed to do this"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
