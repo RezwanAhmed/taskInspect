@@ -1,5 +1,6 @@
 package com.taskinspect.tasks;
 
+import static com.taskinspect.tasks.TaskSpecifications.assignedTo;
 import static com.taskinspect.tasks.TaskSpecifications.dueBefore;
 import static com.taskinspect.tasks.TaskSpecifications.dueFrom;
 import static com.taskinspect.tasks.TaskSpecifications.hasPriority;
@@ -102,16 +103,15 @@ public class TaskService {
 
     /**
      * Tasks the caller may see, filtered and paged. Administrators and
-     * managers see every task of their organization. Workers see only the
-     * tasks assigned to them (assignments are added in task 3.9, so for now
-     * they see none).
+     * managers see every task of their organization; workers see only the
+     * tasks assigned to them.
      */
     @Transactional(readOnly = true)
     public Page<Task> list(CurrentUser caller, TaskFilter filter, Pageable pageable) {
         User user = userService.requireCaller(caller);
         Specification<Task> visible = canSeeAllTasks(user)
                 ? inOrganization(user.getOrganization().getId())
-                : (task, query, cb) -> cb.disjunction();
+                : Specification.allOf(inOrganization(user.getOrganization().getId()), assignedTo(user.getId()));
         return taskRepository.findAll(Specification.allOf(visible, hasStatus(filter.status()),
                 hasPriority(filter.priority()), dueFrom(filter.dueFrom()), dueBefore(filter.dueBefore())), pageable);
     }
@@ -121,8 +121,12 @@ public class TaskService {
     public Task get(CurrentUser caller, UUID id) {
         User user = userService.requireCaller(caller);
         return taskRepository.findByIdAndOrganizationId(id, user.getOrganization().getId())
-                .filter(task -> canSeeAllTasks(user))
+                .filter(task -> canSeeAllTasks(user) || isAssignee(task, user))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, TASK_NOT_FOUND, "Task not found"));
+    }
+
+    private static boolean isAssignee(Task task, User user) {
+        return task.getAssignee() != null && task.getAssignee().getId().equals(user.getId());
     }
 
     private static boolean canSeeAllTasks(User user) {

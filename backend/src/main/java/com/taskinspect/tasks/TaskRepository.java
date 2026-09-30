@@ -11,16 +11,16 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 /**
  * Tasks; combine {@link TaskSpecifications} for filtered, paged lists. The
- * creator and reviewer are loaded together with the task, because the API
+ * creator, reviewer and assignee are loaded together with the task, because the API
  * returns them after the transaction has ended.
  */
 public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificationExecutor<Task> {
 
-    @EntityGraph(attributePaths = {"createdBy", "reviewer"})
+    @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
     Optional<Task> findByIdAndOrganizationId(UUID id, UUID organizationId);
 
     @Override
-    @EntityGraph(attributePaths = {"createdBy", "reviewer"})
+    @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
     Page<Task> findAll(Specification<Task> spec, Pageable pageable);
 
 }

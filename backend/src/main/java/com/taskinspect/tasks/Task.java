@@ -61,6 +61,10 @@ public class Task {
     @JoinColumn(name = "reviewer_id", nullable = false)
     private User reviewer;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id")
+    private User assignee;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -97,6 +101,10 @@ public class Task {
         this.priority = priority;
         this.dueDate = dueDate;
         this.reviewer = reviewer != null ? reviewer : createdBy;
+    }
+
+    void assignTo(User worker) {
+        this.assignee = worker;
     }
 
     /** Only the task state machine changes the status. */
@@ -138,6 +146,11 @@ public class Task {
 
     public User getReviewer() {
         return reviewer;
+    }
+
+    /** The worker the task is assigned to, or {@code null} before it is assigned. */
+    public User getAssignee() {
+        return assignee;
     }
 
     public long getVersion() {

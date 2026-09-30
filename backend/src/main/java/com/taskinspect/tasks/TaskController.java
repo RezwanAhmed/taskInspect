@@ -4,6 +4,7 @@ import com.taskinspect.common.config.OpenApiConfig;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.common.security.Roles;
 import com.taskinspect.common.web.PageResponse;
+import com.taskinspect.tasks.dto.AssignTaskRequest;
 import com.taskinspect.tasks.dto.CreateTaskRequest;
 import com.taskinspect.tasks.dto.TaskResponse;
 import com.taskinspect.tasks.dto.UpdateTaskRequest;
@@ -38,9 +39,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskController {
 
     private final TaskService taskService;
+    private final TaskAssignmentService assignmentService;
 
-    public TaskController(TaskService taskService) {
+    public TaskController(TaskService taskService, TaskAssignmentService assignmentService) {
         this.taskService = taskService;
+        this.assignmentService = assignmentService;
     }
 
     @GetMapping
@@ -72,6 +75,16 @@ public class TaskController {
     public TaskResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
             @Valid @RequestBody UpdateTaskRequest request) {
         return TaskResponse.from(taskService.update(CurrentUser.from(jwt), id, request));
+    }
+
+    @PostMapping("/{id}/assign")
+    @PreAuthorize(Roles.MANAGER)
+    @Operation(summary = "Assign a task to a worker", description = "DRAFT → ASSIGNED. Only the manager who "
+            + "created the task; it needs at least one requirement, the assignee must be an active worker, "
+            + "and the reviewer cannot be the assignee (except a personal task assigned to yourself).")
+    public TaskResponse assign(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+            @Valid @RequestBody AssignTaskRequest request) {
+        return TaskResponse.from(assignmentService.assign(CurrentUser.from(jwt), id, request.assigneeId()));
     }
 
     @PostMapping

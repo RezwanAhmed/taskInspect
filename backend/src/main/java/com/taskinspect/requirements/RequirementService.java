@@ -35,6 +35,12 @@ public class RequirementService {
         return requirementRepository.findAllByTaskIdOrderByPosition(task.getId());
     }
 
+    /** How many requirements a task has, e.g. to check that it can be assigned. */
+    @Transactional(readOnly = true)
+    public long count(UUID taskId) {
+        return requirementRepository.countByTaskId(taskId);
+    }
+
     /** Adds a requirement at the end of the task's list. */
     @Transactional
     public Requirement create(CurrentUser caller, UUID taskId, RequirementRequest request) {

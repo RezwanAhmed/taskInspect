@@ -18,6 +18,10 @@ public final class TaskSpecifications {
         return (task, query, cb) -> cb.equal(task.get("organization").get("id"), organizationId);
     }
 
+    public static Specification<Task> assignedTo(UUID userId) {
+        return (task, query, cb) -> cb.equal(task.get("assignee").get("id"), userId);
+    }
+
     public static Specification<Task> hasStatus(TaskStatus status) {
         return status == null ? Specification.unrestricted() : (task, query, cb) -> cb.equal(task.get("status"), status);
     }
