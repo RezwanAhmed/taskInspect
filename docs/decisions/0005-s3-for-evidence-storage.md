@@ -58,3 +58,18 @@ PostgreSQL.
 - The real S3 integration is built in Phase 8 (tasks 8.1-8.3). Until
   then, evidence metadata and the upload endpoint (task 5.17) work
   against the `filestorage` abstraction.
+
+## Updates
+
+**2026-10-01** — Decision by the project owner: **PDF documents are
+also accepted as evidence** (for example certificates or service
+reports), through a new *Document (PDF)* requirement type.
+
+- Allowed file types are now JPEG, PNG and PDF. The backend checks the
+  type and size before issuing an upload URL, and the pre-signed URL
+  only accepts that content type.
+- PDFs are picked from the device's files and are not compressed; they
+  have their own size limit.
+- PDFs follow the same path as photos: local file, upload queue,
+  pre-signed upload to S3, metadata in the `evidence` table, and
+  pre-signed download URLs for reviewers.

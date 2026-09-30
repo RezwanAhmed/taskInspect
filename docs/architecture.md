@@ -10,7 +10,7 @@ TaskInspect has three parts:
 
 - **Mobile app (Flutter)** — used by workers to execute tasks and by
   managers to create, assign and review them. The app is offline-first:
-  tasks, answers and photos are stored in a local database on the device,
+  tasks, answers and evidence files are stored in a local database on the device,
   and a sync manager exchanges changes with the backend whenever a
   connection is available.
 - **Backend API (Spring Boot)** — a stateless REST API that owns the
@@ -19,9 +19,9 @@ TaskInspect has three parts:
   important action. The mobile app never writes to the database or
   storage directly — it goes through the API.
 - **Data and cloud services** — PostgreSQL is the source of truth for all
-  business data. Photo evidence goes to AWS S3; the database keeps only its
-  metadata. Firebase Cloud Messaging delivers push notifications, and
-  CloudWatch collects backend logs.
+  business data. Evidence files (photos and PDFs) go to AWS S3; the
+  database keeps only their metadata. Firebase Cloud Messaging delivers
+  push notifications, and CloudWatch collects backend logs.
 
 Everything is kept deliberately small: one backend service, one database
 and a few managed cloud services, so that the whole system can be
@@ -34,7 +34,7 @@ flowchart LR
     subgraph Device["Mobile device — Flutter app"]
         UI["UI<br/>(screens + BLoC)"]
         Sync["Sync manager<br/>(background)"]
-        Local[("Local database<br/>+ photo files")]
+        Local[("Local database<br/>+ evidence files")]
         UI --> Local
         Sync --> Local
     end
@@ -46,13 +46,13 @@ flowchart LR
 
     PG[("PostgreSQL<br/>business data")]
     Redis[("Redis<br/>cache, optional")]
-    S3[("AWS S3<br/>photo evidence")]
+    S3[("AWS S3<br/>evidence files")]
     FCM["Firebase Cloud<br/>Messaging"]
     CW["AWS CloudWatch<br/>logs"]
 
     UI -->|"REST + JWT"| API
     Sync -->|"REST + JWT<br/>push / pull"| API
-    Sync -->|"upload photo<br/>(pre-signed URL)"| S3
+    Sync -->|"upload files<br/>(pre-signed URL)"| S3
     API --> PG
     API -.-> Redis
     API -->|"pre-signed URLs"| S3
@@ -73,13 +73,13 @@ notifications from it).
 |-----------|----------------|
 | Flutter UI | Screens for login, dashboard, task list, requirement execution and review. State is managed with BLoC; the UI reads and writes the local database, so it works the same online and offline. |
 | Local database | Stores tasks, requirements, answers and the sync queue on the device. It is the source of truth for the UI while offline. |
-| Local photo files | Compressed photos waiting to be uploaded, referenced from the local database. |
-| Sync manager | Pushes queued local changes to the backend, pulls server changes, uploads photos and retries failed operations with backoff. Runs in the background. |
+| Local evidence files | Compressed photos and attached PDF documents waiting to be uploaded, referenced from the local database. |
+| Sync manager | Pushes queued local changes to the backend, pulls server changes, uploads evidence files and retries failed operations with backoff. Runs in the background. |
 | Spring Boot REST API | Authentication (JWT access + refresh tokens), role-based authorization, task and requirement management, the task state machine, review, audit log and the sync endpoints. Documented with OpenAPI / Swagger. |
 | Notification service | Sends notifications for assignment, submission and review results through FCM to the users' registered devices. |
 | PostgreSQL | Users, roles, tasks, requirements, responses, reviews, status history, audit log and evidence metadata. Schema managed with Flyway migrations. |
 | Redis | Optional cache / short-lived data where it clearly helps; the system works without it. |
-| AWS S3 | Stores photo evidence. The backend issues a pre-signed upload URL, the app uploads the photo directly, and the backend stores the file's metadata (task, requirement, storage key, type, size). |
+| AWS S3 | Stores evidence files (photos and PDF documents). The backend issues a pre-signed upload URL, the app uploads the file directly, and the backend stores the file's metadata (task, requirement, storage key, type, size). |
 | Firebase Cloud Messaging | Delivers push notifications to the mobile app (foreground, background and tap to open the task). |
 | AWS CloudWatch | Central backend logs, together with Spring Boot Actuator health checks. |
 
@@ -91,7 +91,7 @@ notifications from it).
   changes are saved locally first and synchronized later.
 - **Idempotent synchronization.** Every queued operation has an ID, so
   sending the same request twice never creates duplicate data.
-- **Files outside the database.** Photos live in object storage; the
+- **Files outside the database.** Photos and PDFs live in object storage; the
   database stores only metadata.
 - **Stateless API.** Authentication uses JWT, so the backend can be
   restarted or scaled without losing sessions.
@@ -241,7 +241,7 @@ flowchart TB
     end
 
     API["Backend REST API"]
-    DB[("Local database<br/>+ photo files")]
+    DB[("Local database<br/>+ evidence files")]
 
     W -->|"events"| B
     B -->|"calls"| UC
@@ -506,7 +506,7 @@ in the background.
 | Create and edit draft tasks and their requirements (manager) | Assign tasks (manager) |
 | Start a task | Review: approve, reject, request correction |
 | Answer requirements, add comments | Download tasks not yet on the device |
-| Take and attach photos | |
+| Take photos, attach PDF documents | |
 | Submit a task (shown as *submitted locally*) | |
 
 A task created offline gets its ID on the device and is sent to the
@@ -564,8 +564,8 @@ sequenceDiagram
     App->>App: Save locally + queue operations
     App-->>W: Shown at once as pending
     Note over SM: Connection returns
-    SM->>API: Request pre-signed URL for each new photo
-    SM->>S3: Upload photo files
+    SM->>API: Request pre-signed URL for each new file
+    SM->>S3: Upload photos and PDFs
     SM->>API: POST /api/sync/push (queued operations, in order)
     API->>API: Skip already-applied IDs,<br/>check rules, save
     API-->>SM: Result per operation
@@ -575,9 +575,9 @@ sequenceDiagram
     SM->>App: Update local records + cursor
 ```
 
-1. **Photos first.** Photos are uploaded before the operations that
+1. **Files first.** Photos and PDFs are uploaded before the operations that
    depend on them, so a task is never submitted to the server with
-   evidence the server cannot find. Photos have their own upload queue
+   evidence the server cannot find. Files have their own upload queue
    with the same statuses and retries (task 6.12).
 2. **Push.** `POST /api/sync/push` sends pending operations in the order
    they were created. The server records every applied operation ID in
@@ -659,7 +659,7 @@ source of truth for the worker's own unsent answers.
 | Push endpoint + SyncManager push | 6.4-6.5 |
 | Pull endpoint + SyncManager pull | 6.6-6.7 |
 | Retries, expired login, conflicts | 6.8-6.10 |
-| Background sync, photo upload queue | 6.11-6.12 |
+| Background sync, evidence upload queue | 6.11-6.12 |
 | Sync status UI and tests | 6.13-6.14 |
 
 The full sync API and edge cases are documented in `docs/offline-sync.md`
