@@ -14,6 +14,8 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -60,6 +62,25 @@ public class GlobalExceptionHandler {
         HttpStatus status = HttpStatus.BAD_REQUEST;
         return respond(status, new ErrorResponse(status.value(), ErrorCode.VALIDATION_ERROR,
                 "Request validation failed", errors));
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    ResponseEntity<ErrorResponse> handleParameterValidation(HandlerMethodValidationException ex) {
+        List<ErrorResponse.FieldError> errors = ex.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> new ErrorResponse.FieldError(
+                                result.getMethodParameter().getParameterName(), error.getDefaultMessage())))
+                .toList();
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        return respond(status, new ErrorResponse(status.value(), ErrorCode.VALIDATION_ERROR,
+                "Request validation failed", errors));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        return respond(status, new ErrorResponse(status.value(), ErrorCode.INVALID_PARAMETER,
+                "Invalid value for parameter '" + ex.getName() + "'"));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
