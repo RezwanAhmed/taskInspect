@@ -35,6 +35,18 @@ public class RequirementService {
         return requirementRepository.findAllByTaskIdOrderByPosition(task.getId());
     }
 
+    /**
+     * A requirement of the given task with its options, for other modules
+     * that have already checked the caller's access to the task.
+     */
+    @Transactional(readOnly = true)
+    public Requirement getForTask(UUID taskId, UUID requirementId) {
+        return requirementRepository.findWithOptionsById(requirementId)
+                .filter(requirement -> requirement.getTask().getId().equals(taskId))
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, REQUIREMENT_NOT_FOUND,
+                        "Requirement not found"));
+    }
+
     /** How many requirements a task has, e.g. to check that it can be assigned. */
     @Transactional(readOnly = true)
     public long count(UUID taskId) {
