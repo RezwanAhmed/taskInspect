@@ -13,6 +13,11 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+logging:
+  pattern:
+    # Adds the request ID (see RequestIdFilter) to every log line
+    level: "%5p [%X{requestId:-}]"
+
 management:
   endpoints:
     web:
