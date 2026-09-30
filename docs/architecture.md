@@ -2,8 +2,8 @@
 
 This document describes how TaskInspect is put together: the main
 components, what each one is responsible for, and how they talk to each
-other. More sections (task lifecycle, mobile architecture, backend
-architecture and offline sync) are added as the project grows.
+other. More sections (mobile architecture, backend architecture and
+offline sync) are added as the project grows.
 
 ## System Overview
 
@@ -96,3 +96,84 @@ notifications from it).
   database stores only metadata.
 - **Stateless API.** Authentication uses JWT, so the backend can be
   restarted or scaled without losing sessions.
+
+## Task Lifecycle
+
+Every task moves through a fixed set of states. The backend owns this
+state machine: each action is a separate API call, and the server checks
+that the change is allowed from the current state and by the current user
+before applying it. The mobile app only offers the actions that are valid,
+but it is never trusted to decide.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> DRAFT: create
+    DRAFT --> ASSIGNED: assign
+    ASSIGNED --> IN_PROGRESS: start
+    IN_PROGRESS --> SUBMITTED: submit
+    SUBMITTED --> APPROVED: approve
+    SUBMITTED --> REJECTED: reject /<br/>request correction
+    REJECTED --> IN_PROGRESS: start correction
+    APPROVED --> [*]
+
+    DRAFT --> CANCELLED: cancel
+    ASSIGNED --> CANCELLED: cancel
+    IN_PROGRESS --> CANCELLED: cancel
+    REJECTED --> CANCELLED: cancel
+    CANCELLED --> [*]
+```
+
+### States
+
+| State | Meaning |
+|-------|---------|
+| `DRAFT` | Created by a manager; title, details and requirements are still being defined. Not visible to workers. |
+| `ASSIGNED` | Assigned to a worker, who has not started it yet (shown as *pending* in the app). |
+| `IN_PROGRESS` | The worker is completing the requirements and attaching evidence. |
+| `SUBMITTED` | The worker has submitted the task; it is waiting for review. |
+| `REJECTED` | The reviewer rejected the task or requested a correction, with a reason. It is back with the worker. |
+| `APPROVED` | The reviewer accepted the task. Final — it can no longer be changed. |
+| `CANCELLED` | A manager cancelled the task. Final. |
+
+### Transitions
+
+| From | To | Action | Who | Conditions |
+|------|----|--------|-----|------------|
+| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. |
+| `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
+| `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
+| `IN_PROGRESS` | `SUBMITTED` | Submit (`POST /api/tasks/{id}/submit`) | Assigned worker | Every required requirement has a response. |
+| `SUBMITTED` | `APPROVED` | Approve | Manager / reviewer | The reviewer is not the assignee. |
+| `SUBMITTED` | `REJECTED` | Reject or request correction | Manager / reviewer | A reason is given; the reviewer is not the assignee. |
+| `REJECTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
+| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED` | `CANCELLED` | Cancel | Manager | — |
+
+*Reject* and *request correction* lead to the same state. The review
+record stores which one the reviewer chose, the reason, and (optionally)
+the requirements that need to be redone, so the worker knows exactly what
+to fix.
+
+### Rules
+
+- **Invalid changes are rejected.** Any action that is not in the table —
+  for example approving a task that is still `IN_PROGRESS` — returns
+  `409 Conflict` with the error code `TASK_INVALID_TRANSITION`. Acting on a
+  final task returns a specific code such as `TASK_ALREADY_APPROVED`.
+- **Roles are checked on every call.** A worker can never approve or
+  reject a task — including their own — even with a hand-crafted request.
+- **Responses are editable only while the task is `IN_PROGRESS`.** Once a
+  task is submitted, the worker's answers and evidence are locked until the
+  task is rejected back to them.
+- **Final states are final.** `APPROVED` and `CANCELLED` tasks cannot be
+  modified.
+- **Every change is recorded.** Each transition writes a row to the task's
+  status history (old state, new state, user, time, reason) and an entry
+  in the audit log. These rows build the task history timeline (created,
+  assigned, started, submitted, rejected, resubmitted, approved).
+- **Changes trigger notifications.** Assigning, submitting, approving and
+  rejecting notify the other party through push notifications.
+- **Offline actions are applied when they reach the server.** A worker can
+  start and submit a task offline; the app shows it as *submitted locally*
+  and the state machine checks the action when it is synchronized (see
+  the offline sync section).
