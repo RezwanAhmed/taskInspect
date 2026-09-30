@@ -69,6 +69,25 @@ public class UserService {
                 passwordEncoder.encode(request.password()), request.fullName().trim(), roles));
     }
 
+    /** The caller's own user record, for other modules (e.g. the creator of a task). */
+    @Transactional(readOnly = true)
+    public User requireCaller(CurrentUser caller) {
+        return userRepository.findById(caller.id())
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Unknown user"));
+    }
+
+    /**
+     * An active user of the organization who has the given role, or
+     * {@code errorCode} (400) if there is none — e.g. to check a chosen reviewer.
+     */
+    @Transactional(readOnly = true)
+    public User requireActiveWithRole(UUID id, UUID organizationId, RoleName role, String errorCode, String message) {
+        return userRepository.findByIdAndOrganizationId(id, organizationId)
+                .filter(User::isActive)
+                .filter(user -> user.hasRole(role))
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, errorCode, message));
+    }
+
     private UUID organizationOf(CurrentUser caller) {
         return userRepository.findById(caller.id())
                 .map(user -> user.getOrganization().getId())
