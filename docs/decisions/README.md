@@ -12,6 +12,7 @@ old one and the old one is marked *Superseded*.
 |-----|-------|--------|
 | [0001](0001-flutter-for-cross-platform-mobile.md) | Flutter for cross-platform mobile | Accepted |
 | [0002](0002-postgresql-as-primary-database.md) | PostgreSQL as primary database | Accepted |
+| [0003](0003-jwt-authentication.md) | JWT authentication | Accepted |
 
 ## Writing a New ADR
 
