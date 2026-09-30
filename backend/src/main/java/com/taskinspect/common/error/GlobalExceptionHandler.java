@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -35,6 +36,13 @@ public class GlobalExceptionHandler {
         HttpStatus status = HttpStatus.UNAUTHORIZED;
         return respond(status, new ErrorResponse(status.value(), ErrorCode.UNAUTHORIZED,
                 "Authentication is required"));
+    }
+
+    @ExceptionHandler(InvalidBearerTokenException.class)
+    ResponseEntity<ErrorResponse> handleInvalidToken(InvalidBearerTokenException ex) {
+        HttpStatus status = HttpStatus.UNAUTHORIZED;
+        return respond(status, new ErrorResponse(status.value(), ErrorCode.INVALID_TOKEN,
+                "Access token is invalid or expired"));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

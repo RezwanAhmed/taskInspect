@@ -16,7 +16,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +32,10 @@ class GlobalExceptionHandlerTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    // Needed by SecurityConfig; tokens are not used in these tests
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @Test
     void apiExceptionUsesItsStatusAndCode() throws Exception {

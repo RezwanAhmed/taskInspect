@@ -7,6 +7,8 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -15,6 +17,9 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
  * Base security for the REST API: stateless (no sessions or cookies),
  * no form or basic login, secure response headers, and every endpoint
  * protected except health checks, API docs and the login endpoints.
+ * Requests authenticate with a JWT access token
+ * ({@code Authorization: Bearer <token>}); the token's roles become
+ * authorities such as {@code ROLE_MANAGER}.
  * Authentication and authorization errors are returned in the common
  * error format by {@link com.taskinspect.common.error.GlobalExceptionHandler}.
  */
@@ -45,12 +50,26 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())
+                .oauth2ResourceServer(resourceServer -> resourceServer
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                        .authenticationEntryPoint((request, response, ex) ->
+                                exceptionResolver.resolveException(request, response, null, ex)))
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, ex) ->
                                 exceptionResolver.resolveException(request, response, null, ex))
                         .accessDeniedHandler((request, response, ex) ->
                                 exceptionResolver.resolveException(request, response, null, ex)));
         return http.build();
+    }
+
+    /** Maps the token's {@code roles} claim to {@code ROLE_*} authorities; the principal is the user ID. */
+    static JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
+        authorities.setAuthoritiesClaimName("roles");
+        authorities.setAuthorityPrefix("ROLE_");
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
     }
 
 }
