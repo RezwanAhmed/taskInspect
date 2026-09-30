@@ -38,12 +38,12 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final UserService userService;
-    private final TaskStateMachine stateMachine;
+    private final TaskTransitionService transitions;
 
-    public TaskService(TaskRepository taskRepository, UserService userService, TaskStateMachine stateMachine) {
+    public TaskService(TaskRepository taskRepository, UserService userService, TaskTransitionService transitions) {
         this.taskRepository = taskRepository;
         this.userService = userService;
-        this.stateMachine = stateMachine;
+        this.transitions = transitions;
     }
 
     /**
@@ -53,8 +53,10 @@ public class TaskService {
     @Transactional
     public Task create(CurrentUser caller, CreateTaskRequest request) {
         User creator = userService.requireCaller(caller);
-        return taskRepository.save(new Task(creator, request.title().trim(), clean(request.description()),
+        Task task = taskRepository.save(new Task(creator, request.title().trim(), clean(request.description()),
                 request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
+        transitions.recordCreated(task, creator);
+        return task;
     }
 
     /**
@@ -81,7 +83,7 @@ public class TaskService {
     @Transactional
     public Task start(CurrentUser caller, UUID id) {
         Task task = requireAssignee(caller, id);
-        stateMachine.apply(task, TaskAction.START);
+        transitions.apply(task, TaskAction.START, userService.requireCaller(caller), null);
         return taskRepository.saveAndFlush(task);
     }
 

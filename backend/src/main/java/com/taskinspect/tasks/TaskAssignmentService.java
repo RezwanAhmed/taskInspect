@@ -23,16 +23,18 @@ public class TaskAssignmentService {
     private final TaskRepository taskRepository;
     private final TaskAssignmentRepository assignmentRepository;
     private final TaskStateMachine stateMachine;
+    private final TaskTransitionService transitions;
     private final RequirementService requirementService;
     private final UserService userService;
 
     public TaskAssignmentService(TaskService taskService, TaskRepository taskRepository,
             TaskAssignmentRepository assignmentRepository, TaskStateMachine stateMachine,
-            RequirementService requirementService, UserService userService) {
+            TaskTransitionService transitions, RequirementService requirementService, UserService userService) {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
         this.assignmentRepository = assignmentRepository;
         this.stateMachine = stateMachine;
+        this.transitions = transitions;
         this.requirementService = requirementService;
         this.userService = userService;
     }
@@ -62,7 +64,7 @@ public class TaskAssignmentService {
 
         User assigner = userService.requireCaller(caller);
         task.assignTo(assignee);
-        stateMachine.apply(task, TaskAction.ASSIGN);
+        transitions.apply(task, TaskAction.ASSIGN, assigner, null);
         assignmentRepository.save(new TaskAssignment(task, assignee, assigner));
         return taskRepository.saveAndFlush(task);
     }
