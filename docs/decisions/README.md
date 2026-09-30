@@ -14,6 +14,7 @@ old one and the old one is marked *Superseded*.
 | [0002](0002-postgresql-as-primary-database.md) | PostgreSQL as primary database | Accepted |
 | [0003](0003-jwt-authentication.md) | JWT authentication | Accepted |
 | [0004](0004-offline-first-mobile-architecture.md) | Offline-first mobile architecture | Accepted |
+| [0005](0005-s3-for-evidence-storage.md) | S3 for evidence storage | Accepted |
 
 ## Writing a New ADR
 
