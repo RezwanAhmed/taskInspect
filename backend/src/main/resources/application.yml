@@ -1,6 +1,17 @@
 spring:
   application:
     name: taskinspect-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  config:
+    # Local development: read a .env file (repository root or backend/)
+    # if it exists. Real environment variables always win.
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+
+server:
+  port: ${SERVER_PORT:8080}
 
 management:
   endpoints:

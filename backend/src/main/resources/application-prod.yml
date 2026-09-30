@@ -1,0 +1,10 @@
+# Production: quiet logs, no error details sent to clients
+logging:
+  level:
+    root: INFO
+    com.taskinspect: INFO
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never

@@ -28,6 +28,28 @@ Run from this `backend/` folder (use `gradlew.bat` on Windows,
 | `gradlew.bat test` | Run the tests |
 | `gradlew.bat bootRun` | Start the API on http://localhost:8080 |
 
+## Configuration
+
+All settings that differ between environments come from environment
+variables — nothing secret is committed.
+
+1. Copy [`.env.example`](../.env.example) (repository root) to `.env`
+   and adjust the values. `.env` is ignored by git.
+2. When the backend starts, it reads `.env` from the repository root or
+   from `backend/` if one exists. Real environment variables (Docker,
+   CI, cloud) always take priority over `.env`.
+
+Profiles select environment-specific settings:
+
+| Profile | File | Used for |
+|---------|------|----------|
+| `dev` (default) | `application-dev.yml` | Local development — debug logging for `com.taskinspect` |
+| `prod` | `application-prod.yml` | Production — quiet logs, no error details or stack traces sent to clients |
+
+Set the profile with `SPRING_PROFILES_ACTIVE` (for example
+`SPRING_PROFILES_ACTIVE=prod`). Shared settings live in
+`application.yml`.
+
 ## Health Check
 
 Spring Boot Actuator exposes only the health and info endpoints:
