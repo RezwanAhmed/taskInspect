@@ -87,6 +87,14 @@ public class TaskController {
         return TaskResponse.from(assignmentService.assign(CurrentUser.from(jwt), id, request.assigneeId()));
     }
 
+    @PostMapping("/{id}/start")
+    @PreAuthorize(Roles.WORKER)
+    @Operation(summary = "Start working on a task", description = "The assigned worker only. ASSIGNED → "
+            + "IN_PROGRESS; also used to work on the task again after a reject or a correction request.")
+    public TaskResponse start(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return TaskResponse.from(taskService.start(CurrentUser.from(jwt), id));
+    }
+
     @PostMapping
     @PreAuthorize(Roles.MANAGER)
     @Operation(summary = "Create a draft task", description = "Managers only. The task starts as DRAFT; "

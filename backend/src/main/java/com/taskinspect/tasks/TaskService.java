@@ -38,10 +38,12 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final UserService userService;
+    private final TaskStateMachine stateMachine;
 
-    public TaskService(TaskRepository taskRepository, UserService userService) {
+    public TaskService(TaskRepository taskRepository, UserService userService, TaskStateMachine stateMachine) {
         this.taskRepository = taskRepository;
         this.userService = userService;
+        this.stateMachine = stateMachine;
     }
 
     /**
@@ -70,6 +72,28 @@ public class TaskService {
         task.updateDetails(request.title().trim(), clean(request.description()), request.priority(),
                 request.dueDate(), reviewer(request.reviewerId(), task.getCreatedBy()));
         return taskRepository.saveAndFlush(task);
+    }
+
+    /**
+     * The assigned worker starts the task (ASSIGNED → IN_PROGRESS), or starts
+     * working on it again after a reject or a correction request.
+     */
+    @Transactional
+    public Task start(CurrentUser caller, UUID id) {
+        Task task = requireAssignee(caller, id);
+        stateMachine.apply(task, TaskAction.START);
+        return taskRepository.saveAndFlush(task);
+    }
+
+    /** A task the caller works on: only its assigned worker gets it. */
+    @Transactional(readOnly = true)
+    public Task requireAssignee(CurrentUser caller, UUID id) {
+        Task task = get(caller, id);
+        if (task.getAssignee() == null || !task.getAssignee().getId().equals(caller.id())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    "Only the worker the task is assigned to can do this");
+        }
+        return task;
     }
 
     /**
