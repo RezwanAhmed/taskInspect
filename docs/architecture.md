@@ -467,6 +467,31 @@ handler turns every error into the same JSON shape:
 }
 ```
 
+### API Permissions
+
+Every endpoint checks the caller's role (`@PreAuthorize`) and, where it
+matters, ownership in the service. Tasks a user may not see answer
+`404`, so their existence is not revealed.
+
+| Endpoint | Allowed | Everyone else |
+|----------|---------|---------------|
+| `POST /api/auth/login`, `/refresh`, `/logout` | Anyone | — |
+| `GET /api/auth/me` | Any logged-in user | `401` |
+| `GET /api/users` | Administrators, managers | `403` |
+| `GET /api/users/{id}` | Administrators, managers; others only themselves | `403` |
+| `POST /api/users` | Administrators | `403` |
+| `POST /api/tasks` | Managers | `403` |
+| `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them | `404` (hidden) |
+| `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
+| `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
+| `GET /api/tasks/{id}/requirements`, `…/responses` | Anyone who can see the task | `404` |
+| `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
+| `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
+| `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
+
+Without a valid access token every endpoint except login, refresh,
+logout, health checks and API docs answers `401`.
+
 ### Cross-cutting Concerns
 
 - **Security** — stateless Spring Security: a JWT filter authenticates
