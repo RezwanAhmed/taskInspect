@@ -25,7 +25,7 @@ Run from this `backend/` folder (use `gradlew.bat` on Windows,
 | Command | What it does |
 |---------|--------------|
 | `gradlew.bat build` | Compile, run all tests and build the jar |
-| `gradlew.bat test` | Run the tests |
+| `gradlew.bat test` | Run the tests (Docker must be running — tests start a real PostgreSQL with Testcontainers) |
 | `gradlew.bat bootRun` | Start the API on http://localhost:8080 |
 
 ## Configuration
@@ -72,6 +72,10 @@ With the `dev` profile, the API is described with OpenAPI (springdoc):
 Both are turned off with the `prod` profile.
 
 ## Local Database (Docker)
+
+The backend connects to PostgreSQL using the `DB_HOST`, `DB_PORT`,
+`DB_NAME`, `DB_USERNAME` and `DB_PASSWORD` variables from `.env`. Start
+the database before `bootRun`.
 
 PostgreSQL runs in Docker, defined in
 [`docker-compose.yml`](../docker-compose.yml) at the repository root.

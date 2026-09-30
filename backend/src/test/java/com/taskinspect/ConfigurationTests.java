@@ -6,12 +6,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.test.context.ActiveProfiles;
 
 class ConfigurationTests {
 
     @Nested
+    @Import(TestcontainersConfiguration.class)
     @SpringBootTest(properties = "SERVER_PORT=9191")
     class Defaults {
 
@@ -31,6 +33,7 @@ class ConfigurationTests {
     }
 
     @Nested
+    @Import(TestcontainersConfiguration.class)
     @SpringBootTest
     @ActiveProfiles("prod")
     class Production {
