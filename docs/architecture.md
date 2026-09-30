@@ -2,8 +2,8 @@
 
 This document describes how TaskInspect is put together: the main
 components, what each one is responsible for, and how they talk to each
-other. More sections (mobile architecture, backend architecture and
-offline sync) are added as the project grows.
+other. More sections (backend architecture and offline sync) are added
+as the project grows.
 
 ## System Overview
 
@@ -177,3 +177,138 @@ to fix.
   start and submit a task offline; the app shows it as *submitted locally*
   and the state machine checks the action when it is synchronized (see
   the offline sync section).
+
+## Mobile Architecture
+
+The Flutter app follows **feature-based Clean Architecture** with
+**BLoC** for state management. Each feature (authentication, tasks,
+requirements, evidence, review, ...) is split into the same three layers,
+and dependencies always point inwards: the UI knows about the domain, the
+data layer implements the domain, and the domain knows about neither.
+
+```mermaid
+flowchart TB
+    subgraph Presentation["Presentation"]
+        W["Screens + widgets"]
+        B["BLoC<br/>(events in, states out)"]
+    end
+
+    subgraph Domain["Domain — pure Dart"]
+        UC["Use cases"]
+        RI["Repository interfaces<br/>+ entities"]
+    end
+
+    subgraph Data["Data"]
+        R["Repository implementations"]
+        Remote["Remote data source<br/>(Dio API client)"]
+        LocalDS["Local data source<br/>(database + files)"]
+    end
+
+    API["Backend REST API"]
+    DB[("Local database<br/>+ photo files")]
+
+    W -->|"events"| B
+    B -->|"calls"| UC
+    UC -->|"uses"| RI
+    RI -->|"implemented by"| R
+    R --> Remote
+    R --> LocalDS
+    Remote -->|"HTTPS + JWT"| API
+    LocalDS --> DB
+```
+
+Arrows show how a call travels. The code dependencies point the other
+way where it matters: repository implementations in the data layer
+depend on the interfaces defined in the domain, so the domain never
+imports anything from the data layer.
+
+### Layers
+
+| Layer | Folder | Contains | Depends on |
+|-------|--------|----------|------------|
+| Presentation | `features/<feature>/presentation/` | Screens, widgets and BLoCs. Widgets send events to a BLoC and rebuild from the states it emits. | Domain |
+| Domain | `features/<feature>/domain/` | Entities (e.g. `Task`, `Requirement`, `Response`), repository interfaces and use cases (e.g. `StartTask`, `SaveResponse`, `SubmitTask`). Plain Dart — no Flutter, HTTP or database code. | Nothing |
+| Data | `features/<feature>/data/` | Models (JSON and database mapping), remote data sources (API calls), local data sources (database queries) and the repository implementations that combine them. | Domain |
+
+Shared building blocks live outside the features: `core/` holds
+infrastructure used by every feature (API client, local database, secure
+storage, synchronization, error types, theme, router, dependency
+injection), and `shared/` holds reusable widgets, models and extensions.
+
+### Folder Structure
+
+```text
+mobile/lib/
+├── core/
+│   ├── constants/
+│   ├── error/            # exceptions, failures, error-to-message mapping
+│   ├── network/          # Dio client, auth + token refresh interceptor
+│   ├── storage/          # local database, file storage
+│   ├── security/         # secure token storage
+│   ├── synchronization/  # sync queue + SyncManager
+│   ├── utils/
+│   ├── theme/            # Material 3, light + dark
+│   └── router/
+├── features/
+│   ├── authentication/   # each feature: data/ domain/ presentation/
+│   ├── dashboard/
+│   ├── tasks/
+│   ├── requirements/
+│   ├── evidence/
+│   ├── review/
+│   └── profile/
+├── shared/
+│   ├── widgets/
+│   ├── models/
+│   └── extensions/
+└── main.dart
+```
+
+### Data Flow: Answering a Requirement
+
+The local database is the app's source of truth. Screens read from it
+and every change is written there first, so the app behaves the same
+online and offline:
+
+1. The worker answers "Is the gas connection safe?" with *Yes*. The
+   widget sends a `ResponseChanged` event to the execution BLoC.
+2. The BLoC calls the `SaveResponse` use case.
+3. The repository writes the response to the local database with
+   `syncStatus = PENDING` and adds an operation to the sync queue — in
+   one transaction.
+4. The local database notifies its watchers; the BLoC emits a new state
+   and the screen shows the answer immediately, without waiting for the
+   network.
+5. Later, the SyncManager sends the queued operation to the backend and
+   marks the record `SYNCED` (see the offline sync section).
+
+Actions that only make sense online — logging in, or a manager creating
+and assigning tasks — go straight to the API through the remote data
+source, and the result is then stored locally.
+
+### State Management (BLoC)
+
+- One BLoC (or Cubit for simple screens) per screen or flow, e.g.
+  `AuthBloc`, `TaskListBloc`, `TaskExecutionBloc`, `ReviewBloc`.
+- BLoCs only talk to use cases, never to Dio or the database directly.
+- States cover every case the UI must show: loading, success, empty,
+  offline, syncing, sync failed, unauthorized, server error and no
+  internet.
+- An app-wide `AuthBloc` tracks the session; when the token can no longer
+  be refreshed it logs the user out and the router returns to login.
+
+### Error Handling
+
+The data layer catches exceptions (network, server, database) and turns
+them into typed failures — for example `NetworkFailure`,
+`UnauthorizedFailure` or `ServerFailure(code)` using the backend's error
+code. Use cases return either a result or a failure, and the presentation
+layer maps each failure to a user-friendly message, such as *"Changes
+saved locally. They will sync when you're online."*
+
+### Testability
+
+Because each layer depends only on interfaces, it can be tested on its
+own: use cases and BLoCs with mocked repositories, repositories with
+mocked data sources, and screens with widget tests. Dependencies are
+wired in one place with dependency injection, so tests can swap in fakes.
