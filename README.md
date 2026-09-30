@@ -19,6 +19,7 @@ CRUD demo. It consists of:
 
 - **Mobile app** — Flutter, where workers execute tasks and managers review them.
   Works offline and synchronizes in the background when connectivity returns.
+  Released on Google Play first, then on the Apple App Store.
 - **Backend API** — Java / Spring Boot REST API with PostgreSQL, which owns the
   business rules: who can do what, and which task state changes are allowed.
 - **Cloud storage** — photo evidence is stored in object storage (AWS S3), not in
@@ -112,7 +113,10 @@ Planned for the first release:
 
 - Review every response and piece of evidence of a submitted task
 - Approve, reject or request a correction with a reason
-- Rejected tasks go back to the worker to be corrected and resubmitted
+- Reject sends the whole task back; a correction request sends back only
+  the requirements that need fixing
+- Each task has its own reviewer — one manager can assign and another review
+- Solo users can review their own tasks, like a personal checklist
 - A full history timeline for every task
 
 ### Security and platform
@@ -134,7 +138,7 @@ Planned for the first release:
 | Cloud    | AWS S3 (evidence), AWS CloudWatch (logging), Firebase Cloud Messaging (push notifications) |
 | DevOps   | Docker, Docker Compose, GitHub Actions (build, test, deploy) |
 | Testing  | JUnit, Mockito, Spring Boot Test, Flutter unit / widget / integration tests |
-| Tools    | Git, GitHub, Gradle, Android Studio, IntelliJ IDEA |
+| Tools    | Git, GitHub, Gradle, Android Studio, IntelliJ IDEA, Xcode (iOS, on a cloud Mac) |
 
 ## Repository Structure
 
@@ -161,7 +165,7 @@ The project is built in small steps, one phase at a time.
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 1  | Repository and architecture — structure, README, architecture docs, ADRs | In progress |
+| 1  | Repository and architecture — structure, README, architecture docs, ADRs | Done |
 | 2  | Backend foundation — Spring Boot, PostgreSQL, Flyway, JWT authentication, users and roles | Planned |
 | 3  | Task management (backend) — tasks, requirements, assignment, state machine, audit log | Planned |
 | 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Planned |
@@ -172,6 +176,11 @@ The project is built in small steps, one phase at a time.
 | 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | Planned |
 | 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | Planned |
 | 11 | Production release — signed Android app, Google Play, monitoring, final docs | Planned |
+| 12 | iOS release — iOS build on a cloud Mac, push notifications, TestFlight, App Store | Planned |
+
+Android comes first; the iOS release follows the Google Play release.
+The app is built with both platforms in mind from the start (see
+[ADR-0001](docs/decisions/0001-flutter-for-cross-platform-mobile.md)).
 
 Setup, API, testing and deployment instructions will be added to this README
 as those parts are built.
