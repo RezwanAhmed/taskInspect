@@ -28,5 +28,15 @@ Run from this `backend/` folder (use `gradlew.bat` on Windows,
 | `gradlew.bat test` | Run the tests |
 | `gradlew.bat bootRun` | Start the API on http://localhost:8080 |
 
+## Health Check
+
+Spring Boot Actuator exposes only the health and info endpoints:
+
+| URL | Meaning |
+|-----|---------|
+| http://localhost:8080/actuator/health | Overall status (`UP` / `DOWN`), no details |
+| http://localhost:8080/actuator/health/liveness | The app is running (for container restarts) |
+| http://localhost:8080/actuator/health/readiness | The app is ready to receive traffic |
+
 Database, configuration and Docker setup are added in the next Phase 2
 tasks.
