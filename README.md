@@ -147,7 +147,7 @@ taskInspect/
 │   └── decisions/     # Architecture Decision Records (planned)
 ├── .github/           # GitHub Actions workflows (planned)
 ├── docker-compose.yml # Local PostgreSQL + backend (planned)
-├── LICENSE            # MIT License
+├── LICENSE            # All rights reserved
 └── README.md
 ```
 
@@ -178,4 +178,8 @@ as those parts are built.
 
 ## License
 
-TaskInspect is released under the [MIT License](LICENSE).
+Copyright (c) 2026 Rezwan Ahmed Heera. All rights reserved.
+
+The source code is public so that it can be viewed, but it is not open
+source: it may not be used, copied, modified or distributed without
+written permission. See [LICENSE](LICENSE).
