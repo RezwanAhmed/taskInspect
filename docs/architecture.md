@@ -2,7 +2,7 @@
 
 This document describes how TaskInspect is put together: the main
 components, what each one is responsible for, and how they talk to each
-other. The offline sync section is added as the project grows.
+other.
 
 ## System Overview
 
@@ -451,3 +451,169 @@ handler turns every error into the same JSON shape:
   Spring Boot Actuator health checks, and CloudWatch in production.
 - **API documentation** — OpenAPI / Swagger UI generated from the
   controllers.
+
+## Offline Sync
+
+Workers often inspect sites with a weak or no connection, so the app is
+built to work fully offline and to catch up with the server later. The
+local database is the app's source of truth; a **SyncManager** in
+`core/synchronization/` moves changes between the device and the backend
+in the background.
+
+### What Works Offline
+
+| Offline | Online only |
+|---------|-------------|
+| Open tasks already downloaded to the device | Log in |
+| Start a task | Create, edit and assign tasks (manager) |
+| Answer requirements, add comments | Review: approve, reject, request correction |
+| Take and attach photos | Download tasks not yet on the device |
+| Submit a task (shown as *submitted locally*) | |
+
+Online-only actions go straight to the API and show a clear message when
+there is no connection.
+
+### Sync Queue
+
+Every offline change is written to the local database **and** added to
+the sync queue in the same local transaction (see *Data Flow* above).
+Each queued operation has:
+
+| Field | Example | Purpose |
+|-------|---------|---------|
+| `id` | UUID created on the device | Idempotency key — the server never applies the same operation twice. |
+| `entityType` | `TaskResponse` | What changed. |
+| `entityId` | `8c1f…` | Which record changed. |
+| `operation` | `UPDATE` | `CREATE`, `UPDATE`, `DELETE` or a task action (`START`, `SUBMIT`). |
+| `payload` | `{ "value": "YES" }` | The data to send. |
+| `createdAt` | `2026-10-01T09:30:00Z` | Keeps operations in order. |
+| `retryCount` | `2` | How many times sending has failed. |
+| `lastError` | `NETWORK_TIMEOUT` | Why the last attempt failed. |
+| `status` | `PENDING` | See the states below. |
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING: change saved locally
+    PENDING --> SYNCING: SyncManager sends it
+    SYNCING --> SYNCED: server accepted
+    SYNCING --> PENDING: temporary error<br/>(retry later)
+    SYNCING --> FAILED: rejected by server /<br/>too many retries
+    FAILED --> PENDING: user taps Retry
+    SYNCED --> [*]
+```
+
+The queue is stored in the database, not in memory, so nothing is lost
+when the app is closed or the phone restarts. Its contents can be shown
+in the app and inspected in tests.
+
+### Sync Cycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Worker
+    participant App as App + local DB
+    participant SM as SyncManager
+    participant API as Backend API
+    participant S3 as AWS S3
+
+    W->>App: Answer, photo, submit (offline)
+    App->>App: Save locally + queue operations
+    App-->>W: Shown at once as pending
+    Note over SM: Connection returns
+    SM->>API: Request pre-signed URL for each new photo
+    SM->>S3: Upload photo files
+    SM->>API: POST /api/sync/push (queued operations, in order)
+    API->>API: Skip already-applied IDs,<br/>check rules, save
+    API-->>SM: Result per operation
+    SM->>App: Mark SYNCED / FAILED
+    SM->>API: GET /api/sync/pull?since=cursor
+    API-->>SM: Changed tasks, reviews, status
+    SM->>App: Update local records + cursor
+```
+
+1. **Photos first.** Photos are uploaded before the operations that
+   depend on them, so a task is never submitted to the server with
+   evidence the server cannot find. Photos have their own upload queue
+   with the same statuses and retries (task 6.12).
+2. **Push.** `POST /api/sync/push` sends pending operations in the order
+   they were created. The server records every applied operation ID in
+   `sync_records`; if an ID arrives again (for example after a timeout),
+   it returns the earlier result instead of applying it twice. Each
+   operation goes through the same services and rules as a normal API
+   call — the task state machine, role and ownership checks.
+3. **Pull.** `GET /api/sync/pull?since=<cursor>` returns everything that
+   changed on the server since the last pull: new assignments, status
+   changes, review results and reasons. The app stores the new cursor
+   only after the changes are saved locally.
+4. **Order per task.** If an operation for a task fails, later
+   operations for the same task wait, so for example a submit is never
+   sent before the answers it depends on. Other tasks keep syncing.
+
+### When Sync Runs
+
+- When the connection comes back (connectivity detection, task 6.3).
+- When the app starts or returns to the foreground.
+- Shortly after a local change, grouped so that quick edits are sent
+  together.
+- Periodically in the background (task 6.11). Android schedules this
+  with WorkManager; on iOS, background time is limited and decided by the
+  system, so the app also syncs every time it is opened. Both platforms
+  use the same SyncManager.
+
+### Retries and Errors
+
+| Error | What happens |
+|-------|--------------|
+| No connection, timeout, `5xx` | Temporary: the operation goes back to `PENDING` and is retried with exponential backoff (for example 30 s, 1 min, 2 min, … up to 30 min). After 5 failed attempts it becomes `FAILED`. |
+| `401` — access token expired | The app refreshes the token once and retries. If the refresh token has also expired, sync pauses, the queue is kept and the user is asked to sign in again; sync continues after login. |
+| `4xx` business error (e.g. `TASK_INVALID_TRANSITION`) | Permanent: the operation becomes `FAILED` straight away with the server's error code; retrying it unchanged would fail again. |
+
+`FAILED` operations are never deleted silently. The user sees them and
+can retry, and they stay in the queue for troubleshooting.
+
+### Conflicts
+
+The server is the source of truth for a task's status; the device is the
+source of truth for the worker's own unsent answers.
+
+- **The task changed on the server while the worker was offline** — for
+  example the manager cancelled it. The worker's `SUBMIT` is rejected with
+  a clear error code, the operation becomes `FAILED`, the next pull
+  brings the new status, and the app shows why (*"This task was cancelled
+  by the manager"*). The worker's answers stay on the device for
+  reference.
+- **Stale updates** — tasks carry a version number (optimistic locking).
+  An operation based on an old version of a task is rejected instead of
+  overwriting newer data.
+- **Answers** — only the assigned worker can change a task's answers, so
+  two people never edit the same response. When the same answer is
+  changed several times offline, the operations are applied in order and
+  the last one wins.
+
+### Sync Status in the App
+
+| Situation | What the user sees |
+|-----------|--------------------|
+| No connection | Offline banner: *"Changes saved locally. They will sync when you're online."* |
+| Changes waiting | Pending badge on the task and a count of unsent changes |
+| Syncing | Progress indicator |
+| Submitted offline | *"Submitted locally — waiting for synchronization."* |
+| Failed | *"Unable to synchronize. Please try again."* with a Retry button |
+| Session expired | *"Your session has expired. Please sign in again."* |
+
+### Built In
+
+| Part | Tasks |
+|------|-------|
+| Sync queue table and recording changes | 6.1-6.2 |
+| Connectivity detection | 6.3 |
+| Push endpoint + SyncManager push | 6.4-6.5 |
+| Pull endpoint + SyncManager pull | 6.6-6.7 |
+| Retries, expired login, conflicts | 6.8-6.10 |
+| Background sync, photo upload queue | 6.11-6.12 |
+| Sync status UI and tests | 6.13-6.14 |
+
+The full sync API and edge cases are documented in `docs/offline-sync.md`
+(task 11.9).
