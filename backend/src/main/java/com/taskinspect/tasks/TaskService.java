@@ -73,7 +73,9 @@ public class TaskService {
         }
         task.updateDetails(request.title().trim(), clean(request.description()), request.priority(),
                 request.dueDate(), reviewer(request.reviewerId(), task.getCreatedBy()));
-        return taskRepository.saveAndFlush(task);
+        Task saved = taskRepository.saveAndFlush(task);
+        transitions.recordUpdated(saved, saved.getCreatedBy());
+        return saved;
     }
 
     /**

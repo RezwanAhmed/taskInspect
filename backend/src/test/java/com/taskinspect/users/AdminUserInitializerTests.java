@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.taskinspect.TestcontainersConfiguration;
+import com.taskinspect.audit.AuditService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,6 +35,9 @@ class AdminUserInitializerTests {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private AuditService auditService;
 
     @Test
     void createsAdministratorOnStartupWithHashedPassword() {
@@ -76,7 +80,7 @@ class AdminUserInitializerTests {
 
     private AdminUserInitializer newInitializer(AdminProperties properties) {
         return new AdminUserInitializer(properties, userRepository, roleRepository, organizationRepository,
-                passwordEncoder);
+                passwordEncoder, auditService);
     }
 
 }

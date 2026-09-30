@@ -1,5 +1,7 @@
 package com.taskinspect.users;
 
+import com.taskinspect.audit.AuditAction;
+import com.taskinspect.audit.AuditService;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,15 +30,17 @@ public class AdminUserInitializer implements ApplicationRunner {
     private final RoleRepository roleRepository;
     private final OrganizationRepository organizationRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     public AdminUserInitializer(AdminProperties properties, UserRepository userRepository,
             RoleRepository roleRepository, OrganizationRepository organizationRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, AuditService auditService) {
         this.properties = properties;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.organizationRepository = organizationRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditService = auditService;
     }
 
     @Override
@@ -60,8 +64,10 @@ public class AdminUserInitializer implements ApplicationRunner {
 
         Role administrator = roleRepository.findByName(RoleName.ADMINISTRATOR)
                 .orElseThrow(() -> new IllegalStateException("ADMINISTRATOR role is missing"));
-        userRepository.save(new User(organizationRepository.getDefault(), email,
+        User admin = userRepository.save(new User(organizationRepository.getDefault(), email,
                 passwordEncoder.encode(properties.password()), properties.fullName(), Set.of(administrator)));
+        auditService.record(new AuditService.Entry(AuditAction.USER_CREATED, admin.getOrganization().getId(), null,
+                "USER", admin.getId(), "first administrator created on startup"));
         log.info("Created administrator {}", email);
     }
 

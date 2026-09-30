@@ -1,5 +1,7 @@
 package com.taskinspect.users;
 
+import com.taskinspect.audit.AuditAction;
+import com.taskinspect.audit.AuditService;
 import com.taskinspect.common.error.ApiException;
 import com.taskinspect.common.error.ErrorCode;
 import com.taskinspect.common.security.CurrentUser;
@@ -27,12 +29,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     public UserService(UserRepository userRepository, RoleRepository roleRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder, AuditService auditService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditService = auditService;
     }
 
     @Transactional(readOnly = true)
@@ -65,8 +69,11 @@ public class UserService {
                 .collect(Collectors.toSet());
         User creator = userRepository.findById(caller.id())
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Unknown user"));
-        return userRepository.save(new User(creator.getOrganization(), email,
+        User user = userRepository.save(new User(creator.getOrganization(), email,
                 passwordEncoder.encode(request.password()), request.fullName().trim(), roles));
+        auditService.record(new AuditService.Entry(AuditAction.USER_CREATED, creator.getOrganization().getId(),
+                creator.getId(), "USER", user.getId(), "email: " + email + ", roles: " + request.roles()));
+        return user;
     }
 
     /** The caller's own user record, for other modules (e.g. the creator of a task). */

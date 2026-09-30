@@ -1,5 +1,7 @@
 package com.taskinspect.auth;
 
+import com.taskinspect.audit.AuditAction;
+import com.taskinspect.audit.AuditService;
 import com.taskinspect.common.error.ApiException;
 import com.taskinspect.users.User;
 import java.nio.charset.StandardCharsets;
@@ -34,11 +36,14 @@ public class RefreshTokenService {
     private final RefreshTokenRepository repository;
     private final RefreshTokenProperties properties;
     private final Clock clock;
+    private final AuditService auditService;
 
-    public RefreshTokenService(RefreshTokenRepository repository, RefreshTokenProperties properties, Clock clock) {
+    public RefreshTokenService(RefreshTokenRepository repository, RefreshTokenProperties properties, Clock clock,
+            AuditService auditService) {
         this.repository = repository;
         this.properties = properties;
         this.clock = clock;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -59,6 +64,9 @@ public class RefreshTokenService {
         User user = current.getUser();
         if (current.isRevoked()) {
             repository.revokeAllForUser(user.getId(), now);
+            auditService.record(new AuditService.Entry(AuditAction.REFRESH_TOKEN_REUSED,
+                    user.getOrganization().getId(), user.getId(), "USER", user.getId(),
+                    "revoked refresh token used again; all refresh tokens of the user revoked"));
             log.warn("Revoked refresh token reused for user {}; all refresh tokens of the user revoked", user.getId());
             throw invalid();
         }
