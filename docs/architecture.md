@@ -318,9 +318,9 @@ online and offline:
 5. Later, the SyncManager sends the queued operation to the backend and
    marks the record `SYNCED` (see the offline sync section).
 
-Actions that only make sense online — logging in, or a manager creating
-and assigning tasks — go straight to the API through the remote data
-source, and the result is then stored locally.
+Actions that only make sense online — logging in, or a manager
+assigning or reviewing tasks — go straight to the API through the remote
+data source, and the result is then stored locally.
 
 ### State Management (BLoC)
 
@@ -503,10 +503,15 @@ in the background.
 | Offline | Online only |
 |---------|-------------|
 | Open tasks already downloaded to the device | Log in |
-| Start a task | Create, edit and assign tasks (manager) |
-| Answer requirements, add comments | Review: approve, reject, request correction |
-| Take and attach photos | Download tasks not yet on the device |
+| Create and edit draft tasks and their requirements (manager) | Assign tasks (manager) |
+| Start a task | Review: approve, reject, request correction |
+| Answer requirements, add comments | Download tasks not yet on the device |
+| Take and attach photos | |
 | Submit a task (shown as *submitted locally*) | |
+
+A task created offline gets its ID on the device and is sent to the
+server as a `DRAFT` at the next sync; the manager assigns it once
+online.
 
 Online-only actions go straight to the API and show a clear message when
 there is no connection.
@@ -535,9 +540,8 @@ stateDiagram-v2
     [*] --> PENDING: change saved locally
     PENDING --> SYNCING: SyncManager sends it
     SYNCING --> SYNCED: server accepted
-    SYNCING --> PENDING: temporary error<br/>(retry later)
-    SYNCING --> FAILED: rejected by server /<br/>too many retries
-    FAILED --> PENDING: user taps Retry
+    SYNCING --> FAILED: sync failed<br/>(data kept on device,<br/>user is told)
+    FAILED --> PENDING: automatic retry while online /<br/>user taps Retry
     SYNCED --> [*]
 ```
 
@@ -591,7 +595,11 @@ sequenceDiagram
 
 ### When Sync Runs
 
-- When the connection comes back (connectivity detection, task 6.3).
+The rule is simple: **whenever the device is online, the app tries to
+sync.**
+
+- As soon as the connection comes back (connectivity detection, task
+  6.3).
 - When the app starts or returns to the foreground.
 - Shortly after a local change, grouped so that quick edits are sent
   together.
@@ -604,12 +612,13 @@ sequenceDiagram
 
 | Error | What happens |
 |-------|--------------|
-| No connection, timeout, `5xx` | Temporary: the operation goes back to `PENDING` and is retried with exponential backoff (for example 30 s, 1 min, 2 min, … up to 30 min). After 5 failed attempts it becomes `FAILED`. |
+| No connection, timeout, `5xx` | Temporary: the operation becomes `FAILED`, the user is told and gets a **Retry** button. While the device is online the app keeps retrying automatically with a growing delay (30 s, 1 min, 2 min, … up to 5 min), and it retries at once when the connection comes back. It never gives up on unsent data. |
 | `401` — access token expired | The app refreshes the token once and retries. If the refresh token has also expired, sync pauses, the queue is kept and the user is asked to sign in again; sync continues after login. |
-| `4xx` business error (e.g. `TASK_INVALID_TRANSITION`) | Permanent: the operation becomes `FAILED` straight away with the server's error code; retrying it unchanged would fail again. |
+| `4xx` business error (e.g. `TASK_INVALID_TRANSITION`) | The server refused the change: the operation becomes `FAILED` with the server's reason shown to the user (for example *"This task was cancelled by the manager"*). It is not retried automatically, because the same request would fail again; the Retry button is still there. |
 
-`FAILED` operations are never deleted silently. The user sees them and
-can retry, and they stay in the queue for troubleshooting.
+Whatever happens, **data is never lost**: a failed change stays in the
+local database and the sync queue until it is synced, and is never
+deleted silently.
 
 ### Conflicts
 
@@ -638,7 +647,7 @@ source of truth for the worker's own unsent answers.
 | Changes waiting | Pending badge on the task and a count of unsent changes |
 | Syncing | Progress indicator |
 | Submitted offline | *"Submitted locally — waiting for synchronization."* |
-| Failed | *"Unable to synchronize. Please try again."* with a Retry button |
+| Failed | *"Unable to synchronize. Your changes are saved on this device."* with a **Retry** button |
 | Session expired | *"Your session has expired. Please sign in again."* |
 
 ### Built In

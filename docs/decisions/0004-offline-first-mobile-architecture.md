@@ -61,3 +61,15 @@ SQLite through `drift`).
   syncs whenever it is opened.
 - The backend needs idempotent sync endpoints and a `sync_records`
   table, and tasks carry a version number for conflict detection.
+
+## Updates
+
+**2026-10-01** — Decisions by the project owner:
+
+- **Creating tasks works offline.** A manager can create and edit draft
+  tasks and their requirements without a connection; they are synced as
+  `DRAFT` tasks. Login, assigning and reviewing stay online-only.
+- **Sync whenever online.** The app tries to sync every time the device
+  is online. If sync fails, the data stays in the local database, the
+  user is told, and a **Retry** button is shown; automatic retries
+  continue while the device is online and never give up on unsent data.

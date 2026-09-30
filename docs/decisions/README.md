@@ -3,8 +3,9 @@
 An Architecture Decision Record (ADR) explains one important technical
 choice: the situation, what was decided, which options were considered
 and what the decision costs. ADRs are short and are never rewritten
-after they are accepted — if a decision changes, a new ADR replaces the
-old one and the old one is marked *Superseded*.
+after they are accepted. Small changes that keep the decision are added
+at the end under *Updates*, with a date; if the decision itself changes,
+a new ADR replaces the old one and the old one is marked *Superseded*.
 
 ## Index
 
