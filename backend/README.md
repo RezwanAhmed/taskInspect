@@ -92,6 +92,18 @@ Requires Docker Desktop.
 | `docker compose down` | Stop it — data is kept in the `postgres-data` volume |
 | `docker compose down -v` | Stop it and **delete** all data |
 
+### Migrations (Flyway)
+
+The database schema is created and changed only by SQL migrations in
+`src/main/resources/db/migration`, applied automatically when the
+backend starts (Hibernate only validates the schema).
+
+- Add a new file for every change: `V2__create_roles.sql`,
+  `V3__...`. Use the next free number and a short description.
+- Never edit or delete a migration that has been committed — add a new
+  one instead.
+- Applied migrations are listed in the `flyway_schema_history` table.
+
 On Windows, if starting fails with *"bind: An attempt was made to access
 a socket in a way forbidden"*, the port is reserved by Hyper-V. Set
 `DB_PORT` in `.env` to a free port (for example `15432`).
