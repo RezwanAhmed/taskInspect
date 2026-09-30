@@ -28,6 +28,11 @@ server:
   port: ${SERVER_PORT:8080}
 
 taskinspect:
+  jwt:
+    # HMAC-SHA256 signing key, at least 32 characters (never commit it)
+    secret: ${JWT_SECRET:}
+    issuer: taskinspect
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
   # First administrator, created on startup if no administrator exists yet
   admin:
     email: ${ADMIN_EMAIL:}
