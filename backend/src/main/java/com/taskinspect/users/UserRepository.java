@@ -13,6 +13,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
 
+    boolean existsByRolesName(RoleName roleName);
+
     Page<User> findAllByOrganizationId(UUID organizationId, Pageable pageable);
 
 }

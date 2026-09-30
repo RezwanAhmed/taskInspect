@@ -50,6 +50,14 @@ Set the profile with `SPRING_PROFILES_ACTIVE` (for example
 `SPRING_PROFILES_ACTIVE=prod`). Shared settings live in
 `application.yml`.
 
+### First Administrator
+
+On startup, if no administrator exists yet, the backend creates one from
+`ADMIN_EMAIL`, `ADMIN_PASSWORD` (at least 12 characters) and
+`ADMIN_FULL_NAME`. Passwords are stored only as BCrypt hashes. Once the
+administrator exists, these variables are ignored and `ADMIN_PASSWORD`
+can be removed.
+
 ## Health Check
 
 Spring Boot Actuator exposes only the health and info endpoints:

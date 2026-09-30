@@ -27,6 +27,13 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+taskinspect:
+  # First administrator, created on startup if no administrator exists yet
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+    full-name: ${ADMIN_FULL_NAME:Administrator}
+
 logging:
   pattern:
     # Adds the request ID (see RequestIdFilter) to every log line
