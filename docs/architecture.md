@@ -112,14 +112,17 @@ stateDiagram-v2
     ASSIGNED --> IN_PROGRESS: start
     IN_PROGRESS --> SUBMITTED: submit
     SUBMITTED --> APPROVED: approve
-    SUBMITTED --> REJECTED: reject /<br/>request correction
-    REJECTED --> IN_PROGRESS: start correction
+    SUBMITTED --> REJECTED: reject
+    SUBMITTED --> CORRECTION_REQUESTED: request<br/>correction
+    REJECTED --> IN_PROGRESS: start again
+    CORRECTION_REQUESTED --> IN_PROGRESS: start correction
     APPROVED --> [*]
 
     DRAFT --> CANCELLED: cancel
     ASSIGNED --> CANCELLED: cancel
     IN_PROGRESS --> CANCELLED: cancel
     REJECTED --> CANCELLED: cancel
+    CORRECTION_REQUESTED --> CANCELLED: cancel
     CANCELLED --> [*]
 ```
 
@@ -131,7 +134,8 @@ stateDiagram-v2
 | `ASSIGNED` | Assigned to a worker, who has not started it yet (shown as *pending* in the app). |
 | `IN_PROGRESS` | The worker is completing the requirements and attaching evidence. |
 | `SUBMITTED` | The worker has submitted the task; it is waiting for review. |
-| `REJECTED` | The reviewer rejected the task or requested a correction, with a reason. It is back with the worker. |
+| `REJECTED` | The reviewer rejected the whole task, with a reason. It is back with the worker, who can change any answer or photo. |
+| `CORRECTION_REQUESTED` | The reviewer marked only some requirements as needing a fix, each with a comment. It is back with the worker, who can change only the marked requirements. |
 | `APPROVED` | The reviewer accepted the task. Final — it can no longer be changed. |
 | `CANCELLED` | A manager cancelled the task. Final. |
 
@@ -139,19 +143,47 @@ stateDiagram-v2
 
 | From | To | Action | Who | Conditions |
 |------|----|--------|-----|------------|
-| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. |
+| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. A reviewer is set (defaults to the creator). |
 | `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
 | `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `IN_PROGRESS` | `SUBMITTED` | Submit (`POST /api/tasks/{id}/submit`) | Assigned worker | Every required requirement has a response. |
-| `SUBMITTED` | `APPROVED` | Approve | Manager / reviewer | The reviewer is not the assignee. |
-| `SUBMITTED` | `REJECTED` | Reject or request correction | Manager / reviewer | A reason is given; the reviewer is not the assignee. |
-| `REJECTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
-| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED` | `CANCELLED` | Cancel | Manager | — |
+| `SUBMITTED` | `APPROVED` | Approve | Task's reviewer | The reviewer is not the assignee (except solo accounts). |
+| `SUBMITTED` | `REJECTED` | Reject | Task's reviewer | A reason is given; the reviewer is not the assignee (except solo accounts). |
+| `SUBMITTED` | `CORRECTION_REQUESTED` | Request correction | Task's reviewer | At least one requirement is marked, each with a comment; the reviewer is not the assignee (except solo accounts). |
+| `REJECTED` | `IN_PROGRESS` | Start again (`POST /api/tasks/{id}/start`) | Assigned worker | — |
+| `CORRECTION_REQUESTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
+| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED`, `CORRECTION_REQUESTED` | `CANCELLED` | Cancel | Manager | — |
 
-*Reject* and *request correction* lead to the same state. The review
-record stores which one the reviewer chose, the reason, and (optionally)
-the requirements that need to be redone, so the worker knows exactly what
-to fix.
+*Reject* and *request correction* are two different results:
+
+- **Reject** sends the whole task back. The worker can change every
+  answer and photo before submitting again.
+- **Request correction** sends back only the requirements the reviewer
+  marked (for example *"Please retake the refrigerator photo."*). The
+  worker can change only those; all other answers stay as submitted.
+
+Either way the review record stores the result, the reason and the
+marked requirements, and the worker is notified.
+
+### Reviewers and Account Types
+
+Every task has its own **reviewer**, chosen when the task is created or
+assigned. The reviewer can be a different manager from the one who
+created and assigned the task — for example one manager assigns the
+work and another reviews and closes it.
+
+TaskInspect is meant for three sizes of account:
+
+| Account | Example | Review rule |
+|---------|---------|-------------|
+| Solo | One person using tasks as a personal checklist | The same person creates, does and approves the task (self-review is allowed). |
+| Small team | One manager with about 10 workers | The reviewer is never the assigned worker. |
+| Organization | Many managers, each with their own workers | The reviewer is never the assigned worker; any manager can be a task's reviewer. |
+
+The first release has one default organization; users and tasks already
+carry an `organization_id` so that full organizations (sign-up, several
+organizations, managers with their own workers) can be added later
+without reshaping the data.
 
 ### Rules
 
@@ -161,17 +193,22 @@ to fix.
   final task returns a specific code such as `TASK_ALREADY_APPROVED`.
 - **Roles are checked on every call.** A worker can never approve or
   reject a task — including their own — even with a hand-crafted request.
+  Only the task's reviewer can review it; in a solo account that is the
+  same person, who holds both the manager and worker roles.
 - **Responses are editable only while the task is `IN_PROGRESS`.** Once a
-  task is submitted, the worker's answers and evidence are locked until the
-  task is rejected back to them.
+  task is submitted, the worker's answers and evidence are locked. After a
+  *reject* they are all editable again; after a *request correction* only
+  the marked requirements are.
 - **Final states are final.** `APPROVED` and `CANCELLED` tasks cannot be
   modified.
 - **Every change is recorded.** Each transition writes a row to the task's
   status history (old state, new state, user, time, reason) and an entry
   in the audit log. These rows build the task history timeline (created,
-  assigned, started, submitted, rejected, resubmitted, approved).
-- **Changes trigger notifications.** Assigning, submitting, approving and
-  rejecting notify the other party through push notifications.
+  assigned, started, submitted, rejected, correction requested,
+  resubmitted, approved).
+- **Changes trigger notifications.** Assigning, submitting, approving,
+  rejecting and requesting a correction notify the other party through
+  push notifications.
 - **Offline actions are applied when they reach the server.** A worker can
   start and submit a task offline; the app shows it as *submitted locally*
   and the state machine checks the action when it is synchronized (see
@@ -349,8 +386,9 @@ the module boundary stays the same.
 | `audit` | Audit log of important actions | 3.13 |
 | `common` | Security config, error handling, request ID logging, OpenAPI | 2.7-2.8, 2.13, 2.21 |
 
-Organizations (multi-tenant support, spec section 14) are not part of
-the first release.
+Full organizations (multi-tenant support, spec section 14) come after
+the first release. Users and tasks carry an `organization_id` from the
+start, with one default organization (see *Reviewers and Account Types*).
 
 Modules use each other only through services — for example the reviews
 module calls `TaskService` to change a task's state, never
@@ -405,10 +443,10 @@ sequenceDiagram
     App->>F: POST /api/tasks/{id}/approve<br/>Authorization: Bearer JWT
     F->>F: Add request ID, validate JWT,<br/>load user + roles
     F->>C: Authenticated request
-    C->>C: Check role (manager / reviewer)
+    C->>C: Check role (manager)
     C->>S: approve(taskId, user)
     S->>DB: Load task
-    S->>S: State machine: SUBMITTED → APPROVED?<br/>Reviewer is not the assignee?
+    S->>S: State machine: SUBMITTED → APPROVED?<br/>User is the task's reviewer?
     S->>DB: Update task, insert review,<br/>status history and audit log (one transaction)
     S-->>C: Approved task
     C-->>App: 200 OK + task DTO
