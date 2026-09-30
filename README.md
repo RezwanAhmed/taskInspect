@@ -135,3 +135,43 @@ Planned for the first release:
 | DevOps   | Docker, Docker Compose, GitHub Actions (build, test, deploy) |
 | Testing  | JUnit, Mockito, Spring Boot Test, Flutter unit / widget / integration tests |
 | Tools    | Git, GitHub, Gradle, Android Studio, IntelliJ IDEA |
+
+## Repository Structure
+
+```text
+taskInspect/
+├── mobile/            # Flutter app — BLoC, feature-based Clean Architecture, offline-first
+├── backend/           # Java / Spring Boot REST API — Security + JWT, JPA, PostgreSQL
+├── infrastructure/    # Docker, deployment and AWS configuration
+├── docs/              # Architecture, API, database, sync and deployment docs
+│   └── decisions/     # Architecture Decision Records (planned)
+├── .github/           # GitHub Actions workflows (planned)
+├── docker-compose.yml # Local PostgreSQL + backend (planned)
+├── LICENSE            # (planned)
+└── README.md
+```
+
+Each top-level folder has its own `README.md` describing what it will
+contain. Folders and files marked *planned* are added in the phase that needs
+them (see the roadmap below).
+
+## Roadmap
+
+The project is built in small steps, one phase at a time.
+
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 1  | Repository and architecture — structure, README, architecture docs, ADRs | In progress |
+| 2  | Backend foundation — Spring Boot, PostgreSQL, Flyway, JWT authentication, users and roles | Planned |
+| 3  | Task management (backend) — tasks, requirements, assignment, state machine, audit log | Planned |
+| 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Planned |
+| 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo evidence | Planned |
+| 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Planned |
+| 7  | Review workflow — submit, approve / reject / request correction, resubmit, history | Planned |
+| 8  | Cloud — S3 evidence storage, push notifications, Docker image, cloud deployment | Planned |
+| 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | Planned |
+| 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | Planned |
+| 11 | Production release — signed Android app, Google Play, monitoring, final docs | Planned |
+
+Setup, API, testing and deployment instructions will be added to this README
+as those parts are built.
