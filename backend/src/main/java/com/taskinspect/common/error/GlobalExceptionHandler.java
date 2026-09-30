@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -62,6 +63,14 @@ public class GlobalExceptionHandler {
         HttpStatus status = HttpStatus.BAD_REQUEST;
         return respond(status, new ErrorResponse(status.value(), ErrorCode.VALIDATION_ERROR,
                 "Request validation failed", errors));
+    }
+
+    /** Two requests changed the same record at the same time; the later one must reload. */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ErrorResponse> handleConcurrentUpdate(OptimisticLockingFailureException ex) {
+        HttpStatus status = HttpStatus.CONFLICT;
+        return respond(status, new ErrorResponse(status.value(), ErrorCode.VERSION_CONFLICT,
+                "This item was changed by someone else. Reload it and try again."));
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)

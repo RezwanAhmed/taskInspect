@@ -7,8 +7,12 @@ import static com.taskinspect.tasks.TaskSpecifications.hasStatus;
 import static com.taskinspect.tasks.TaskSpecifications.inOrganization;
 
 import com.taskinspect.common.error.ApiException;
+import com.taskinspect.common.error.ErrorCode;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.tasks.dto.CreateTaskRequest;
+import com.taskinspect.tasks.dto.UpdateTaskRequest;
+import java.util.EnumSet;
+import java.util.Set;
 import com.taskinspect.users.RoleName;
 import com.taskinspect.users.User;
 import com.taskinspect.users.UserService;
@@ -26,6 +30,10 @@ public class TaskService {
 
     static final String INVALID_REVIEWER = "INVALID_REVIEWER";
     static final String TASK_NOT_FOUND = "TASK_NOT_FOUND";
+    static final String TASK_NOT_EDITABLE = "TASK_NOT_EDITABLE";
+
+    /** A task's details can change only until the worker starts it. */
+    private static final Set<TaskStatus> EDITABLE = EnumSet.of(TaskStatus.DRAFT, TaskStatus.ASSIGNED);
 
     private final TaskRepository taskRepository;
     private final UserService userService;
@@ -42,13 +50,43 @@ public class TaskService {
     @Transactional
     public Task create(CurrentUser caller, CreateTaskRequest request) {
         User creator = userService.requireCaller(caller);
-        User reviewer = request.reviewerId() == null ? null
-                : userService.requireActiveWithRole(request.reviewerId(), creator.getOrganization().getId(),
+        return taskRepository.save(new Task(creator, request.title().trim(), clean(request.description()),
+                request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
+    }
+
+    /**
+     * Replaces a task's details. Only the manager who created the task can
+     * edit it, only before work starts, and only if nobody changed it since
+     * the client loaded it.
+     */
+    @Transactional
+    public Task update(CurrentUser caller, UUID id, UpdateTaskRequest request) {
+        Task task = get(caller, id);
+        if (!task.getCreatedBy().getId().equals(caller.id())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    "Only the manager who created the task can edit it");
+        }
+        if (!EDITABLE.contains(task.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, TASK_NOT_EDITABLE,
+                    "A task can only be edited before work starts (status " + task.getStatus() + ")");
+        }
+        if (task.getVersion() != request.version()) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.VERSION_CONFLICT,
+                    "This task was changed by someone else. Reload it and try again.");
+        }
+        task.updateDetails(request.title().trim(), clean(request.description()), request.priority(),
+                request.dueDate(), reviewer(request.reviewerId(), task.getCreatedBy()));
+        return taskRepository.saveAndFlush(task);
+    }
+
+    private User reviewer(UUID reviewerId, User creator) {
+        return reviewerId == null ? null
+                : userService.requireActiveWithRole(reviewerId, creator.getOrganization().getId(),
                         RoleName.MANAGER, INVALID_REVIEWER, "The reviewer must be an active manager");
-        String description = request.description() == null || request.description().isBlank()
-                ? null : request.description().trim();
-        return taskRepository.save(new Task(creator, request.title().trim(), description, request.priority(),
-                request.dueDate(), reviewer));
+    }
+
+    private static String clean(String description) {
+        return description == null || description.isBlank() ? null : description.trim();
     }
 
 

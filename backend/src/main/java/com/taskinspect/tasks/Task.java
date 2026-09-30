@@ -89,6 +89,16 @@ public class Task {
         this.reviewer = reviewer != null ? reviewer : createdBy;
     }
 
+    /** Changes the details a manager can edit; the reviewer defaults to the creator. */
+    public void updateDetails(String title, String description, TaskPriority priority, Instant dueDate,
+            User reviewer) {
+        this.title = title;
+        this.description = description;
+        this.priority = priority;
+        this.dueDate = dueDate;
+        this.reviewer = reviewer != null ? reviewer : createdBy;
+    }
+
     /** Only the task state machine changes the status. */
     void changeStatus(TaskStatus newStatus) {
         this.status = newStatus;
