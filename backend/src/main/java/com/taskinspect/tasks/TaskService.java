@@ -61,6 +61,22 @@ public class TaskService {
      */
     @Transactional
     public Task update(CurrentUser caller, UUID id, UpdateTaskRequest request) {
+        Task task = requireEditable(caller, id);
+        if (task.getVersion() != request.version()) {
+            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.VERSION_CONFLICT,
+                    "This task was changed by someone else. Reload it and try again.");
+        }
+        task.updateDetails(request.title().trim(), clean(request.description()), request.priority(),
+                request.dueDate(), reviewer(request.reviewerId(), task.getCreatedBy()));
+        return taskRepository.saveAndFlush(task);
+    }
+
+    /**
+     * A task the caller may change (details or requirements): only the
+     * manager who created it, and only before work starts.
+     */
+    @Transactional(readOnly = true)
+    public Task requireEditable(CurrentUser caller, UUID id) {
         Task task = get(caller, id);
         if (!task.getCreatedBy().getId().equals(caller.id())) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
@@ -70,13 +86,7 @@ public class TaskService {
             throw new ApiException(HttpStatus.CONFLICT, TASK_NOT_EDITABLE,
                     "A task can only be edited before work starts (status " + task.getStatus() + ")");
         }
-        if (task.getVersion() != request.version()) {
-            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.VERSION_CONFLICT,
-                    "This task was changed by someone else. Reload it and try again.");
-        }
-        task.updateDetails(request.title().trim(), clean(request.description()), request.priority(),
-                request.dueDate(), reviewer(request.reviewerId(), task.getCreatedBy()));
-        return taskRepository.saveAndFlush(task);
+        return task;
     }
 
     private User reviewer(UUID reviewerId, User creator) {
