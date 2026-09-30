@@ -144,7 +144,7 @@ taskInspect/
 ├── backend/           # Java / Spring Boot REST API — Security + JWT, JPA, PostgreSQL
 ├── infrastructure/    # Docker, deployment and AWS configuration
 ├── docs/              # Architecture, API, database, sync and deployment docs
-│   └── decisions/     # Architecture Decision Records (planned)
+│   └── decisions/     # Architecture Decision Records
 ├── .github/           # GitHub Actions workflows (planned)
 ├── docker-compose.yml # Local PostgreSQL + backend (planned)
 ├── LICENSE            # All rights reserved
