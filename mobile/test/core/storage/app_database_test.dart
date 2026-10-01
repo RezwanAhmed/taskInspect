@@ -32,8 +32,8 @@ void main() {
     expect(count.read<int>('c'), 0);
   });
 
-  test('is at schema version 6', () {
-    expect(database.schemaVersion, 6);
+  test('is at schema version 7', () {
+    expect(database.schemaVersion, 7);
   });
 
   test('a version 1 database (no tables) is upgraded with all tables', () async {
@@ -51,10 +51,11 @@ void main() {
       'local_requirements',
       'local_responses',
       'local_sync_operations',
+      'local_sync_state',
       'local_tasks',
     ]);
     final version = await old.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 6);
+    expect(version.read<int>('user_version'), 7);
   });
 
   test('a version 4 database gets the evidence file_name column', () async {
@@ -98,6 +99,15 @@ void main() {
     expect(kept.read<String>('file_name'), 'a.pdf');
   });
 
+  test('a version 6 database gets the sync state table', () async {
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) => raw.execute('PRAGMA user_version = 6')));
+    addTearDown(old.close);
+
+    await old.into(old.localSyncState).insert(LocalSyncStateCompanion.insert(key: 'pullCursor', value: 'c1'));
+
+    expect((await old.select(old.localSyncState).getSingle()).value, 'c1');
+  });
+
   test('clearUserData removes every row', () async {
     await database.customStatement(
         "INSERT INTO local_tasks VALUES ('t1', 'Kitchen', NULL, 'HIGH', 'ASSIGNED', 0, 'm', 'M', 'm', 'M', NULL, NULL, 1, 0)");
@@ -111,10 +121,11 @@ void main() {
           operation: 'UPDATE',
           createdAt: DateTime.utc(2026, 10, 1),
         ));
+    await database.into(database.localSyncState).insert(LocalSyncStateCompanion.insert(key: 'pullCursor', value: 'c1'));
 
     await database.clearUserData();
 
-    for (final table in ['local_tasks', 'local_requirements', 'local_responses', 'local_evidence', 'local_sync_operations']) {
+    for (final table in ['local_tasks', 'local_requirements', 'local_responses', 'local_evidence', 'local_sync_operations', 'local_sync_state']) {
       final count = await database.customSelect('SELECT COUNT(*) AS c FROM $table').getSingle();
       expect(count.read<int>('c'), 0, reason: table);
     }

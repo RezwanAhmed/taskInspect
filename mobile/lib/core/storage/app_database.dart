@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:taskinspect/core/synchronization/sync_queue_table.dart';
+import 'package:taskinspect/core/synchronization/sync_state_table.dart';
 import 'package:taskinspect/features/evidence/data/local/evidence_tables.dart';
 import 'package:taskinspect/features/requirements/data/local/response_tables.dart';
 import 'package:taskinspect/features/tasks/data/local/task_tables.dart';
@@ -12,12 +13,12 @@ part 'app_database.g.dart';
 ///
 /// Every schema change raises [schemaVersion] and adds a step to
 /// [migration], because devices keep their database between app updates.
-@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations])
+@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations, LocalSyncState])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -41,6 +42,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 6) {
             await migrator.createTable(localSyncOperations);
           }
+          if (from < 7) {
+            await migrator.createTable(localSyncState);
+          }
         },
         beforeOpen: (details) async {
           // SQLite does not check foreign keys unless asked to.
@@ -48,7 +52,7 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
-  /// Deletes all user data (tasks, requirements, answers, sync queue),
+  /// Deletes all user data (tasks, requirements, answers, sync queue and state),
   /// e.g. at sign out, so the next user of the device cannot see it.
   Future<void> clearUserData() {
     return transaction(() async {
