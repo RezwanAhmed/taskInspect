@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 
 /// Email and password sign-in. Errors from the [AuthBloc] are shown under
@@ -16,6 +17,9 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
   bool _obscurePassword = true;
 
+  /// The delete dialog is open (a second tap must not open another).
+  bool _confirming = false;
+
   @override
   void dispose() {
     _email.dispose();
@@ -23,10 +27,50 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_confirming) {
+      return;
+    }
     FocusScope.of(context).unfocus();
-    context.read<AuthBloc>().add(LoginRequested(email: _email.text, password: _password.text));
+    final bloc = context.read<AuthBloc>();
+    if (bloc.state case Unauthenticated(unsynced: final unsynced?) when unsynced.belongToAnother(_email.text)) {
+      _confirming = true;
+      final confirmed = await _confirmDelete(unsynced);
+      _confirming = false;
+      if (!confirmed || !mounted) {
+        return;
+      }
+    }
+    if (bloc.state case Unauthenticated(isSubmitting: true)) {
+      return;
+    }
+    bloc.add(LoginRequested(email: _email.text, password: _password.text));
   }
+
+  /// Signing in with another account deletes the unsynced changes of the
+  /// previous one (privacy first), so ask first.
+  Future<bool> _confirmDelete(UnsyncedChanges unsynced) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete unsynced changes?'),
+        content: Text('${_changes(unsynced.count)} of ${unsynced.ownerName} ${unsynced.count == 1 ? 'is' : 'are'} '
+            'not synced yet. Signing in with another account deletes them from this device.\n\n'
+            'To keep them, sign in as ${unsynced.ownerName} first and wait until they are synced.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete and sign in'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  static String _changes(int count) => count == 1 ? '1 change' : '$count changes';
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +98,20 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 4),
                         Text('to TaskInspect', textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
                         const SizedBox(height: 32),
+                        if (current.unsynced case final unsynced?) ...[
+                          Card(
+                            key: const Key('login-unsynced'),
+                            color: theme.colorScheme.errorContainer,
+                            margin: EdgeInsets.zero,
+                            child: ListTile(
+                              leading: const Icon(Icons.cloud_upload_outlined),
+                              title: Text('${_changes(unsynced.count)} not synced yet'),
+                              subtitle: Text('Sign in as ${unsynced.ownerName} to keep them. '
+                                  'Signing in with another account deletes them.'),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         TextField(
                           key: const Key('login-email'),
                           controller: _email,

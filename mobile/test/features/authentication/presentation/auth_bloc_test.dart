@@ -4,7 +4,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/check_unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
@@ -19,6 +21,8 @@ class _MockLogout extends Mock implements Logout {}
 
 class _MockEndExpiredSession extends Mock implements EndExpiredSession {}
 
+class _MockCheckUnsyncedChanges extends Mock implements CheckUnsyncedChanges {}
+
 const _user = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'Wendy', roles: {UserRole.worker});
 
 void main() {
@@ -26,6 +30,7 @@ void main() {
   late _MockRestoreSession restoreSession;
   late _MockLogout logout;
   late _MockEndExpiredSession endExpiredSession;
+  late _MockCheckUnsyncedChanges checkUnsyncedChanges;
 
   setUp(() {
     login = _MockLogin();
@@ -34,10 +39,63 @@ void main() {
     when(() => logout()).thenAnswer((_) async {});
     endExpiredSession = _MockEndExpiredSession();
     when(() => endExpiredSession()).thenAnswer((_) async {});
+    checkUnsyncedChanges = _MockCheckUnsyncedChanges();
+    when(() => checkUnsyncedChanges()).thenAnswer((_) async => null);
   });
 
-  AuthBloc build() =>
-      AuthBloc(login: login, restoreSession: restoreSession, logout: logout, endExpiredSession: endExpiredSession);
+  AuthBloc build() => AuthBloc(
+        login: login,
+        restoreSession: restoreSession,
+        logout: logout,
+        endExpiredSession: endExpiredSession,
+        checkUnsyncedChanges: checkUnsyncedChanges,
+      );
+
+  const unsynced = UnsyncedChanges(ownerEmail: 'worker@example.com', count: 2);
+
+  blocTest<AuthBloc, AuthState>(
+    'without a session but with unsynced changes on the device, the login screen is told',
+    setUp: () {
+      when(() => restoreSession()).thenAnswer((_) async => const Ok(null));
+      when(() => checkUnsyncedChanges()).thenAnswer((_) async => unsynced);
+    },
+    build: build,
+    act: (bloc) => bloc.add(const AuthStarted()),
+    expect: () => [const Unauthenticated(unsynced: unsynced)],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'an expired session tells the login screen about the changes it left',
+    setUp: () => when(() => checkUnsyncedChanges()).thenAnswer((_) async => unsynced),
+    build: build,
+    seed: () => const Authenticated(_user),
+    act: (bloc) => bloc.add(const SessionExpired()),
+    expect: () => [isA<Unauthenticated>().having((s) => s.unsynced, 'unsynced', unsynced)],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'a failing check does not keep the user from signing in',
+    setUp: () {
+      when(() => restoreSession()).thenAnswer((_) async => const Ok(null));
+      when(() => checkUnsyncedChanges()).thenThrow(StateError('database closed'));
+    },
+    build: build,
+    act: (bloc) => bloc.add(const AuthStarted()),
+    expect: () => [const Unauthenticated()],
+  );
+
+  blocTest<AuthBloc, AuthState>(
+    'a failed sign in keeps the unsynced changes warning',
+    setUp: () => when(() => login(email: any(named: 'email'), password: any(named: 'password')))
+        .thenAnswer((_) async => const Err(UnauthorizedFailure(message: 'Email or password is incorrect'))),
+    build: build,
+    seed: () => const Unauthenticated(unsynced: unsynced),
+    act: (bloc) => bloc.add(const LoginRequested(email: 'worker@example.com', password: 'x')),
+    expect: () => [
+      const Unauthenticated(isSubmitting: true, unsynced: unsynced),
+      isA<Unauthenticated>().having((s) => s.unsynced, 'unsynced', unsynced),
+    ],
+  );
 
   void loginReturns(Result<AuthUser> result) {
     when(() => login(email: any(named: 'email'), password: any(named: 'password'))).thenAnswer((_) async => result);

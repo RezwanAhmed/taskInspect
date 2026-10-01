@@ -2,8 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/check_unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
@@ -31,6 +33,11 @@ class _FakeRepository implements AuthRepository {
 
   @override
   Future<void> endExpiredSession() async => sessionEnded = true;
+
+  UnsyncedChanges? unsynced;
+
+  @override
+  Future<UnsyncedChanges?> unsyncedChanges() async => unsynced;
 }
 
 void main() {
@@ -87,5 +94,14 @@ void main() {
 
     expect(repository.sessionEnded, isTrue);
     expect(repository.loggedOut, isFalse);
+  });
+
+  test('CheckUnsyncedChanges returns what is left on the device', () async {
+    const unsynced = UnsyncedChanges(ownerEmail: 'worker@example.com', count: 1);
+    repository.unsynced = unsynced;
+
+    expect(await CheckUnsyncedChanges(repository)(), unsynced);
+    expect(unsynced.belongToAnother(' WORKER@example.com '), isFalse);
+    expect(unsynced.belongToAnother('manager@example.com'), isTrue);
   });
 }

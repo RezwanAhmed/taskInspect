@@ -1,8 +1,10 @@
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/check_unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
@@ -13,9 +15,12 @@ const testWorker = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'We
 
 /// An [AuthRepository] for widget tests: one known user and password.
 class FakeAuthRepository implements AuthRepository {
-  FakeAuthRepository({this.savedUser});
+  FakeAuthRepository({this.savedUser, this.unsynced});
 
   AuthUser? savedUser;
+
+  /// Unsynced changes left on the "device".
+  UnsyncedChanges? unsynced;
   int logouts = 0;
   int expiredSessions = 0;
 
@@ -42,6 +47,9 @@ class FakeAuthRepository implements AuthRepository {
     expiredSessions++;
     savedUser = null;
   }
+
+  @override
+  Future<UnsyncedChanges?> unsyncedChanges() async => unsynced;
 }
 
 AuthBloc authBlocWith(FakeAuthRepository repository) => AuthBloc(
@@ -49,4 +57,5 @@ AuthBloc authBlocWith(FakeAuthRepository repository) => AuthBloc(
       restoreSession: RestoreSession(repository),
       logout: Logout(repository),
       endExpiredSession: EndExpiredSession(repository),
+      checkUnsyncedChanges: CheckUnsyncedChanges(repository),
     );

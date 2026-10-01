@@ -1,5 +1,6 @@
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 
 /// Authentication as the rest of the app sees it. The data layer
 /// implements it with the API and secure token storage.
@@ -18,4 +19,8 @@ abstract interface class AuthRepository {
   /// and unsent changes, so synchronization goes on after they sign in
   /// again (docs/architecture.md, "Retries and Errors").
   Future<void> endExpiredSession();
+
+  /// Changes on the device that are not on the server yet, and whose
+  /// they are; `null` when there are none.
+  Future<UnsyncedChanges?> unsyncedChanges();
 }

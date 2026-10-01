@@ -21,7 +21,9 @@ import 'package:taskinspect/features/authentication/data/auth_interceptor.dart';
 import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
 import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
 import 'package:taskinspect/features/authentication/data/token_refresher.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/check_unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
@@ -119,15 +121,26 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
         getIt(),
         getIt(),
         clearLocalData: _clearLocalData,
-        claimLocalData: (userId) => LocalDataOwner(getIt()).claim(userId, clear: _clearLocalData),
+        claimLocalData: (user) => LocalDataOwner(getIt()).claim(user.id, email: user.email, clear: _clearLocalData),
+        unsyncedChanges: () async {
+          final unsynced = await LocalDataOwner(getIt()).unsynced();
+          return unsynced == null ? null : UnsyncedChanges(ownerEmail: unsynced.email, count: unsynced.count);
+        },
       ),
     )
     ..registerFactory(() => Login(getIt()))
     ..registerFactory(() => RestoreSession(getIt()))
     ..registerFactory(() => Logout(getIt()))
     ..registerFactory(() => EndExpiredSession(getIt()))
+    ..registerFactory(() => CheckUnsyncedChanges(getIt()))
     ..registerLazySingleton(
-      () => AuthBloc(login: getIt(), restoreSession: getIt(), logout: getIt(), endExpiredSession: getIt()),
+      () => AuthBloc(
+        login: getIt(),
+        restoreSession: getIt(),
+        logout: getIt(),
+        endExpiredSession: getIt(),
+        checkUnsyncedChanges: getIt(),
+      ),
       dispose: (bloc) => bloc.close(),
     )
     // Tasks
