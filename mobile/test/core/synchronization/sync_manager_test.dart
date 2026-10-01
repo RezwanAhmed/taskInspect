@@ -351,6 +351,73 @@ void main() {
       expect(await localTitles(), ['Kitchen (new)', 'Task t2']);
     });
 
+    test('conflict: a task whose change was refused gets the server version', () async {
+      // Started offline, but the manager cancelled the task meanwhile.
+      await TaskLocalDataSource(db, queue: queue).start('t1');
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        if (request.path == '/api/sync/pull') {
+          return (200, {
+            'cursor': 'c',
+            'taskIds': ['t1', 't2'],
+            'tasks': [
+              {'task': taskJson('t1', 'Task t1', status: 'CANCELLED'), 'requirements': <Object?>[]},
+            ],
+          });
+        }
+        final operations = ((request.data as Map)['operations'] as List).cast<_Sent>();
+        return (200, {
+          'results': [
+            for (final o in operations) {'id': o['id'], 'status': 'REJECTED', 'code': 'TASK_ALREADY_CANCELLED'},
+          ],
+        });
+      });
+
+      await manager.sync();
+
+      final task = await TaskLocalDataSource(db).watchTask('t1').first;
+      expect(task!.status, TaskStatus.cancelled);
+      final refused = (await queued()).single;
+      expect((refused.status, refused.lastError), ('FAILED', 'TASK_ALREADY_CANCELLED'));
+    });
+
+    test('a task whose change failed temporarily keeps its local version', () async {
+      await TaskLocalDataSource(db, queue: queue).start('t1');
+      await db.update(db.localSyncOperations).write(
+          const LocalSyncOperationsCompanion(status: Value('FAILED'), lastError: Value(SyncManager.networkError)));
+      servePull({
+        'cursor': 'c',
+        'taskIds': ['t1', 't2'],
+        'tasks': [
+          {'task': taskJson('t1', 'Task t1'), 'requirements': <Object?>[]},
+        ],
+      });
+
+      await manager.pull();
+
+      expect((await TaskLocalDataSource(db).watchTask('t1').first)!.status, TaskStatus.inProgress);
+    });
+
+    test('Retry sends a refused START with the task version from the last pull', () async {
+      await TaskLocalDataSource(db, queue: queue).start('t1');
+      await db.update(db.localSyncOperations).write(
+          const LocalSyncOperationsCompanion(status: Value('FAILED'), lastError: Value('VERSION_CONFLICT')));
+      // The pull brought the task with version 4 (the local copy had 1).
+      servePull({
+        'cursor': 'c',
+        'taskIds': ['t1', 't2'],
+        'tasks': [
+          {'task': taskJson('t1', 'Task t1'), 'requirements': <Object?>[]},
+        ],
+      });
+      await manager.pull();
+
+      await manager.retryFailed();
+
+      final retried = (await queued()).single;
+      expect(retried.status, 'PENDING');
+      expect(retried.payload, '{"version":4}');
+    });
+
     test('offline: nothing changes and the cursor stays', () async {
       servePull({'cursor': 'c1', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
       await manager.pull();

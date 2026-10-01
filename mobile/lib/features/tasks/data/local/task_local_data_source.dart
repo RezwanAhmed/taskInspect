@@ -87,8 +87,8 @@ class TaskLocalDataSource {
   Future<void> updateTask(Task task) => _db.into(_db.localTasks).insertOnConflictUpdate(_toTaskRow(task));
 
   /// Stores the server's tasks and removes all others, in one transaction.
-  /// Tasks with changes in the sync queue that are not sent yet keep their
-  /// local version, so the server's older copy can't undo those changes.
+  /// Tasks with changes in the sync queue that are still on their way keep
+  /// their local version, so the server's older copy can't undo them.
   Future<void> replaceAll(List<(Task, List<Requirement>)> tasks) =>
       applyServerChanges(tasks, {for (final (task, _) in tasks) task.id});
 
@@ -130,11 +130,17 @@ class TaskLocalDataSource {
     });
   }
 
+  /// Tasks with changes that are still on their way: waiting, being sent,
+  /// or failed for a temporary reason. A change the server refused doesn't
+  /// count: then the server's version of the task wins (e.g. the manager
+  /// cancelled it meanwhile), as in docs/architecture.md "Conflicts".
   Future<Set<String>> _taskIdsWithUnsentChanges() {
-    final query = _db.selectOnly(_db.localSyncOperations, distinct: true)
-      ..addColumns([_db.localSyncOperations.taskId])
-      ..where(_db.localSyncOperations.status.equals('SYNCED').not());
-    return query.map((row) => row.read(_db.localSyncOperations.taskId)!).get().then((ids) => ids.toSet());
+    final queue = _db.localSyncOperations;
+    final query = _db.selectOnly(queue, distinct: true)
+      ..addColumns([queue.taskId])
+      ..where(queue.status.isIn(['PENDING', 'SYNCING']) |
+          (queue.status.equals('FAILED') & queue.lastError.isIn(SyncErrors.temporary)));
+    return query.map((row) => row.read(queue.taskId)!).get().then((ids) => ids.toSet());
   }
 
   /// Removes tasks that are no longer on the server (with their requirements).

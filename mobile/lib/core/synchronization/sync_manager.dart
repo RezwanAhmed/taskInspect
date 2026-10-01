@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
@@ -24,8 +26,8 @@ class SyncManager {
   static const pullCursorKey = 'pullCursor';
 
   /// `lastError` of operations whose push failed for a temporary reason.
-  static const networkError = 'NETWORK_ERROR';
-  static const serverError = 'SERVER_ERROR';
+  static const networkError = SyncErrors.network;
+  static const serverError = SyncErrors.server;
 
   /// Whether a failed sync is worth retrying automatically: no connection
   /// or a server error. A business error would fail again.
@@ -81,14 +83,29 @@ class SyncManager {
   /// the automatic retry.
   Future<void> retryTemporaryFailures() {
     return (_db.update(_db.localSyncOperations)
-          ..where((o) => o.status.equals('FAILED') & o.lastError.isIn([networkError, serverError])))
+          ..where((o) => o.status.equals('FAILED') & o.lastError.isIn(SyncErrors.temporary)))
         .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
   }
 
   /// Every FAILED operation goes back to PENDING: the user tapped Retry.
+  /// A START refused because the task changed on the server is sent with
+  /// the task's version from the last pull, so it can succeed now.
   Future<void> retryFailed() {
-    return (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('FAILED')))
-        .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+    return _db.transaction(() async {
+      final failedStarts = await (_db.select(_db.localSyncOperations)
+            ..where((o) => o.status.equals('FAILED') & o.operation.equals(SyncOperation.start.apiName)))
+          .get();
+      for (final operation in failedStarts) {
+        final task = await (_db.select(_db.localTasks)..where((t) => t.id.equals(operation.taskId)))
+            .getSingleOrNull();
+        if (task != null) {
+          await (_db.update(_db.localSyncOperations)..where((o) => o.id.equals(operation.id)))
+              .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode({'version': task.version}))));
+        }
+      }
+      await (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('FAILED')))
+          .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+    });
   }
 
   /// Operations left SYNCING because the app was closed during a push go

@@ -28,6 +28,15 @@ enum SyncOperation {
   final String apiName;
 }
 
+/// `lastError` codes of operations whose push failed for a temporary
+/// reason; they are retried automatically. Any other `lastError` is the
+/// server's reason for refusing the change.
+abstract final class SyncErrors {
+  static const network = 'NETWORK_ERROR';
+  static const server = 'SERVER_ERROR';
+  static const temporary = [network, server];
+}
+
 /// Adds local changes to the sync queue ([LocalSyncOperations]).
 ///
 /// Call [add] inside the same transaction that saves the change, so the
