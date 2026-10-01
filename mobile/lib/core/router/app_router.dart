@@ -6,6 +6,7 @@ import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.
 import 'package:taskinspect/features/authentication/presentation/pages/login_page.dart';
 import 'package:taskinspect/features/authentication/presentation/pages/splash_page.dart';
 import 'package:taskinspect/features/dashboard/presentation/pages/home_page.dart';
+import 'package:taskinspect/features/tasks/presentation/pages/task_details_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_list_page.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
 
@@ -18,6 +19,8 @@ abstract final class AppRoutes {
 
   /// The task list opened on one tab, e.g. `/tasks?tab=inProgress`.
   static String tasksOn(TaskTab tab) => '$tasks?tab=${tab.name}';
+
+  static String task(String id) => '$tasks/$id';
 }
 
 /// Creates the app's router. It follows the [AuthBloc]: while the session
@@ -43,6 +46,10 @@ GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.spl
       GoRoute(
         path: AppRoutes.tasks,
         builder: (context, state) => TaskListPage(initialTab: TaskTab.parse(state.uri.queryParameters['tab'])),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id',
+        builder: (context, state) => TaskDetailsPage(taskId: state.pathParameters['id']!),
       ),
     ],
     errorBuilder: (context, state) => const _NotFoundPage(),
