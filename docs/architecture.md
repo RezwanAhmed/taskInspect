@@ -612,9 +612,10 @@ matters, ownership in the service. Tasks a user may not see answer
 |----------|---------|---------------|
 | `POST /api/auth/login`, `/refresh`, `/logout` | Anyone | — |
 | `GET /api/auth/me` | Any logged-in user | `401` |
-| `GET /api/users` | Administrators, managers | `403` |
+| `GET /api/users` (`?role=`, `?teamManagerId=`) | Administrators, managers | `403` |
 | `GET /api/users/{id}` | Administrators, managers; others only themselves | `403` |
 | `POST /api/users` | Administrators | `403` |
+| `PUT /api/users/{id}/team` | Administrators (a worker joins one manager's team, or leaves it) | `403` |
 | `POST /api/tasks` | Managers | `403` |
 | `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them | `404` (hidden) |
 | `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / ASSIGNED | `403` |

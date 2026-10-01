@@ -73,6 +73,10 @@ class AuthorizationMatrixTests {
                      "roles": ["WORKER"]}""".formatted(a.name().toLowerCase())));
     private static final Endpoint GET_WORKER = new Endpoint("GET /api/users/{assignedWorker}", null,
             (f, a) -> get("/api/users/{id}", f.users().get(Actor.ASSIGNED_WORKER).getId()));
+    private static final Endpoint SET_TEAM = new Endpoint("PUT /api/users/{assignedWorker}/team", null,
+            (f, a) -> put("/api/users/{id}/team", f.users().get(Actor.ASSIGNED_WORKER).getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"managerId\": \"" + f.users().get(Actor.CREATOR).getId() + "\"}"));
     private static final Endpoint CREATE_TASK = new Endpoint("POST /api/tasks", null, (f, a) -> post("/api/tasks")
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"title\": \"T\", \"priority\": \"LOW\", \"dueDate\": \"2026-12-01T09:00:00Z\"}"));
@@ -119,6 +123,7 @@ class AuthorizationMatrixTests {
                 row(LIST_USERS, 401, 200, 200, 200, 403, 403),
                 row(CREATE_USER, 401, 201, 403, 403, 403, 403),
                 row(GET_WORKER, 401, 200, 200, 200, 200, 403),
+                row(SET_TEAM, 401, 200, 403, 403, 403, 403),
                 row(CREATE_TASK, 401, 403, 201, 201, 403, 403),
                 row(GET_TASK, 401, 200, 200, 200, 200, 404),
                 row(EDIT_TASK, 401, 403, 200, 403, 403, 403),

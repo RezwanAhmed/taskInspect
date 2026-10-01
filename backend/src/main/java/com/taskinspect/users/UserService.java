@@ -25,6 +25,8 @@ public class UserService {
 
     static final String USER_NOT_FOUND = "USER_NOT_FOUND";
     static final String EMAIL_ALREADY_USED = "EMAIL_ALREADY_USED";
+    static final String NOT_A_WORKER = "NOT_A_WORKER";
+    static final String INVALID_TEAM_MANAGER = "INVALID_TEAM_MANAGER";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -45,6 +47,37 @@ public class UserService {
         return role == null
                 ? userRepository.findAllByOrganizationId(organizationId, pageable)
                 : userRepository.findAllByOrganizationIdAndRolesName(organizationId, role, pageable);
+    }
+
+    /** The workers in a manager's team. */
+    @Transactional(readOnly = true)
+    public Page<User> listTeam(CurrentUser caller, UUID teamManagerId, Pageable pageable) {
+        return userRepository.findAllByOrganizationIdAndTeamManagerId(organizationOf(caller), teamManagerId, pageable);
+    }
+
+    /**
+     * Puts a worker into an active manager's team of the same organization,
+     * or takes them out of their team ({@code managerId} null). A worker is
+     * in at most one team (docs/architecture.md "Teams").
+     */
+    @Transactional
+    public User setTeam(CurrentUser caller, UUID userId, UUID managerId) {
+        User admin = requireCaller(caller);
+        UUID organizationId = admin.getOrganization().getId();
+        User worker = userRepository.findByIdAndOrganizationId(userId, organizationId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, USER_NOT_FOUND, "User not found"));
+        if (!worker.hasRole(RoleName.WORKER)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, NOT_A_WORKER, "Only workers are put into a team");
+        }
+        User manager = managerId == null ? null : requireActiveWithRole(managerId, organizationId, RoleName.MANAGER,
+                INVALID_TEAM_MANAGER, "The team manager must be an active manager of the organization");
+        if (manager != null && manager.getId().equals(worker.getId())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, INVALID_TEAM_MANAGER, "A worker can't be their own manager");
+        }
+        worker.joinTeamOf(manager);
+        auditService.record(new AuditService.Entry(AuditAction.USER_TEAM_CHANGED, organizationId, admin.getId(),
+                "USER", worker.getId(), manager == null ? "no team" : "team of " + manager.getId()));
+        return userRepository.saveAndFlush(worker);
     }
 
     /** Administrators and managers can see any user of their organization; others only themselves. */
