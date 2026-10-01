@@ -5,7 +5,9 @@ import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/network/connectivity_monitor.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/core/synchronization/sync_manager.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
+import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
 import 'package:taskinspect/features/authentication/data/auth_interceptor.dart';
 import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
 import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
@@ -66,6 +68,8 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
       dispose: (database) => database.close(),
     )
     ..registerLazySingleton(() => SyncQueue(getIt()))
+    ..registerLazySingleton(() => SyncRemoteDataSource(getIt()))
+    ..registerLazySingleton(() => SyncManager(getIt(), getIt()))
     // Authentication
     ..registerLazySingleton(() => AuthRemoteDataSource(getIt<ApiClient>()))
     ..registerLazySingleton(() => TokenRefresher(getIt(), getIt()))

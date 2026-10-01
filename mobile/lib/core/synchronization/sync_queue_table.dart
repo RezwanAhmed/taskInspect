@@ -31,7 +31,8 @@ class LocalSyncOperations extends Table {
   /// Why the last attempt failed, e.g. `NETWORK_TIMEOUT`.
   TextColumn get lastError => text().nullable()();
 
-  /// PENDING, SYNCING, SYNCED or FAILED.
+  /// PENDING, SYNCING or FAILED. Once the server has applied an operation
+  /// (SYNCED), the SyncManager removes it from the queue.
   TextColumn get status => text().withDefault(const Constant('PENDING'))();
 
   @override
