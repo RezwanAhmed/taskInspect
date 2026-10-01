@@ -24,6 +24,25 @@ class SyncManager {
   /// time; calling again meanwhile returns the running one.
   Future<Result<void>> push() => _running ??= _pushAll().whenComplete(() => _running = null);
 
+  /// Operations left SYNCING because the app was closed during a push go
+  /// back to PENDING. Sending them again is safe: the server doesn't apply
+  /// an operation twice.
+  Future<void> resetInterrupted() async {
+    if (_running != null) {
+      return;
+    }
+    await (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('SYNCING')))
+        .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+  }
+
+  /// When the newest queued change was made; emits again whenever a change
+  /// is queued (or the queue is emptied), but not when only statuses change.
+  Stream<DateTime?> watchLatestChange() {
+    final latest = _db.localSyncOperations.createdAt.max();
+    final query = _db.selectOnly(_db.localSyncOperations)..addColumns([latest]);
+    return query.map((row) => row.read(latest)).watchSingle().distinct();
+  }
+
   Future<Result<void>> _pushAll() async {
     while (true) {
       final batch = await _nextBatch();

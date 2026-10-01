@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/config/app_config.dart';
@@ -206,5 +206,31 @@ void main() {
 
     expect(pushes, hasLength(1));
     expect((await queued()).single.status, 'PENDING');
+  });
+
+  test('operations left SYNCING by a closed app go back to PENDING', () async {
+    await add('t1', 'e1');
+    await db.update(db.localSyncOperations).write(const LocalSyncOperationsCompanion(status: Value('SYNCING')));
+
+    await manager.resetInterrupted();
+
+    expect((await queued()).single.status, 'PENDING');
+  });
+
+  test('reports when a change is queued, not when only a status changes', () async {
+    final seen = <DateTime?>[];
+    final subscription = manager.watchLatestChange().listen(seen.add);
+    addTearDown(subscription.cancel);
+    Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 50));
+
+    await settle();
+    await add('t1', 'e1');
+    await settle();
+    await db.update(db.localSyncOperations).write(const LocalSyncOperationsCompanion(status: Value('SYNCING')));
+    await settle();
+
+    expect(seen, hasLength(2));
+    expect(seen.first, isNull);
+    expect(seen.last, isNotNull);
   });
 }
