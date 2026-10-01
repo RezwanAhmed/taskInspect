@@ -8,6 +8,7 @@ import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
 import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
+import 'package:taskinspect/features/authentication/data/token_refresher.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 
@@ -36,7 +37,8 @@ void main() {
     server = DioAdapter(dio: api.dio, matcher: const UrlRequestMatcher());
     storage = InMemoryTokenStorage();
     now = DateTime.utc(2026, 10, 1, 9);
-    repository = AuthRepositoryImpl(AuthRemoteDataSource(api), storage, now: () => now);
+    final remote = AuthRemoteDataSource(api);
+    repository = AuthRepositoryImpl(remote, storage, TokenRefresher(remote, storage), now: () => now);
   });
 
   Future<void> loggedIn() async {

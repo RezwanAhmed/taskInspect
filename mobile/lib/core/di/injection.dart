@@ -3,8 +3,10 @@ import 'package:taskinspect/core/config/app_config.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/features/authentication/data/auth_interceptor.dart';
 import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
 import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
+import 'package:taskinspect/features/authentication/data/token_refresher.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
@@ -23,12 +25,22 @@ Future<void> configureDependencies({AppConfig? config}) async {
   await getIt.reset();
   getIt
     ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
-    ..registerLazySingleton<ApiClient>(() => ApiClient.forConfig(getIt<AppConfig>()))
+    ..registerLazySingleton<ApiClient>(() {
+      final client = ApiClient.forConfig(getIt<AppConfig>());
+      client.dio.interceptors.add(AuthInterceptor(
+        dio: client.dio,
+        storage: getIt(),
+        refresher: getIt(),
+        onSessionExpired: () => getIt<AuthBloc>().add(const SessionExpired()),
+      ));
+      return client;
+    })
     ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
     ..registerLazySingleton<AppDatabase>(AppDatabase.new, dispose: (database) => database.close())
     // Authentication
     ..registerLazySingleton(() => AuthRemoteDataSource(getIt<ApiClient>()))
-    ..registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(getIt(), getIt()))
+    ..registerLazySingleton(() => TokenRefresher(getIt(), getIt()))
+    ..registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(getIt(), getIt(), getIt()))
     ..registerFactory(() => Login(getIt()))
     ..registerFactory(() => RestoreSession(getIt()))
     ..registerFactory(() => Logout(getIt()))
