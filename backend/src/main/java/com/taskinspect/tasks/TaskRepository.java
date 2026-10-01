@@ -42,6 +42,17 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
     @Query("update Task t set t.updatedAt = :at where t.id = :id")
     void markChanged(UUID id, Instant at);
 
+    /**
+     * Per team manager: how many tasks the team members have that are not
+     * finished yet (also those of deactivated members: the work still exists).
+     */
+    @Query("""
+            select t.assignee.teamManager.id, count(t) from Task t
+            where t.organization.id = :organizationId and t.assignee.teamManager is not null
+              and t.status not in (com.taskinspect.tasks.TaskStatus.APPROVED, com.taskinspect.tasks.TaskStatus.CANCELLED)
+            group by t.assignee.teamManager.id""")
+    List<Object[]> countUnfinishedTasksPerTeam(UUID organizationId);
+
     /** Loads the task and locks its row until the transaction ends (SELECT ... FOR UPDATE). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Task t where t.id = :id")

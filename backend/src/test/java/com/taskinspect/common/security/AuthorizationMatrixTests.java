@@ -67,6 +67,9 @@ class AuthorizationMatrixTests {
     }
 
     private static final Endpoint LIST_USERS = new Endpoint("GET /api/users", null, (f, a) -> get("/api/users"));
+    private static final Endpoint LIST_TEAMS = new Endpoint("GET /api/teams", null, (f, a) -> get("/api/teams"));
+    private static final Endpoint LIST_TEAM_TASKS = new Endpoint("GET /api/tasks/team", null,
+            (f, a) -> get("/api/tasks/team"));
     private static final Endpoint CREATE_USER = new Endpoint("POST /api/users", null, (f, a) -> post("/api/users")
             .contentType(MediaType.APPLICATION_JSON).content("""
                     {"email": "new-%s@example.com", "fullName": "New", "password": "password-123",
@@ -124,6 +127,8 @@ class AuthorizationMatrixTests {
                 row(CREATE_USER, 401, 201, 403, 403, 403, 403),
                 row(GET_WORKER, 401, 200, 200, 200, 200, 403),
                 row(SET_TEAM, 401, 200, 403, 403, 403, 403),
+                row(LIST_TEAMS, 401, 200, 200, 200, 200, 200),
+                row(LIST_TEAM_TASKS, 401, 200, 200, 200, 200, 200),
                 row(CREATE_TASK, 401, 403, 201, 201, 403, 403),
                 row(GET_TASK, 401, 200, 200, 200, 200, 404),
                 row(EDIT_TASK, 401, 403, 200, 403, 403, 403),

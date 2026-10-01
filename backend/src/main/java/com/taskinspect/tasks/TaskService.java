@@ -1,11 +1,14 @@
 package com.taskinspect.tasks;
 
 import static com.taskinspect.tasks.TaskSpecifications.assignedTo;
+import static com.taskinspect.tasks.TaskSpecifications.assignedToTeamOf;
 import static com.taskinspect.tasks.TaskSpecifications.dueBefore;
 import static com.taskinspect.tasks.TaskSpecifications.dueFrom;
 import static com.taskinspect.tasks.TaskSpecifications.hasPriority;
 import static com.taskinspect.tasks.TaskSpecifications.hasStatus;
 import static com.taskinspect.tasks.TaskSpecifications.inOrganization;
+import static com.taskinspect.tasks.TaskSpecifications.notAssignedTo;
+import static com.taskinspect.tasks.TaskSpecifications.notInStatus;
 
 import com.taskinspect.common.error.ApiException;
 import com.taskinspect.common.error.ErrorCode;
@@ -170,6 +173,25 @@ public class TaskService {
         return canSeeAllTasks(user)
                 ? inOrganization(user.getOrganization().getId())
                 : Specification.allOf(inOrganization(user.getOrganization().getId()), assignedTo(user.getId()));
+    }
+
+    /**
+     * The tasks of the caller's team members (not the caller's own), shown
+     * to them as tiles (docs/architecture.md, "What a Worker Sees").
+     * Cancelled tasks are left out; tasks of deactivated members stay (the
+     * work still exists). A caller without a team, or whose team manager
+     * was deactivated, gets none.
+     */
+    @Transactional(readOnly = true)
+    public Page<Task> listTeam(CurrentUser caller, TaskStatus status, Pageable pageable) {
+        User user = userService.requireCaller(caller);
+        User teamManager = user.getTeamManager();
+        if (teamManager == null || !teamManager.isActive()) {
+            return Page.empty(pageable);
+        }
+        return taskRepository.findAll(Specification.allOf(inOrganization(user.getOrganization().getId()),
+                assignedToTeamOf(teamManager.getId()), notAssignedTo(user.getId()),
+                notInStatus(TaskStatus.CANCELLED), hasStatus(status)), pageable);
     }
 
     /** One task the caller may see; 404 for tasks that don't exist or aren't visible. */

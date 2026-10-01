@@ -7,6 +7,7 @@ import com.taskinspect.common.web.PageResponse;
 import com.taskinspect.tasks.dto.AssignTaskRequest;
 import com.taskinspect.tasks.dto.CreateTaskRequest;
 import com.taskinspect.tasks.dto.TaskResponse;
+import com.taskinspect.tasks.dto.TaskTile;
 import com.taskinspect.tasks.dto.UpdateTaskRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -59,6 +60,18 @@ public class TaskController {
         PageRequest pageable = PageRequest.of(page, size, Sort.by("dueDate", "createdAt"));
         TaskService.TaskFilter filter = new TaskService.TaskFilter(status, priority, dueFrom, dueBefore);
         return PageResponse.of(taskService.list(CurrentUser.from(jwt), filter, pageable), TaskResponse::from);
+    }
+
+    @GetMapping("/team")
+    @Operation(summary = "List my team's tasks", description = "The tasks of the caller's team members (not the "
+            + "caller's own) as tiles: no description, requirements, answers or evidence. Cancelled tasks are left "
+            + "out; empty for a caller without a team. Optional filter: status.")
+    public PageResponse<TaskTile> listTeam(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) TaskStatus status,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        PageRequest pageable = PageRequest.of(page, size, Sort.by("dueDate", "createdAt"));
+        return PageResponse.of(taskService.listTeam(CurrentUser.from(jwt), status, pageable), TaskTile::from);
     }
 
     @GetMapping("/{id}")

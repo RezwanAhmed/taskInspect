@@ -22,6 +22,19 @@ public final class TaskSpecifications {
         return (task, query, cb) -> cb.equal(task.get("assignee").get("id"), userId);
     }
 
+    /** Tasks assigned to a member of the manager's team. */
+    public static Specification<Task> assignedToTeamOf(UUID teamManagerId) {
+        return (task, query, cb) -> cb.equal(task.get("assignee").get("teamManager").get("id"), teamManagerId);
+    }
+
+    public static Specification<Task> notAssignedTo(UUID userId) {
+        return (task, query, cb) -> cb.notEqual(task.get("assignee").get("id"), userId);
+    }
+
+    public static Specification<Task> notInStatus(TaskStatus status) {
+        return (task, query, cb) -> cb.notEqual(task.get("status"), status);
+    }
+
     public static Specification<Task> hasStatus(TaskStatus status) {
         return status == null ? Specification.unrestricted() : (task, query, cb) -> cb.equal(task.get("status"), status);
     }
