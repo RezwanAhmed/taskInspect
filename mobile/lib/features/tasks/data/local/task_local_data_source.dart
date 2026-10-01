@@ -110,8 +110,17 @@ class TaskLocalDataSource {
           await saveTask(task, requirements);
         }
       }
-      await deleteTasksExcept({...visibleIds, ...unsent});
+      // A task with anything left in the queue stays on the device, even
+      // when the server no longer shows it (e.g. reassigned after a refused
+      // change): its answers, evidence and the failure stay visible.
+      await deleteTasksExcept({...visibleIds, ...await _taskIdsInQueue()});
     });
+  }
+
+  Future<Set<String>> _taskIdsInQueue() {
+    final queue = _db.localSyncOperations;
+    final query = _db.selectOnly(queue, distinct: true)..addColumns([queue.taskId]);
+    return query.map((row) => row.read(queue.taskId)!).get().then((ids) => ids.toSet());
   }
 
   /// Starts a task on the device and queues the START for the server, in
@@ -138,16 +147,23 @@ class TaskLocalDataSource {
   }
 
   /// Tasks with changes that are still on their way: waiting, being sent,
-  /// or failed for a temporary reason. A change the server refused doesn't
-  /// count: then the server's version of the task wins (e.g. the manager
-  /// cancelled it meanwhile), as in docs/architecture.md "Conflicts".
-  Future<Set<String>> _taskIdsWithUnsentChanges() {
+  /// or failed for a temporary reason. A task with a change the server
+  /// refused doesn't count, even if later changes wait behind it: then the
+  /// server's version of the task wins (e.g. the manager cancelled it
+  /// meanwhile), as in docs/architecture.md "Conflicts".
+  Future<Set<String>> _taskIdsWithUnsentChanges() async {
     final queue = _db.localSyncOperations;
-    final query = _db.selectOnly(queue, distinct: true)
-      ..addColumns([queue.taskId])
-      ..where(queue.status.isIn(['PENDING', 'SYNCING']) |
-          (queue.status.equals('FAILED') & queue.lastError.isIn(SyncErrors.temporary)));
-    return query.map((row) => row.read(queue.taskId)!).get().then((ids) => ids.toSet());
+    final refused = queue.status.equals('FAILED') & queue.lastError.isNotIn(SyncErrors.temporary);
+    Future<Set<String>> taskIds(Expression<bool> where) {
+      final query = _db.selectOnly(queue, distinct: true)
+        ..addColumns([queue.taskId])
+        ..where(where);
+      return query.map((row) => row.read(queue.taskId)!).get().then((ids) => ids.toSet());
+    }
+
+    final onTheirWay = await taskIds(queue.status.isIn(['PENDING', 'SYNCING']) |
+        (queue.status.equals('FAILED') & queue.lastError.isIn(SyncErrors.temporary)));
+    return onTheirWay.difference(await taskIds(refused));
   }
 
   /// Removes tasks that are no longer on the server (with their requirements).
