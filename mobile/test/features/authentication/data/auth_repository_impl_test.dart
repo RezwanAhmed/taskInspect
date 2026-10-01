@@ -32,6 +32,7 @@ void main() {
   late DateTime now;
   late AuthRepositoryImpl repository;
   late int clearedLocalData;
+  late List<String> claimedBy;
 
   setUp(() {
     final api = ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://api.test'));
@@ -40,8 +41,11 @@ void main() {
     now = DateTime.utc(2026, 10, 1, 9);
     final remote = AuthRemoteDataSource(api);
     clearedLocalData = 0;
+    claimedBy = [];
     repository = AuthRepositoryImpl(remote, storage, TokenRefresher(remote, storage),
-        now: () => now, clearLocalData: () async => clearedLocalData++);
+        now: () => now,
+        clearLocalData: () async => clearedLocalData++,
+        claimLocalData: (userId) async => claimedBy.add(userId));
   });
 
   Future<void> loggedIn() async {
@@ -127,5 +131,23 @@ void main() {
     expect(storage.tokens, isNull);
     expect(serverCalled, isTrue);
     expect(clearedLocalData, 1, reason: 'the user\'s tasks and answers are removed from the device');
+  });
+
+  test('signing in or restoring the session claims the local data for the user', () async {
+    await loggedIn();
+    await repository.restoreSession();
+
+    expect(claimedBy, ['u1', 'u1']);
+  });
+
+  test('a session that can no longer be restored claims nothing', () async {
+    await loggedIn();
+    claimedBy.clear();
+    now = DateTime.utc(2026, 10, 1, 10);
+    server.onPost('/api/auth/refresh', (s) => s.reply(401, {'code': 'INVALID_REFRESH_TOKEN'}));
+
+    await repository.restoreSession();
+
+    expect(claimedBy, isEmpty);
   });
 }

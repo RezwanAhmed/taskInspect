@@ -18,8 +18,10 @@ class AuthRepositoryImpl implements AuthRepository {
     this._refresher, {
     DateTime Function()? now,
     Future<void> Function()? clearLocalData,
+    Future<void> Function(String userId)? claimLocalData,
   }) : _now = now ?? DateTime.now,
-       _clearLocalData = clearLocalData ?? _nothing;
+       _clearLocalData = clearLocalData ?? _nothing,
+       _claimLocalData = claimLocalData ?? _nobody;
 
   final AuthRemoteDataSource _remote;
   final TokenStorage _storage;
@@ -29,7 +31,13 @@ class AuthRepositoryImpl implements AuthRepository {
   /// Removes the user's data from the device at sign out.
   final Future<void> Function() _clearLocalData;
 
+  /// Makes the device's data the signed-in user's; another user's data is
+  /// removed first (see LocalDataOwner).
+  final Future<void> Function(String userId) _claimLocalData;
+
   static Future<void> _nothing() async {}
+
+  static Future<void> _nobody(String userId) async {}
 
   @override
   Future<Result<AuthUser>> login({
@@ -39,6 +47,7 @@ class AuthRepositoryImpl implements AuthRepository {
     final result = await _remote.login(email: email, password: password);
     switch (result) {
       case Ok(:final value):
+        await _claimLocalData(value.user.id);
         await _refresher.save(value);
         return Ok(value.user);
       case Err(:final failure):
@@ -56,16 +65,21 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Ok(null);
     }
     if (!tokens.isAccessTokenExpired(now)) {
+      await _claimLocalData(user.id);
       return Ok(user);
     }
 
-    return switch (await _refresher.refresh()) {
-      RefreshOutcome.refreshed => Ok(await _readUser()),
+    final restored = switch (await _refresher.refresh()) {
+      RefreshOutcome.refreshed => await _readUser(),
       // Offline (or the server is down): keep working with the saved session.
-      RefreshOutcome.unavailable => Ok(user),
+      RefreshOutcome.unavailable => user,
       // The server refused the refresh token or the account: logged out.
-      RefreshOutcome.refused => const Ok(null),
+      RefreshOutcome.refused => null,
     };
+    if (restored != null) {
+      await _claimLocalData(restored.id);
+    }
+    return Ok(restored);
   }
 
   @override

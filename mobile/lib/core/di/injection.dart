@@ -5,6 +5,7 @@ import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/network/connectivity_monitor.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/core/storage/local_data_owner.dart';
 import 'package:taskinspect/core/synchronization/sync_manager.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
@@ -83,13 +84,8 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
         getIt(),
         getIt(),
         getIt(),
-        clearLocalData: () async {
-          await getIt<AppDatabase>().clearUserData();
-          final evidence = getIt<EvidenceRepository>();
-          if (evidence is EvidenceLocalDataSource) {
-            await evidence.deleteAllFiles();
-          }
-        },
+        clearLocalData: _clearLocalData,
+        claimLocalData: (userId) => LocalDataOwner(getIt()).claim(userId, clear: _clearLocalData),
       ),
     )
     ..registerFactory(() => Login(getIt()))
@@ -125,4 +121,13 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     )
     // Dashboard
     ..registerFactory(() => DashboardCubit(getIt(), getIt()));
+}
+
+/// Removes the user's data from the device: the database and evidence files.
+Future<void> _clearLocalData() async {
+  await getIt<AppDatabase>().clearUserData();
+  final evidence = getIt<EvidenceRepository>();
+  if (evidence is EvidenceLocalDataSource) {
+    await evidence.deleteAllFiles();
+  }
 }
