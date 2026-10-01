@@ -18,7 +18,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -44,6 +44,11 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 7) {
             await migrator.createTable(localSyncState);
+          }
+          if (from >= 4 && from < 8) {
+            // Created with these columns when from < 4.
+            await migrator.addColumn(localEvidence, localEvidence.uploadRetryCount);
+            await migrator.addColumn(localEvidence, localEvidence.uploadError);
           }
         },
         beforeOpen: (details) async {

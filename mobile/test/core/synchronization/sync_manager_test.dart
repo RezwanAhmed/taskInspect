@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +13,8 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_manager.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
+import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
+import 'package:taskinspect/features/evidence/data/remote/evidence_remote_data_source.dart';
 import 'package:taskinspect/features/requirements/data/local/answer_local_data_source.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
@@ -37,7 +41,7 @@ void main() {
     api = ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://api.test'));
     now = DateTime.utc(2026, 10, 1, 9);
     queue = SyncQueue(db, now: () => now = now.add(const Duration(seconds: 1)));
-    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db), batchSize: 2);
+    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db), EvidenceUploader(db, EvidenceRemoteDataSource(api)), batchSize: 2);
     pushes = [];
     for (final id in ['t1', 't2']) {
       await TaskLocalDataSource(db).saveTask(fakeTask(id, status: TaskStatus.inProgress), [
@@ -455,5 +459,61 @@ void main() {
       expect(await manager.sync(), isA<Err<void>>());
       expect(pulls, 0);
     });
+  });
+
+  test('a sync uploads the files the push registered, then pulls; a failed upload still pulls', () async {
+    final folder = await Directory.systemTemp.createTemp('sync_upload_test');
+    addTearDown(() => folder.delete(recursive: true));
+    final file = File('${folder.path}/e1.jpg');
+    await file.writeAsBytes([1, 2, 3]);
+    await db.into(db.localEvidence).insert(LocalEvidenceCompanion.insert(
+          id: 'e1',
+          taskId: 't1',
+          requirementId: 'r-t1',
+          localPath: file.path,
+          mimeType: 'image/jpeg',
+          sizeBytes: 3,
+          createdAt: now,
+        ));
+    await add('t1', 'e1');
+    final steps = <String>[];
+    var completeStatus = 503;
+    api.dio.httpClientAdapter = FakeServer((request) async {
+      final step = request.path.split('/').last;
+      steps.add(step);
+      return switch (step) {
+        'push' => (200, {
+            'results': [
+              for (final operation in ((request.data as Map)['operations'] as List).cast<_Sent>())
+                {'id': operation['id'], 'status': 'APPLIED'},
+            ],
+          }),
+        'upload-url' => (200, {'url': 'http://files.test/f', 'method': 'PUT', 'headers': {'Content-Type': 'image/jpeg'}}),
+        'complete' => (completeStatus, {'code': null}),
+        _ => (200, {'cursor': 'c1', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]}),
+      };
+    });
+    final files = Dio()..httpClientAdapter = FakeServer((_) async => (200, null));
+    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db),
+        EvidenceUploader(db, EvidenceRemoteDataSource(api, files: files)));
+
+    final failed = await manager.sync();
+
+    expect(steps, ['push', 'upload-url', 'complete', 'pull']);
+    expect(failed, isA<Err<void>>(), reason: 'the scheduler retries the upload');
+
+    completeStatus = 200;
+    await manager.retryTemporaryFailures();
+    steps.clear();
+    expect(await manager.sync(), isA<Ok<void>>());
+    expect(steps, ['upload-url', 'complete', 'pull'], reason: 'nothing left to push');
+    expect((await db.select(db.localEvidence).getSingle()).uploadStatus, 'UPLOADED');
+  });
+
+  test('an expired upload URL counts as temporary, so the scheduler retries the sync', () {
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 403, code: EvidenceRemoteDataSource.urlExpired)), isTrue);
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 403, code: 'FORBIDDEN')), isFalse);
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 503)), isTrue);
+    expect(SyncManager.isTemporary(const NetworkFailure()), isTrue);
   });
 }

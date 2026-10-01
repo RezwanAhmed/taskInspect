@@ -592,27 +592,33 @@ sequenceDiagram
     App->>App: Save locally + queue operations
     App-->>W: Shown at once as pending
     Note over SM: Connection returns
-    SM->>API: Request pre-signed URL for each new file
-    SM->>S3: Upload photos and PDFs
     SM->>API: POST /api/sync/push (queued operations, in order)
     API->>API: Skip already-applied IDs,<br/>check rules, save
     API-->>SM: Result per operation
     SM->>App: Mark SYNCED / FAILED
+    SM->>API: Request pre-signed URL for each registered file
+    SM->>S3: Upload photos and PDFs
+    SM->>API: Confirm each upload (complete)
     SM->>API: GET /api/sync/pull?since=cursor
     API-->>SM: Changed tasks, reviews, status
     SM->>App: Update local records + cursor
 ```
 
-1. **Files first.** Photos and PDFs are uploaded before the operations that
-   depend on them, so a task is never submitted to the server with
-   evidence the server cannot find. Files have their own upload queue
-   with the same statuses and retries (task 6.12).
-2. **Push.** `POST /api/sync/push` sends pending operations in the order
+1. **Push.** `POST /api/sync/push` sends pending operations in the order
    they were created. The server records every applied operation ID in
    `sync_records`; if an ID arrives again (for example after a timeout),
    it returns the earlier result instead of applying it twice. Each
    operation goes through the same services and rules as a normal API
-   call — the task state machine, role and ownership checks.
+   call — the task state machine, role and ownership checks. Adding a
+   photo or PDF is one of these operations: it registers the file
+   (type, size) with the server.
+2. **Files.** Once a file is registered, the app asks for a pre-signed
+   upload URL, sends the file to it and confirms the upload (`complete`;
+   the server checks the stored size). Files have their own upload queue
+   with the same statuses (`PENDING`, `UPLOADING`, `FAILED`, `UPLOADED`)
+   and retries (task 6.12); a failed upload doesn't stop the pull. A
+   submit waits until all of the task's files are uploaded (task 7.5),
+   so a task is never submitted with evidence the server cannot find.
 3. **Pull.** `GET /api/sync/pull?since=<cursor>` returns everything that
    changed on the server since the last pull: new assignments, status
    changes, review results and reasons. The app stores the new cursor

@@ -2375,6 +2375,29 @@ class $LocalEvidenceTable extends LocalEvidence
     requiredDuringInsert: false,
     defaultValue: const Constant('PENDING'),
   );
+  static const VerificationMeta _uploadRetryCountMeta = const VerificationMeta(
+    'uploadRetryCount',
+  );
+  @override
+  late final GeneratedColumn<int> uploadRetryCount = GeneratedColumn<int>(
+    'upload_retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _uploadErrorMeta = const VerificationMeta(
+    'uploadError',
+  );
+  @override
+  late final GeneratedColumn<String> uploadError = GeneratedColumn<String>(
+    'upload_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2386,6 +2409,8 @@ class $LocalEvidenceTable extends LocalEvidence
     createdAt,
     fileName,
     uploadStatus,
+    uploadRetryCount,
+    uploadError,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2470,6 +2495,24 @@ class $LocalEvidenceTable extends LocalEvidence
         ),
       );
     }
+    if (data.containsKey('upload_retry_count')) {
+      context.handle(
+        _uploadRetryCountMeta,
+        uploadRetryCount.isAcceptableOrUnknown(
+          data['upload_retry_count']!,
+          _uploadRetryCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('upload_error')) {
+      context.handle(
+        _uploadErrorMeta,
+        uploadError.isAcceptableOrUnknown(
+          data['upload_error']!,
+          _uploadErrorMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2515,6 +2558,14 @@ class $LocalEvidenceTable extends LocalEvidence
         DriftSqlType.string,
         data['${effectivePrefix}upload_status'],
       )!,
+      uploadRetryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}upload_retry_count'],
+      )!,
+      uploadError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}upload_error'],
+      ),
     );
   }
 
@@ -2536,8 +2587,14 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
   /// Original name of a picked document; `null` for photos.
   final String? fileName;
 
-  /// PENDING until the file is uploaded, then UPLOADED.
+  /// The file's upload (task 6.12): PENDING -> UPLOADING -> UPLOADED, or
+  /// FAILED with [uploadError] (retried like the sync queue).
   final String uploadStatus;
+  final int uploadRetryCount;
+
+  /// Why the last upload failed: NETWORK_ERROR / SERVER_ERROR (retried
+  /// automatically), FILE_MISSING or the server's error code.
+  final String? uploadError;
   const EvidenceRow({
     required this.id,
     required this.taskId,
@@ -2548,6 +2605,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     required this.createdAt,
     this.fileName,
     required this.uploadStatus,
+    required this.uploadRetryCount,
+    this.uploadError,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2563,6 +2622,10 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       map['file_name'] = Variable<String>(fileName);
     }
     map['upload_status'] = Variable<String>(uploadStatus);
+    map['upload_retry_count'] = Variable<int>(uploadRetryCount);
+    if (!nullToAbsent || uploadError != null) {
+      map['upload_error'] = Variable<String>(uploadError);
+    }
     return map;
   }
 
@@ -2579,6 +2642,10 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ? const Value.absent()
           : Value(fileName),
       uploadStatus: Value(uploadStatus),
+      uploadRetryCount: Value(uploadRetryCount),
+      uploadError: uploadError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(uploadError),
     );
   }
 
@@ -2597,6 +2664,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       fileName: serializer.fromJson<String?>(json['fileName']),
       uploadStatus: serializer.fromJson<String>(json['uploadStatus']),
+      uploadRetryCount: serializer.fromJson<int>(json['uploadRetryCount']),
+      uploadError: serializer.fromJson<String?>(json['uploadError']),
     );
   }
   @override
@@ -2612,6 +2681,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'fileName': serializer.toJson<String?>(fileName),
       'uploadStatus': serializer.toJson<String>(uploadStatus),
+      'uploadRetryCount': serializer.toJson<int>(uploadRetryCount),
+      'uploadError': serializer.toJson<String?>(uploadError),
     };
   }
 
@@ -2625,6 +2696,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     DateTime? createdAt,
     Value<String?> fileName = const Value.absent(),
     String? uploadStatus,
+    int? uploadRetryCount,
+    Value<String?> uploadError = const Value.absent(),
   }) => EvidenceRow(
     id: id ?? this.id,
     taskId: taskId ?? this.taskId,
@@ -2635,6 +2708,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     createdAt: createdAt ?? this.createdAt,
     fileName: fileName.present ? fileName.value : this.fileName,
     uploadStatus: uploadStatus ?? this.uploadStatus,
+    uploadRetryCount: uploadRetryCount ?? this.uploadRetryCount,
+    uploadError: uploadError.present ? uploadError.value : this.uploadError,
   );
   EvidenceRow copyWithCompanion(LocalEvidenceCompanion data) {
     return EvidenceRow(
@@ -2651,6 +2726,12 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       uploadStatus: data.uploadStatus.present
           ? data.uploadStatus.value
           : this.uploadStatus,
+      uploadRetryCount: data.uploadRetryCount.present
+          ? data.uploadRetryCount.value
+          : this.uploadRetryCount,
+      uploadError: data.uploadError.present
+          ? data.uploadError.value
+          : this.uploadError,
     );
   }
 
@@ -2665,7 +2746,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ..write('sizeBytes: $sizeBytes, ')
           ..write('createdAt: $createdAt, ')
           ..write('fileName: $fileName, ')
-          ..write('uploadStatus: $uploadStatus')
+          ..write('uploadStatus: $uploadStatus, ')
+          ..write('uploadRetryCount: $uploadRetryCount, ')
+          ..write('uploadError: $uploadError')
           ..write(')'))
         .toString();
   }
@@ -2681,6 +2764,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     createdAt,
     fileName,
     uploadStatus,
+    uploadRetryCount,
+    uploadError,
   );
   @override
   bool operator ==(Object other) =>
@@ -2694,7 +2779,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           other.sizeBytes == this.sizeBytes &&
           other.createdAt == this.createdAt &&
           other.fileName == this.fileName &&
-          other.uploadStatus == this.uploadStatus);
+          other.uploadStatus == this.uploadStatus &&
+          other.uploadRetryCount == this.uploadRetryCount &&
+          other.uploadError == this.uploadError);
 }
 
 class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
@@ -2707,6 +2794,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
   final Value<DateTime> createdAt;
   final Value<String?> fileName;
   final Value<String> uploadStatus;
+  final Value<int> uploadRetryCount;
+  final Value<String?> uploadError;
   final Value<int> rowid;
   const LocalEvidenceCompanion({
     this.id = const Value.absent(),
@@ -2718,6 +2807,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     this.createdAt = const Value.absent(),
     this.fileName = const Value.absent(),
     this.uploadStatus = const Value.absent(),
+    this.uploadRetryCount = const Value.absent(),
+    this.uploadError = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalEvidenceCompanion.insert({
@@ -2730,6 +2821,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     required DateTime createdAt,
     this.fileName = const Value.absent(),
     this.uploadStatus = const Value.absent(),
+    this.uploadRetryCount = const Value.absent(),
+    this.uploadError = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        taskId = Value(taskId),
@@ -2748,6 +2841,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     Expression<DateTime>? createdAt,
     Expression<String>? fileName,
     Expression<String>? uploadStatus,
+    Expression<int>? uploadRetryCount,
+    Expression<String>? uploadError,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2760,6 +2855,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (fileName != null) 'file_name': fileName,
       if (uploadStatus != null) 'upload_status': uploadStatus,
+      if (uploadRetryCount != null) 'upload_retry_count': uploadRetryCount,
+      if (uploadError != null) 'upload_error': uploadError,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2774,6 +2871,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     Value<DateTime>? createdAt,
     Value<String?>? fileName,
     Value<String>? uploadStatus,
+    Value<int>? uploadRetryCount,
+    Value<String?>? uploadError,
     Value<int>? rowid,
   }) {
     return LocalEvidenceCompanion(
@@ -2786,6 +2885,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
       createdAt: createdAt ?? this.createdAt,
       fileName: fileName ?? this.fileName,
       uploadStatus: uploadStatus ?? this.uploadStatus,
+      uploadRetryCount: uploadRetryCount ?? this.uploadRetryCount,
+      uploadError: uploadError ?? this.uploadError,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2820,6 +2921,12 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     if (uploadStatus.present) {
       map['upload_status'] = Variable<String>(uploadStatus.value);
     }
+    if (uploadRetryCount.present) {
+      map['upload_retry_count'] = Variable<int>(uploadRetryCount.value);
+    }
+    if (uploadError.present) {
+      map['upload_error'] = Variable<String>(uploadError.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2838,6 +2945,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
           ..write('createdAt: $createdAt, ')
           ..write('fileName: $fileName, ')
           ..write('uploadStatus: $uploadStatus, ')
+          ..write('uploadRetryCount: $uploadRetryCount, ')
+          ..write('uploadError: $uploadError, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5944,6 +6053,8 @@ typedef $$LocalEvidenceTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<String?> fileName,
       Value<String> uploadStatus,
+      Value<int> uploadRetryCount,
+      Value<String?> uploadError,
       Value<int> rowid,
     });
 typedef $$LocalEvidenceTableUpdateCompanionBuilder =
@@ -5957,6 +6068,8 @@ typedef $$LocalEvidenceTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String?> fileName,
       Value<String> uploadStatus,
+      Value<int> uploadRetryCount,
+      Value<String?> uploadError,
       Value<int> rowid,
     });
 
@@ -6045,6 +6158,16 @@ class $$LocalEvidenceTableFilterComposer
 
   ColumnFilters<String> get uploadStatus => $composableBuilder(
     column: $table.uploadStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get uploadRetryCount => $composableBuilder(
+    column: $table.uploadRetryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uploadError => $composableBuilder(
+    column: $table.uploadError,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6139,6 +6262,16 @@ class $$LocalEvidenceTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get uploadRetryCount => $composableBuilder(
+    column: $table.uploadRetryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get uploadError => $composableBuilder(
+    column: $table.uploadError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LocalTasksTableOrderingComposer get taskId {
     final $$LocalTasksTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -6215,6 +6348,16 @@ class $$LocalEvidenceTableAnnotationComposer
 
   GeneratedColumn<String> get uploadStatus => $composableBuilder(
     column: $table.uploadStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get uploadRetryCount => $composableBuilder(
+    column: $table.uploadRetryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get uploadError => $composableBuilder(
+    column: $table.uploadError,
     builder: (column) => column,
   );
 
@@ -6303,6 +6446,8 @@ class $$LocalEvidenceTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> fileName = const Value.absent(),
                 Value<String> uploadStatus = const Value.absent(),
+                Value<int> uploadRetryCount = const Value.absent(),
+                Value<String?> uploadError = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEvidenceCompanion(
                 id: id,
@@ -6314,6 +6459,8 @@ class $$LocalEvidenceTableTableManager
                 createdAt: createdAt,
                 fileName: fileName,
                 uploadStatus: uploadStatus,
+                uploadRetryCount: uploadRetryCount,
+                uploadError: uploadError,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6327,6 +6474,8 @@ class $$LocalEvidenceTableTableManager
                 required DateTime createdAt,
                 Value<String?> fileName = const Value.absent(),
                 Value<String> uploadStatus = const Value.absent(),
+                Value<int> uploadRetryCount = const Value.absent(),
+                Value<String?> uploadError = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEvidenceCompanion.insert(
                 id: id,
@@ -6338,6 +6487,8 @@ class $$LocalEvidenceTableTableManager
                 createdAt: createdAt,
                 fileName: fileName,
                 uploadStatus: uploadStatus,
+                uploadRetryCount: uploadRetryCount,
+                uploadError: uploadError,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -27,9 +27,11 @@ import 'package:taskinspect/features/authentication/domain/usecases/restore_sess
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
 import 'package:taskinspect/features/evidence/data/device_evidence_picker.dart';
+import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
 import 'package:taskinspect/features/evidence/data/image_compressor.dart';
 import 'package:taskinspect/features/evidence/data/local/evidence_local_data_source.dart';
 import 'package:taskinspect/features/evidence/data/open_filex_document_opener.dart';
+import 'package:taskinspect/features/evidence/data/remote/evidence_remote_data_source.dart';
 import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
@@ -77,7 +79,9 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     )
     ..registerLazySingleton(() => SyncQueue(getIt()))
     ..registerLazySingleton(() => SyncRemoteDataSource(getIt()))
-    ..registerLazySingleton(() => SyncManager(getIt(), getIt(), getIt()))
+    ..registerLazySingleton(() => EvidenceRemoteDataSource(getIt()))
+    ..registerLazySingleton(() => EvidenceUploader(getIt(), getIt()))
+    ..registerLazySingleton(() => SyncManager(getIt(), getIt(), getIt(), getIt()))
     ..registerLazySingleton(
       () => SyncScheduler(getIt(), getIt()),
       dispose: (scheduler) => scheduler.stop(),

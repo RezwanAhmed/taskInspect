@@ -6,6 +6,8 @@ import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
+import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
+import 'package:taskinspect/features/evidence/data/remote/evidence_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 
 /// Sends the sync queue to the server (docs/architecture.md, "Sync Cycle").
@@ -19,9 +21,11 @@ import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dar
 /// [networkError] or [serverError]; the SyncScheduler retries those with
 /// a growing delay. Nothing is ever dropped.
 ///
-/// [pull] then loads what changed on the server since the last pull.
+/// A sync cycle then uploads the evidence files the server now knows
+/// (EvidenceUploader), and [pull] loads what changed on the server since
+/// the last pull.
 class SyncManager {
-  SyncManager(this._db, this._remote, this._tasks, {this.batchSize = 100});
+  SyncManager(this._db, this._remote, this._tasks, this._uploads, {this.batchSize = 100});
 
   static const pullCursorKey = 'pullCursor';
 
@@ -29,14 +33,17 @@ class SyncManager {
   static const networkError = SyncErrors.network;
   static const serverError = SyncErrors.server;
 
-  /// Whether a failed sync is worth retrying automatically: no connection
-  /// or a server error. A business error would fail again.
+  /// Whether a failed sync is worth retrying automatically: no connection,
+  /// a server error or an expired upload URL (a new one will work). A
+  /// business error would fail again.
   static bool isTemporary(Failure failure) =>
-      failure is NetworkFailure || (failure is ServerFailure && failure.isServerError);
+      failure is NetworkFailure ||
+      (failure is ServerFailure && (failure.isServerError || failure.code == EvidenceRemoteDataSource.urlExpired));
 
   final AppDatabase _db;
   final SyncRemoteDataSource _remote;
   final TaskLocalDataSource _tasks;
+  final EvidenceUploader _uploads;
   final int batchSize;
   Future<Result<void>>? _running;
   Future<Result<void>>? _syncing;
@@ -45,9 +52,11 @@ class SyncManager {
   /// time; calling again meanwhile returns the running one.
   Future<Result<void>> push() => _running ??= _pushAll().whenComplete(() => _running = null);
 
-  /// A full sync cycle: push the local changes first, then pull the
-  /// server's. If the push fails (e.g. offline), there is no pull. Only one
-  /// cycle runs at a time.
+  /// A full sync cycle: push the local changes first, then upload the
+  /// evidence files, then pull the server's changes. If the push fails
+  /// (e.g. offline), nothing else is tried. A failed upload doesn't stop
+  /// the pull, but its failure is returned (so the sync is retried). Only
+  /// one cycle runs at a time.
   Future<Result<void>> sync() => _syncing ??= _syncOnce().whenComplete(() => _syncing = null);
 
   Future<Result<void>> _syncOnce() async {
@@ -55,7 +64,12 @@ class SyncManager {
     if (pushed is Err<void>) {
       return pushed;
     }
-    return pull();
+    final uploaded = await _uploads.uploadAll();
+    if (uploaded case Err(failure: UnauthorizedFailure())) {
+      return uploaded;
+    }
+    final pulled = await pull();
+    return pulled is Err<void> ? pulled : uploaded;
   }
 
   /// Loads what changed on the server since the last pull (everything the
@@ -79,19 +93,22 @@ class SyncManager {
     }
   }
 
-  /// Operations that failed for a temporary reason go back to PENDING, for
-  /// the automatic retry.
-  Future<void> retryTemporaryFailures() {
-    return (_db.update(_db.localSyncOperations)
+  /// Operations and uploads that failed for a temporary reason go back to
+  /// PENDING, for the automatic retry.
+  Future<void> retryTemporaryFailures() async {
+    await (_db.update(_db.localSyncOperations)
           ..where((o) => o.status.equals('FAILED') & o.lastError.isIn(SyncErrors.temporary)))
         .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+    await _uploads.retryTemporaryFailures();
   }
 
-  /// Every FAILED operation goes back to PENDING: the user tapped Retry.
-  /// A START refused because the task changed on the server is sent with
-  /// the task's version from the last pull, so it can succeed now.
+  /// Every FAILED operation and upload goes back to PENDING: the user
+  /// tapped Retry. A START refused because the task changed on the server
+  /// is sent with the task's version from the last pull, so it can succeed
+  /// now.
   Future<void> retryFailed() {
     return _db.transaction(() async {
+      await _uploads.retryFailed();
       final failedStarts = await (_db.select(_db.localSyncOperations)
             ..where((o) => o.status.equals('FAILED') & o.operation.equals(SyncOperation.start.apiName)))
           .get();
@@ -108,15 +125,17 @@ class SyncManager {
     });
   }
 
-  /// Operations left SYNCING because the app was closed during a push go
-  /// back to PENDING. Sending them again is safe: the server doesn't apply
-  /// an operation twice.
+  /// Operations left SYNCING (and uploads left UPLOADING) because the app
+  /// was closed during a sync go back to PENDING. Sending them again is
+  /// safe: the server doesn't apply an operation twice, and an upload is
+  /// only confirmed once the whole file arrived.
   Future<void> resetInterrupted() async {
-    if (_running != null) {
+    if (_running != null || _syncing != null) {
       return;
     }
     await (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('SYNCING')))
         .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+    await _uploads.resetInterrupted();
   }
 
   /// When the newest queued change was made; emits again whenever a change
