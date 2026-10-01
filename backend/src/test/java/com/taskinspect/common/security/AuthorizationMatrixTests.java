@@ -107,6 +107,8 @@ class AuthorizationMatrixTests {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"requirements\": [{\"requirementId\": \"" + f.requirement().getId()
                             + "\", \"comment\": \"Fix\"}]}"));
+    private static final Endpoint HISTORY = new Endpoint("GET /api/tasks/{id}/history", TaskStatus.SUBMITTED,
+            (f, a) -> get("/api/tasks/{id}/history", f.task().getId()));
     private static final Endpoint LIST_REVIEWS = new Endpoint("GET /api/tasks/{id}/reviews", TaskStatus.SUBMITTED,
             (f, a) -> get("/api/tasks/{id}/reviews", f.task().getId()));
     private static final Endpoint LIST_RESPONSES = new Endpoint("GET /api/tasks/{id}/responses",
@@ -129,6 +131,7 @@ class AuthorizationMatrixTests {
                 row(REJECT, 401, 403, 200, 403, 403, 403),
                 row(REQUEST_CORRECTION, 401, 403, 200, 403, 403, 403),
                 row(LIST_REVIEWS, 401, 200, 200, 200, 200, 404),
+                row(HISTORY, 401, 200, 200, 200, 200, 404),
                 row(LIST_RESPONSES, 401, 200, 200, 200, 200, 404))
                 .flatMap(Function.identity());
     }
