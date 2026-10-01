@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/core/theme/status_colors.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
@@ -27,15 +28,28 @@ class HomePage extends StatelessWidget {
 class _DashboardView extends StatelessWidget {
   const _DashboardView();
 
+  /// Signing out deletes the user's data from the device, so changes that
+  /// are not on the server yet would be lost: then the dialog says so.
   Future<void> _confirmSignOut(BuildContext context) async {
+    final unsent = context.read<SyncStatusCubit>().state.unsent;
+    final error = Theme.of(context).colorScheme.error;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Sign out?'),
-        content: const Text('You will need your email and password to sign in again.'),
+        content: Text(unsent == 0
+            ? 'You will need your email and password to sign in again.'
+            : '${unsent == 1 ? '1 change is' : '$unsent changes are'} not synced yet. If you sign out now, '
+                'they are deleted from this device and lost.\n\n'
+                'To keep them, connect to the internet and wait until they are synced.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Sign out')),
+          FilledButton(
+            key: const Key('confirm-sign-out'),
+            style: unsent == 0 ? null : FilledButton.styleFrom(backgroundColor: error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(unsent == 0 ? 'Sign out' : 'Sign out anyway'),
+          ),
         ],
       ),
     );
