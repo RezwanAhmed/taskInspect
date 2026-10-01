@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
@@ -11,14 +12,25 @@ import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dar
 /// applied operation is removed from the queue (the server keeps its
 /// record). A rejected one becomes FAILED with the server's error code, and
 /// the later operations of its task wait, so a change never overtakes one
-/// it depends on. If the push itself fails (e.g. no connection), the
-/// operations stay PENDING for the next try.
+/// it depends on. If the push itself fails for a temporary reason (no
+/// connection, server error), the operations become FAILED with
+/// [networkError] or [serverError]; the SyncScheduler retries those with
+/// a growing delay. Nothing is ever dropped.
 ///
 /// [pull] then loads what changed on the server since the last pull.
 class SyncManager {
   SyncManager(this._db, this._remote, this._tasks, {this.batchSize = 100});
 
   static const pullCursorKey = 'pullCursor';
+
+  /// `lastError` of operations whose push failed for a temporary reason.
+  static const networkError = 'NETWORK_ERROR';
+  static const serverError = 'SERVER_ERROR';
+
+  /// Whether a failed sync is worth retrying automatically: no connection
+  /// or a server error. A business error would fail again.
+  static bool isTemporary(Failure failure) =>
+      failure is NetworkFailure || (failure is ServerFailure && failure.isServerError);
 
   final AppDatabase _db;
   final SyncRemoteDataSource _remote;
@@ -65,6 +77,20 @@ class SyncManager {
     }
   }
 
+  /// Operations that failed for a temporary reason go back to PENDING, for
+  /// the automatic retry.
+  Future<void> retryTemporaryFailures() {
+    return (_db.update(_db.localSyncOperations)
+          ..where((o) => o.status.equals('FAILED') & o.lastError.isIn([networkError, serverError])))
+        .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+  }
+
+  /// Every FAILED operation goes back to PENDING: the user tapped Retry.
+  Future<void> retryFailed() {
+    return (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('FAILED')))
+        .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+  }
+
   /// Operations left SYNCING because the app was closed during a push go
   /// back to PENDING. Sending them again is safe: the server doesn't apply
   /// an operation twice.
@@ -93,7 +119,7 @@ class SyncManager {
       await _setStatus(batch.map((o) => o.id), 'SYNCING');
       switch (await _remote.push(batch)) {
         case Err(:final failure):
-          await _setStatus(batch.map((o) => o.id), 'PENDING');
+          await _failTemporarily(batch, failure);
           return Err(failure);
         case Ok(:final value):
           final progressed = await _apply(batch, value);
@@ -162,6 +188,26 @@ class SyncManager {
       await (_db.update(_db.localResponses)..where((r) => r.requirementId.equals(operation.entityId)))
           .write(const LocalResponsesCompanion(syncStatus: Value('SYNCED')));
     }
+  }
+
+  /// A temporary failure makes the batch FAILED (retried automatically);
+  /// any other failure of the whole push (e.g. an expired login, task 6.9)
+  /// leaves it PENDING.
+  Future<void> _failTemporarily(List<SyncOperationRow> batch, Failure failure) {
+    if (!isTemporary(failure)) {
+      return _setStatus(batch.map((o) => o.id), 'PENDING');
+    }
+    return _db.transaction(() async {
+      for (final operation in batch) {
+        await (_db.update(_db.localSyncOperations)..where((o) => o.id.equals(operation.id))).write(
+          LocalSyncOperationsCompanion(
+            status: const Value('FAILED'),
+            retryCount: Value(operation.retryCount + 1),
+            lastError: Value(failure is NetworkFailure ? networkError : serverError),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _setStatus(Iterable<String> ids, String status) {

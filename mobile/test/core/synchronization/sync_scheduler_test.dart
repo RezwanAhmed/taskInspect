@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/network/connectivity_monitor.dart';
 import 'package:taskinspect/core/synchronization/sync_manager.dart';
@@ -35,9 +36,16 @@ void main() {
     connectivity = _FakeConnectivity(onlineChanges);
     latestChange = StreamController<DateTime?>.broadcast();
     when(manager.resetInterrupted).thenAnswer((_) async {});
+    when(manager.retryTemporaryFailures).thenAnswer((_) async {});
     when(manager.watchLatestChange).thenAnswer((_) => latestChange.stream);
     when(manager.sync).thenAnswer((_) async => const Ok(null));
-    scheduler = SyncScheduler(manager, connectivity, delay: const Duration(milliseconds: 20));
+    scheduler = SyncScheduler(
+      manager,
+      connectivity,
+      delay: const Duration(milliseconds: 20),
+      firstRetryDelay: const Duration(milliseconds: 30),
+      maxRetryDelay: const Duration(milliseconds: 100),
+    );
   });
 
   tearDown(() async {
@@ -120,5 +128,49 @@ void main() {
 
     verifyNever(manager.sync);
     expect(scheduler.isRunning, isFalse);
+  });
+
+  test('a temporary failure is retried after a delay, with the failed operations put back first', () async {
+    var calls = 0;
+    when(manager.sync).thenAnswer((_) async => ++calls == 1 ? const Err(NetworkFailure()) : const Ok(null));
+
+    await scheduler.start();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    expect(calls, 2);
+    verifyInOrder([manager.sync, manager.retryTemporaryFailures, manager.sync]);
+  });
+
+  test('a business failure is not retried automatically', () async {
+    when(manager.sync).thenAnswer((_) async => const Err(ServerFailure(statusCode: 409)));
+
+    await scheduler.start();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    verify(manager.sync).called(1);
+    verifyNever(manager.retryTemporaryFailures);
+  });
+
+  test('when the connection comes back, failed operations are retried at once', () async {
+    await started();
+
+    onlineChanges.add(true);
+    await settle();
+
+    verifyInOrder([manager.retryTemporaryFailures, manager.sync]);
+  });
+
+  test('the retry delay doubles up to the maximum', () {
+    final defaults = SyncScheduler(manager, connectivity);
+
+    expect([for (var n = 1; n <= 6; n++) defaults.retryDelay(n)], const [
+      Duration(seconds: 30),
+      Duration(minutes: 1),
+      Duration(minutes: 2),
+      Duration(minutes: 4),
+      Duration(minutes: 5),
+      Duration(minutes: 5),
+    ]);
+    expect(defaults.retryDelay(1000), const Duration(minutes: 5));
   });
 }

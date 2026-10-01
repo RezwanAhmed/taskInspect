@@ -132,7 +132,7 @@ void main() {
     expect(pushes, isEmpty);
   });
 
-  test('offline: the push fails and everything stays PENDING for the next try', () async {
+  test('offline: the operations become FAILED for the automatic retry, nothing is lost', () async {
     await add('t1', 'e1');
     api.dio.httpClientAdapter = FakeServer((_) async => (0, null));
 
@@ -140,8 +140,50 @@ void main() {
 
     expect((result as Err<void>).failure, isA<NetworkFailure>());
     final row = (await queued()).single;
-    expect(row.status, 'PENDING');
-    expect(row.retryCount, 0);
+    expect(row.status, 'FAILED');
+    expect(row.lastError, SyncManager.networkError);
+    expect(row.retryCount, 1);
+  });
+
+  test('a server error is a temporary failure too', () async {
+    await add('t1', 'e1');
+    api.dio.httpClientAdapter = FakeServer((_) async => (503, {'code': 'INTERNAL_ERROR'}));
+
+    await manager.push();
+
+    expect((await queued()).single.lastError, SyncManager.serverError);
+  });
+
+  test('other failures of the whole push leave the operations PENDING', () async {
+    await add('t1', 'e1');
+    api.dio.httpClientAdapter = FakeServer((_) async => (401, {'code': 'INVALID_TOKEN'}));
+
+    await manager.push();
+
+    expect((await queued()).single.status, 'PENDING');
+  });
+
+  test('retryTemporaryFailures brings back only temporary failures; retryFailed brings back all', () async {
+    await add('t1', 'offline');
+    await add('t2', 'refused');
+    await db.update(db.localSyncOperations).write(const LocalSyncOperationsCompanion(status: Value('FAILED')));
+    await (db.update(db.localSyncOperations)..where((o) => o.entityId.equals('offline')))
+        .write(const LocalSyncOperationsCompanion(lastError: Value(SyncManager.networkError)));
+    await (db.update(db.localSyncOperations)..where((o) => o.entityId.equals('refused')))
+        .write(const LocalSyncOperationsCompanion(lastError: Value('TASK_INVALID_TRANSITION')));
+
+    await manager.retryTemporaryFailures();
+    expect((await queued()).map((o) => (o.entityId, o.status)), [('offline', 'PENDING'), ('refused', 'FAILED')]);
+
+    await manager.retryFailed();
+    expect((await queued()).map((o) => o.status), ['PENDING', 'PENDING']);
+  });
+
+  test('isTemporary: no connection and 5xx only', () {
+    expect(SyncManager.isTemporary(const NetworkFailure()), isTrue);
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 502)), isTrue);
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 409)), isFalse);
+    expect(SyncManager.isTemporary(const UnauthorizedFailure()), isFalse);
   });
 
   test('an answer is marked synced once its last change was applied', () async {
@@ -173,7 +215,7 @@ void main() {
     await manager.push();
 
     expect(await answers.pendingRequirementIds('t1'), ['r-t1']);
-    expect((await queued()).single.status, 'PENDING');
+    expect((await queued()).single.lastError, SyncManager.networkError);
   });
 
   test('only one push runs at a time', () async {
