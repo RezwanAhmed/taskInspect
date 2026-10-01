@@ -8,6 +8,8 @@ import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/review/data/review_remote_data_source.dart';
 import 'package:taskinspect/features/review/domain/submission.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 
 import '../../helpers/fake_server.dart';
 
@@ -15,13 +17,25 @@ void main() {
   late ApiClient api;
   late ReviewRemoteDataSource source;
   late bool online;
+  late List<Task> stored;
+  late List<(String, Object?)> posted;
 
   setUp(() {
     online = true;
+    posted = [];
     api = ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://api.test'));
     api.dio.httpClientAdapter = FakeServer((request) async {
       if (!online) {
         return (0, null);
+      }
+      if (request.method == 'POST') {
+        posted.add((request.path, request.data));
+        return (200, {
+          'id': 't1', 'title': 'Kitchen', 'priority': 'HIGH', 'status': 'APPROVED',
+          'dueDate': '2026-10-02T09:00:00Z', 'createdBy': {'id': 'm1', 'fullName': 'Mia Manager'},
+          'reviewer': {'id': 'm1', 'fullName': 'Mia Manager'}, 'assignee': {'id': 'u1', 'fullName': 'Wendy Worker'},
+          'version': 5, 'updatedAt': '2026-10-01T10:00:00Z',
+        });
       }
       return switch (request.path) {
         '/api/tasks/t1/responses' => (200, [
@@ -39,7 +53,9 @@ void main() {
         _ => (404, {'code': 'NOT_FOUND'}),
       };
     });
-    source = ReviewRemoteDataSource(api, temporaryDirectory: () async => Directory.systemTemp);
+    stored = [];
+    source = ReviewRemoteDataSource(api, temporaryDirectory: () async => Directory.systemTemp,
+        storeTask: (task) async => stored.add(task));
   });
 
   test('loads the submitted answers and files by requirement', () async {
@@ -58,6 +74,29 @@ void main() {
         sizeBytes: 200, uploaded: true);
 
     expect((await source.fileUrl('t1', file) as Ok<String>).value, 'http://files.test/e1.jpg');
+  });
+
+  test('a decision is sent and the returned task is stored on the device', () async {
+    final result = await source.approve('t1', comment: ' Well done ');
+
+    expect((result as Ok<Task>).value.status, TaskStatus.approved);
+    expect(posted.single.$1, '/api/tasks/t1/approve');
+    expect(posted.single.$2, {'comment': 'Well done'});
+    expect(stored.single.version, 5);
+  });
+
+  test('reject sends the reason; a correction sends the marked requirements with comments', () async {
+    await source.reject('t1', reason: 'Wrong kitchen');
+    await source.requestCorrection('t1', reason: '', requirements: {'r3': ' Retake it '});
+
+    expect(posted[0].$1, '/api/tasks/t1/reject');
+    expect(posted[0].$2, {'reason': 'Wrong kitchen'});
+    expect(posted[1].$1, '/api/tasks/t1/request-correction');
+    expect(posted[1].$2, {
+      'requirements': [
+        {'requirementId': 'r3', 'comment': 'Retake it'},
+      ],
+    });
   });
 
   test('offline: a network failure', () async {

@@ -21,6 +21,8 @@ class ReviewState extends Equatable {
     this.error,
     this.canRetry = false,
     this.opening = const {},
+    this.isDeciding = false,
+    this.decided,
     this.message,
   });
 
@@ -40,6 +42,12 @@ class ReviewState extends Equatable {
   /// Files being downloaded to be opened.
   final Set<String> opening;
 
+  /// An approve, reject or correction request is being sent.
+  final bool isDeciding;
+
+  /// The task after the reviewer's decision (then the screen closes).
+  final Task? decided;
+
   /// Shown once, e.g. a document that could not be opened.
   final String? message;
 
@@ -51,6 +59,8 @@ class ReviewState extends Equatable {
     String? Function()? error,
     bool? canRetry,
     Set<String>? opening,
+    bool? isDeciding,
+    Task? decided,
     String? Function()? message,
   }) {
     return ReviewState(
@@ -61,12 +71,15 @@ class ReviewState extends Equatable {
       error: error != null ? error() : this.error,
       canRetry: canRetry ?? this.canRetry,
       opening: opening ?? this.opening,
+      isDeciding: isDeciding ?? this.isDeciding,
+      decided: decided ?? this.decided,
       message: message != null ? message() : this.message,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, submission, isLoading, error, canRetry, opening, message];
+  List<Object?> get props =>
+      [task, requirements, submission, isLoading, error, canRetry, opening, isDeciding, decided, message];
 }
 
 /// The reviewer's view of a submitted task: the task and its requirements
@@ -145,6 +158,38 @@ class ReviewCubit extends Cubit<ReviewState> {
           emit(state.copyWith(message: () => 'No app on this device can open this document.'));
         }
     }
+  }
+
+  Future<void> approve({String? comment}) => _decide(() => _repository.approve(taskId, comment: comment));
+
+  Future<void> reject(String reason) => _decide(() => _repository.reject(taskId, reason: reason));
+
+  Future<void> requestCorrection(Map<String, String> requirements, {String? reason}) =>
+      _decide(() => _repository.requestCorrection(taskId, reason: reason, requirements: requirements));
+
+  /// Reviewing needs the server; on failure the reviewer sees why and can try again.
+  Future<void> _decide(Future<Result<Task>> Function() action) async {
+    if (state.isDeciding) {
+      return;
+    }
+    emit(state.copyWith(isDeciding: true, message: () => null));
+    final result = await action();
+    if (isClosed) {
+      return;
+    }
+    if (result case Err(failure: ServerFailure(statusCode: 409))) {
+      // The task changed meanwhile (e.g. reviewed already): show its real status.
+      await _repository.refreshTask(taskId);
+      if (isClosed) {
+        return;
+      }
+    }
+    emit(switch (result) {
+      Ok(:final value) => state.copyWith(isDeciding: false, decided: value),
+      Err(failure: NetworkFailure()) =>
+        state.copyWith(isDeciding: false, message: () => 'No connection. Your decision was not sent; try again.'),
+      Err(:final failure) => state.copyWith(isDeciding: false, message: () => userMessage(failure)),
+    });
   }
 
   void clearMessage() => emit(state.copyWith(message: () => null));

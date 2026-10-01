@@ -74,6 +74,42 @@ class _FakeReviewRepository implements ReviewRepository {
 
   @override
   Future<void> clearDownloads(String taskId) async => cleared++;
+
+  final List<String> decisions = [];
+  Failure? decisionFailure;
+
+  /// Like the app, which stores the decided task on the device.
+  void Function(Task task)? onDecided;
+
+  Future<Result<Task>> _decided(String what, TaskStatus status) async {
+    decisions.add(what);
+    if (decisionFailure != null) {
+      return Err(decisionFailure!);
+    }
+    final task = fakeTask('t1', status: status, title: 'Kitchen');
+    onDecided?.call(task);
+    return Ok(task);
+  }
+
+  int refreshed = 0;
+
+  @override
+  Future<Result<Task>> refreshTask(String taskId) async {
+    refreshed++;
+    final task = fakeTask('t1', status: TaskStatus.approved, title: 'Kitchen');
+    onDecided?.call(task);
+    return Ok(task);
+  }
+
+  @override
+  Future<Result<Task>> approve(String taskId, {String? comment}) => _decided('approve:${comment ?? ''}', TaskStatus.approved);
+
+  @override
+  Future<Result<Task>> reject(String taskId, {required String reason}) => _decided('reject:$reason', TaskStatus.rejected);
+
+  @override
+  Future<Result<Task>> requestCorrection(String taskId, {String? reason, required Map<String, String> requirements}) =>
+      _decided('correction:$requirements', TaskStatus.correctionRequested);
 }
 
 void main() {
@@ -87,8 +123,10 @@ void main() {
     review = _FakeReviewRepository();
     opener = FakeDocumentOpener();
     final task = fakeTask('t1', status: status, title: 'Kitchen');
+    final tasks = FakeTaskRepository();
+    review.onDecided = (decided) => tasks.emit([decided]);
     registerFakeTasks(
-      FakeTaskRepository([
+      tasks..emit([
         if (reviewerIsWorker)
           Task(
             id: task.id,
@@ -178,5 +216,106 @@ void main() {
   testWidgets('a task that is not submitted has no Review', (tester) async {
     await openTask(tester, status: TaskStatus.inProgress);
     expect(find.byKey(const Key('review-task')), findsNothing);
+  });
+
+  Future<void> openReview(WidgetTester tester) async {
+    await openTask(tester);
+    await tester.tap(find.byKey(const Key('review-task')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('approve, with an optional comment, then back to the task', (tester) async {
+    await openReview(tester);
+
+    await tester.tap(find.byKey(const Key('approve-task')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('approve-comment')), 'Well done');
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve').last);
+    await tester.pumpAndSettle();
+
+    expect(review.decisions, ['approve:Well done']);
+    expect(find.text('Task approved.'), findsOneWidget);
+    expect(find.byKey(const Key('review-task')), findsNothing, reason: 'back on the task');
+  });
+
+  testWidgets('reject needs a reason', (tester) async {
+    await openReview(tester);
+
+    await tester.tap(find.byKey(const Key('reject-task')));
+    await tester.pumpAndSettle();
+    final reject = find.widgetWithText(FilledButton, 'Reject');
+    expect(tester.widget<FilledButton>(reject).onPressed, isNull);
+
+    await tester.enterText(find.byKey(const Key('reject-reason')), 'Wrong kitchen');
+    await tester.pump();
+    await tester.tap(reject);
+    await tester.pumpAndSettle();
+
+    expect(review.decisions, ['reject:Wrong kitchen']);
+  });
+
+  testWidgets('a correction marks requirements, each with a comment', (tester) async {
+    await openReview(tester);
+
+    await tester.tap(find.byKey(const Key('request-correction')));
+    await tester.pumpAndSettle();
+    final send = find.byKey(const Key('send-correction'));
+    expect(tester.widget<TextButton>(send).onPressed, isNull, reason: 'nothing marked');
+
+    await tester.tap(find.byKey(const Key('mark-r3')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(send).onPressed, isNull, reason: 'the marked one needs a comment');
+    await tester.enterText(find.byKey(const Key('comment-r3')), 'Retake the fridge photo');
+    await tester.pump();
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+
+    expect(review.decisions, ['correction:{r3: Retake the fridge photo}']);
+    expect(find.text('Correction requested from the worker.'), findsOneWidget);
+  });
+
+  testWidgets('offline: the decision is not sent and the reviewer can try again', (tester) async {
+    await openReview(tester);
+    review.decisionFailure = const NetworkFailure();
+
+    await tester.tap(find.byKey(const Key('approve-task')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Approve').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('No connection. Your decision was not sent; try again.'), findsOneWidget);
+    expect(find.byKey(const Key('approve-task')), findsOneWidget, reason: 'still on the review');
+  });
+
+  testWidgets('reviewed meanwhile (409): the task is reloaded and the decision buttons go away', (tester) async {
+    await openReview(tester);
+    review.decisionFailure = const ServerFailure(statusCode: 409, code: 'TASK_ALREADY_APPROVED',
+        message: 'Task has already been approved');
+
+    await tester.tap(find.byKey(const Key('reject-task')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('reject-reason')), 'Too late');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Reject'));
+    await tester.pumpAndSettle();
+
+    expect(review.refreshed, 1);
+    expect(find.text('Task has already been approved'), findsOneWidget);
+    expect(find.byKey(const Key('approve-task')), findsNothing);
+  });
+
+  testWidgets('unmarking a requirement while typing its comment is safe', (tester) async {
+    await openReview(tester);
+    await tester.tap(find.byKey(const Key('request-correction')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('mark-r1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('comment-r1')), 'Check');
+    await tester.tap(find.byKey(const Key('mark-r1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('comment-r1')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

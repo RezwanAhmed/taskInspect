@@ -173,7 +173,11 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     )
     // Review
     ..registerLazySingleton<ReviewRepository>(
-      () => ReviewRemoteDataSource(getIt(), temporaryDirectory: getTemporaryDirectory),
+      () => ReviewRemoteDataSource(
+        getIt(),
+        temporaryDirectory: getTemporaryDirectory,
+        storeTask: getIt<TaskLocalDataSource>().updateTask,
+      ),
     )
     // Dashboard
     ..registerFactory(() => DashboardCubit(getIt(), getIt()));

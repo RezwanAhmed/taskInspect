@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/review/domain/review_repository.dart';
 import 'package:taskinspect/features/review/domain/submission.dart';
 import 'package:taskinspect/features/review/presentation/cubit/review_cubit.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 import '../../helpers/fake_tasks.dart';
@@ -21,6 +24,31 @@ class _CountingRepository implements ReviewRepository {
 
   @override
   Future<void> clearDownloads(String taskId) async {}
+
+  final List<String> decisions = [];
+  Failure? decisionFailure;
+
+  Future<Result<Task>> _decided(String what, TaskStatus status) async {
+    decisions.add(what);
+    if (decisionFailure != null) {
+      return Err(decisionFailure!);
+    }
+    final task = fakeTask('t1', status: status, title: 'Kitchen');
+    return Ok(task);
+  }
+
+  @override
+  Future<Result<Task>> refreshTask(String taskId) async => Ok(fakeTask('t1'));
+
+  @override
+  Future<Result<Task>> approve(String taskId, {String? comment}) => _decided('approve:${comment ?? ''}', TaskStatus.approved);
+
+  @override
+  Future<Result<Task>> reject(String taskId, {required String reason}) => _decided('reject:$reason', TaskStatus.rejected);
+
+  @override
+  Future<Result<Task>> requestCorrection(String taskId, {String? reason, required Map<String, String> requirements}) =>
+      _decided('correction:$requirements', TaskStatus.correctionRequested);
 }
 
 void main() {
