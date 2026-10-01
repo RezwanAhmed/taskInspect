@@ -3,6 +3,12 @@ import 'package:taskinspect/core/config/app_config.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
+import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
+import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 
 /// The app's service locator. Every dependency is registered in
 /// [configureDependencies]; widgets and BLoCs never create their own
@@ -18,5 +24,11 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
     ..registerLazySingleton<ApiClient>(() => ApiClient.forConfig(getIt<AppConfig>()))
     ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
-    ..registerLazySingleton<AppDatabase>(AppDatabase.new, dispose: (database) => database.close());
+    ..registerLazySingleton<AppDatabase>(AppDatabase.new, dispose: (database) => database.close())
+    // Authentication
+    ..registerLazySingleton(() => AuthRemoteDataSource(getIt<ApiClient>()))
+    ..registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(getIt(), getIt()))
+    ..registerFactory(() => Login(getIt()))
+    ..registerFactory(() => RestoreSession(getIt()))
+    ..registerFactory(() => Logout(getIt()));
 }

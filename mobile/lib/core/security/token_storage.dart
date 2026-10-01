@@ -19,14 +19,45 @@ class StoredTokens {
   bool isRefreshTokenExpired(DateTime now) => !now.isBefore(refreshTokenExpiresAt);
 }
 
-/// Keeps the tokens on the device. The rest of the app depends on this
-/// interface, so tests can use an in-memory fake.
+/// Keeps the tokens (and the logged-in user's profile, so the app can start
+/// offline) on the device. The rest of the app depends on this interface,
+/// so tests can use an in-memory fake.
 abstract interface class TokenStorage {
   Future<StoredTokens?> read();
 
   Future<void> save(StoredTokens tokens);
 
+  /// The logged-in user as JSON, or `null`.
+  Future<String?> readUserProfile();
+
+  Future<void> saveUserProfile(String json);
+
+  /// Removes tokens and profile (logout).
   Future<void> clear();
+}
+
+/// In-memory [TokenStorage] for tests.
+class InMemoryTokenStorage implements TokenStorage {
+  StoredTokens? tokens;
+  String? userProfile;
+
+  @override
+  Future<StoredTokens?> read() async => tokens;
+
+  @override
+  Future<void> save(StoredTokens tokens) async => this.tokens = tokens;
+
+  @override
+  Future<String?> readUserProfile() async => userProfile;
+
+  @override
+  Future<void> saveUserProfile(String json) async => userProfile = json;
+
+  @override
+  Future<void> clear() async {
+    tokens = null;
+    userProfile = null;
+  }
 }
 
 /// Stores tokens in the platform's secure storage: Android Keystore
@@ -43,6 +74,7 @@ class SecureTokenStorage implements TokenStorage {
   static const _accessTokenExpiresAt = 'access_token_expires_at';
   static const _refreshToken = 'refresh_token';
   static const _refreshTokenExpiresAt = 'refresh_token_expires_at';
+  static const _userProfile = 'user_profile';
 
   final FlutterSecureStorage _storage;
 
@@ -73,8 +105,14 @@ class SecureTokenStorage implements TokenStorage {
   }
 
   @override
+  Future<String?> readUserProfile() => _storage.read(key: _userProfile);
+
+  @override
+  Future<void> saveUserProfile(String json) => _storage.write(key: _userProfile, value: json);
+
+  @override
   Future<void> clear() async {
-    for (final key in [_accessToken, _accessTokenExpiresAt, _refreshToken, _refreshTokenExpiresAt]) {
+    for (final key in [_accessToken, _accessTokenExpiresAt, _refreshToken, _refreshTokenExpiresAt, _userProfile]) {
       await _storage.delete(key: key);
     }
   }
