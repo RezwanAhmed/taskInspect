@@ -1,4 +1,4 @@
-package com.taskinspect.taskinspect
+package com.taskinspect
 
 import io.flutter.embedding.android.FlutterActivity
 
