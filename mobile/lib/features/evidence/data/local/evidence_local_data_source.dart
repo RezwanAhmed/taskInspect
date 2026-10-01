@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/features/evidence/data/image_compressor.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
@@ -10,11 +11,12 @@ import 'package:uuid/uuid.dart';
 
 /// [EvidenceRepository] on the local database and the app's files. Files
 /// live in `<documents>/evidence/<taskId>/<id>.jpg` (or `.pdf`), outside the
-/// database.
+/// database. Every added or removed file is queued in the sync queue.
 class EvidenceLocalDataSource implements EvidenceRepository {
   EvidenceLocalDataSource(
     this._db,
-    this._compressor, {
+    this._compressor,
+    this._queue, {
     required Future<Directory> Function() documentsDirectory,
     DateTime Function()? now,
     Uuid? uuid,
@@ -24,6 +26,7 @@ class EvidenceLocalDataSource implements EvidenceRepository {
 
   final AppDatabase _db;
   final ImageCompressor _compressor;
+  final SyncQueue _queue;
   final Future<Directory> Function() _documents;
   final DateTime Function() _now;
   final Uuid _uuid;
@@ -104,19 +107,36 @@ class EvidenceLocalDataSource implements EvidenceRepository {
     return String.fromCharCodes(header) == '%PDF-';
   }
 
-  /// Records [item]; its file is deleted again if that fails.
+  /// Records [item] and queues it for the server; its file is deleted
+  /// again if that fails.
   Future<EvidenceItem> _record(EvidenceItem item) async {
     try {
-      await _db.into(_db.localEvidence).insert(LocalEvidenceCompanion.insert(
-            id: item.id,
-            taskId: item.taskId,
-            requirementId: item.requirementId,
-            localPath: item.localPath,
-            mimeType: item.mimeType,
-            sizeBytes: item.sizeBytes,
-            createdAt: item.createdAt,
-            fileName: Value(item.fileName),
-          ));
+      await _db.transaction(() async {
+        await _db.into(_db.localEvidence).insert(LocalEvidenceCompanion.insert(
+              id: item.id,
+              taskId: item.taskId,
+              requirementId: item.requirementId,
+              localPath: item.localPath,
+              mimeType: item.mimeType,
+              sizeBytes: item.sizeBytes,
+              createdAt: item.createdAt,
+              fileName: Value(item.fileName),
+            ));
+        // The body of POST /api/tasks/{taskId}/requirements/{requirementId}/evidence.
+        await _queue.add(
+          entity: SyncEntity.evidence,
+          entityId: item.id,
+          taskId: item.taskId,
+          operation: SyncOperation.create,
+          payload: {
+            'requirementId': item.requirementId,
+            'id': item.id,
+            'fileName': item.fileName ?? p.basename(item.localPath),
+            'contentType': item.mimeType,
+            'sizeBytes': item.sizeBytes,
+          },
+        );
+      });
     } on Object {
       // Don't leave an unrecorded file behind.
       await File(item.localPath).delete();
@@ -127,7 +147,23 @@ class EvidenceLocalDataSource implements EvidenceRepository {
 
   @override
   Future<void> remove(EvidenceItem item) async {
-    await (_db.delete(_db.localEvidence)..where((e) => e.id.equals(item.id))).go();
+    await _db.transaction(() async {
+      await (_db.delete(_db.localEvidence)..where((e) => e.id.equals(item.id))).go();
+      // Not sent yet: the server never has to hear about it.
+      final neverSent = await _queue.removePending(
+        entity: SyncEntity.evidence,
+        entityId: item.id,
+        operation: SyncOperation.create,
+      );
+      if (!neverSent) {
+        await _queue.add(
+          entity: SyncEntity.evidence,
+          entityId: item.id,
+          taskId: item.taskId,
+          operation: SyncOperation.delete,
+        );
+      }
+    });
     final file = File(item.localPath);
     if (file.existsSync()) {
       await file.delete();

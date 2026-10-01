@@ -105,6 +105,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
       () => EvidenceLocalDataSource(
         getIt(),
         const NativeImageCompressor(),
+        getIt(),
         documentsDirectory: getApplicationDocumentsDirectory,
       ),
     )

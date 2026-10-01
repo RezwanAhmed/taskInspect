@@ -53,13 +53,7 @@ class SyncQueue {
     Map<String, Object?> payload = const {},
   }) async {
     if (operation == SyncOperation.update) {
-      await (_db.delete(_db.localSyncOperations)
-            ..where((o) =>
-                o.entityType.equals(entity.apiName) &
-                o.entityId.equals(entityId) &
-                o.operation.equals(SyncOperation.update.apiName) &
-                o.status.equals('PENDING')))
-          .go();
+      await removePending(entity: entity, entityId: entityId, operation: operation);
     }
     await _db.into(_db.localSyncOperations).insert(LocalSyncOperationsCompanion.insert(
           id: _uuid.v4(),
@@ -70,5 +64,23 @@ class SyncQueue {
           payload: Value(jsonEncode(payload)),
           createdAt: _now().toUtc(),
         ));
+  }
+
+  /// Removes a still PENDING [operation] of a record, e.g. the CREATE of
+  /// evidence that is removed again before it was sent. Returns whether
+  /// there was one.
+  Future<bool> removePending({
+    required SyncEntity entity,
+    required String entityId,
+    required SyncOperation operation,
+  }) async {
+    final removed = await (_db.delete(_db.localSyncOperations)
+          ..where((o) =>
+              o.entityType.equals(entity.apiName) &
+              o.entityId.equals(entityId) &
+              o.operation.equals(operation.apiName) &
+              o.status.equals('PENDING')))
+        .go();
+    return removed > 0;
   }
 }

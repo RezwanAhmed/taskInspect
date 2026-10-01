@@ -100,4 +100,24 @@ void main() {
 
     expect(await queued(), isEmpty);
   });
+
+  test('removePending removes only a PENDING operation of that record', () async {
+    await queue.add(entity: SyncEntity.evidence, entityId: 'e1', taskId: 't1', operation: SyncOperation.create);
+    await queue.add(entity: SyncEntity.evidence, entityId: 'e2', taskId: 't1', operation: SyncOperation.create);
+
+    final removed = await queue.removePending(
+      entity: SyncEntity.evidence,
+      entityId: 'e1',
+      operation: SyncOperation.create,
+    );
+    final again = await queue.removePending(
+      entity: SyncEntity.evidence,
+      entityId: 'e1',
+      operation: SyncOperation.create,
+    );
+
+    expect(removed, isTrue);
+    expect(again, isFalse);
+    expect((await queued()).map((o) => o.entityId), ['e2']);
+  });
 }

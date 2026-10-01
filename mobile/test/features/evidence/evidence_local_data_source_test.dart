@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/features/evidence/data/image_compressor.dart';
 import 'package:taskinspect/features/evidence/data/local/evidence_local_data_source.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
@@ -37,7 +40,7 @@ void main() {
     documents = await Directory.systemTemp.createTemp('documents');
     picked = await Directory.systemTemp.createTemp('picked');
     compressor = _HalfCompressor();
-    evidence = EvidenceLocalDataSource(db, compressor, documentsDirectory: () async => documents);
+    evidence = EvidenceLocalDataSource(db, compressor, SyncQueue(db), documentsDirectory: () async => documents);
     await TaskLocalDataSource(db).saveTask(fakeTask('t1', status: TaskStatus.inProgress), const [
       Requirement(id: 'r1', taskId: 't1', title: 'Photo', type: RequirementType.photo, required: true, position: 0),
       Requirement(id: 'r2', taskId: 't1', title: 'Report', type: RequirementType.document, required: true, position: 1),
@@ -152,5 +155,66 @@ void main() {
 
     expect(File(item.localPath).existsSync(), isFalse);
     expect(Directory('${documents.path}/evidence').existsSync(), isFalse);
+  });
+
+  Future<List<SyncOperationRow>> queued() {
+    final query = db.select(db.localSyncOperations)..orderBy([(o) => OrderingTerm(expression: o.createdAt)]);
+    return query.get();
+  }
+
+  test('an added photo is queued for the server', () async {
+    final item = await evidence.addPhoto(taskId: 't1', requirementId: 'r1', sourcePath: await pickedPhoto('a.jpg'));
+
+    final operation = (await queued()).single;
+
+    expect(operation.entityType, 'Evidence');
+    expect(operation.entityId, item.id);
+    expect(operation.taskId, 't1');
+    expect(operation.operation, 'CREATE');
+    expect(jsonDecode(operation.payload), {
+      'requirementId': 'r1',
+      'id': item.id,
+      'fileName': '${item.id}.jpg',
+      'contentType': 'image/jpeg',
+      'sizeBytes': 500,
+    });
+  });
+
+  test('an added PDF is queued with its own name', () async {
+    final source = await pickedFile('report.pdf', [...'%PDF-1.7\n'.codeUnits, 1, 2, 3]);
+
+    await evidence.addDocument(taskId: 't1', requirementId: 'r2', sourcePath: source, fileName: 'Service report.pdf');
+
+    final payload = jsonDecode((await queued()).single.payload) as Map<String, Object?>;
+    expect(payload['fileName'], 'Service report.pdf');
+    expect(payload['contentType'], 'application/pdf');
+  });
+
+  test('nothing is queued when recording fails', () async {
+    await expectLater(
+      evidence.addPhoto(taskId: 't1', requirementId: 'missing', sourcePath: await pickedPhoto('a.jpg')),
+      throwsA(anything),
+    );
+
+    expect(await queued(), isEmpty);
+  });
+
+  test('removing a file that was never sent also removes it from the queue', () async {
+    final item = await evidence.addPhoto(taskId: 't1', requirementId: 'r1', sourcePath: await pickedPhoto('a.jpg'));
+
+    await evidence.remove(item);
+
+    expect(await queued(), isEmpty);
+  });
+
+  test('removing a file the server already has queues a DELETE', () async {
+    final item = await evidence.addPhoto(taskId: 't1', requirementId: 'r1', sourcePath: await pickedPhoto('a.jpg'));
+    await db.update(db.localSyncOperations).write(const LocalSyncOperationsCompanion(status: Value('SYNCED')));
+
+    await evidence.remove(item);
+
+    final operations = await queued();
+    expect(operations.map((o) => o.operation), ['CREATE', 'DELETE']);
+    expect(operations.last.entityId, item.id);
   });
 }
