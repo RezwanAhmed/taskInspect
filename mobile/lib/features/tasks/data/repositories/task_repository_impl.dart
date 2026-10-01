@@ -1,3 +1,4 @@
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
@@ -40,17 +41,14 @@ class TaskRepositoryImpl implements TaskRepository {
       }
     }
 
-    // TODO(phase-6): keep tasks with unsynced local changes.
+    // Tasks with unsent local changes keep their local version.
     await _local.replaceAll([for (final task in loaded) (task, requirements[task.id]!)]);
     return const Ok(null);
   }
 
   @override
   Future<Result<Task>> start(String taskId) async {
-    final result = await _remote.start(taskId);
-    if (result case Ok(:final value)) {
-      await _local.updateTask(value);
-    }
-    return result;
+    final started = await _local.start(taskId);
+    return started == null ? Err(UnexpectedFailure(StateError('Task $taskId is not on the device'))) : Ok(started);
   }
 }

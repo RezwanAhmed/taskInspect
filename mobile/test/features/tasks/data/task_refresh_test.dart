@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/config/app_config.dart';
@@ -115,26 +118,57 @@ void main() {
     expect((await repository.watchTasks().first).map((t) => t.id), ['t1']);
   });
 
-  test('starting a task updates it on the device and keeps its requirements', () async {
+  test('starting a task works offline: started on the device and queued for the server', () async {
     await local.replaceAll([(TaskRemoteDataSource.taskFromJson(taskJson('t1', 'Kitchen')), [
       TaskRemoteDataSource.requirementFromJson('t1', requirements.first),
     ])]);
-    serve((path, query) async => path == '/api/tasks/t1/start'
-        ? (200, taskJson('t1', 'Kitchen', status: 'IN_PROGRESS'))
-        : (404, null));
+    final server = serve((path, query) async => (0, null));
 
     final result = await repository.start('t1');
 
     expect((result as Ok<Task>).value.status, TaskStatus.inProgress);
     expect((await repository.watchTask('t1').first)!.status, TaskStatus.inProgress);
     expect(await repository.watchRequirements('t1').first, hasLength(1));
+    expect(server.count('/api/tasks/t1/start'), 0);
+    final queued = await db.select(db.localSyncOperations).getSingle();
+    expect(queued.entityType, 'Task');
+    expect(queued.entityId, 't1');
+    expect(queued.operation, 'START');
+    expect(jsonDecode(queued.payload), {'version': 3});
   });
 
-  test('a refused start changes nothing on the device', () async {
-    await local.replaceAll([(TaskRemoteDataSource.taskFromJson(taskJson('t1', 'Kitchen')), [])]);
-    serve((path, query) async => (409, {'code': 'TASK_INVALID_TRANSITION', 'message': 'Cannot start'}));
+  test('starting a task that is not on the device fails and queues nothing', () async {
+    expect(await repository.start('missing'), isA<Err<Task>>());
+    expect(await db.select(db.localSyncOperations).get(), isEmpty);
+  });
 
-    expect(await repository.start('t1'), isA<Err<Object?>>());
-    expect((await repository.watchTask('t1').first)!.status, TaskStatus.assigned);
+  test('a refresh keeps a task with unsent changes as it is on the device', () async {
+    await local.replaceAll([
+      (TaskRemoteDataSource.taskFromJson(taskJson('t1', 'Kitchen')), []),
+      (TaskRemoteDataSource.taskFromJson(taskJson('t2', 'Warehouse')), []),
+    ]);
+    await repository.start('t1');
+    // The server doesn't know about the start yet and no longer lists t2.
+    serve((path, query) async => path == '/api/tasks'
+        ? (200, page([taskJson('t1', 'Kitchen (renamed)')], 0, 1))
+        : (200, <Object?>[]));
+
+    expect(await repository.refresh(), isA<Ok<void>>());
+
+    final tasks = await repository.watchTasks().first;
+    expect(tasks.map((t) => (t.title, t.status)), [('Kitchen', TaskStatus.inProgress)]);
+  });
+
+  test('once its changes are sent, a task is updated from the server again', () async {
+    await local.replaceAll([(TaskRemoteDataSource.taskFromJson(taskJson('t1', 'Kitchen')), [])]);
+    await repository.start('t1');
+    await db.update(db.localSyncOperations).write(const LocalSyncOperationsCompanion(status: Value('SYNCED')));
+    serve((path, query) async => path == '/api/tasks'
+        ? (200, page([taskJson('t1', 'Kitchen (renamed)', status: 'IN_PROGRESS')], 0, 1))
+        : (200, <Object?>[]));
+
+    await repository.refresh();
+
+    expect((await repository.watchTask('t1').first)!.title, 'Kitchen (renamed)');
   });
 }

@@ -18,12 +18,13 @@ abstract interface class TaskRepository {
   Stream<List<Requirement>> watchRequirements(String taskId);
 
   /// Loads the tasks the user may see (with their requirements) from the
-  /// server and stores them, removing tasks that are no longer there. On
-  /// failure the local data stays as it was.
+  /// server and stores them, removing tasks that are no longer there.
+  /// Tasks with unsent local changes are kept as they are. On failure the
+  /// local data stays as it was.
   Future<Result<void>> refresh();
 
   /// The assigned worker starts the task (or starts again after a reject
-  /// or correction request). Needs a connection until the sync queue
-  /// (task 6.2) lets this work offline.
+  /// or correction request). Works offline: the task is started on the
+  /// device and the start is sent to the server by the sync queue.
   Future<Result<Task>> start(String taskId);
 }

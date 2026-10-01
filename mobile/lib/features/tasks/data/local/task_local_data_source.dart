@@ -1,14 +1,16 @@
 import 'package:drift/drift.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 
 /// Reads and writes tasks and requirements in the local database.
 class TaskLocalDataSource {
-  const TaskLocalDataSource(this._db);
+  TaskLocalDataSource(this._db, {SyncQueue? queue}) : _queue = queue ?? SyncQueue(_db);
 
   final AppDatabase _db;
+  final SyncQueue _queue;
 
   Stream<List<Task>> watchTasks({TaskStatus? status}) {
     final query = _db.select(_db.localTasks)
@@ -85,13 +87,48 @@ class TaskLocalDataSource {
   Future<void> updateTask(Task task) => _db.into(_db.localTasks).insertOnConflictUpdate(_toTaskRow(task));
 
   /// Stores the server's tasks and removes all others, in one transaction.
+  /// Tasks with changes in the sync queue that are not sent yet keep their
+  /// local version, so the server's older copy can't undo those changes.
   Future<void> replaceAll(List<(Task, List<Requirement>)> tasks) {
     return _db.transaction(() async {
+      final unsent = await _taskIdsWithUnsentChanges();
       for (final (task, requirements) in tasks) {
-        await saveTask(task, requirements);
+        if (!unsent.contains(task.id)) {
+          await saveTask(task, requirements);
+        }
       }
-      await deleteTasksExcept({for (final (task, _) in tasks) task.id});
+      await deleteTasksExcept({for (final (task, _) in tasks) task.id, ...unsent});
     });
+  }
+
+  /// Starts a task on the device and queues the START for the server, in
+  /// one transaction, so it works offline. Returns the started task, or
+  /// `null` if it is not on the device.
+  Future<Task?> start(String taskId) {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.localTasks)..where((t) => t.id.equals(taskId))).getSingleOrNull();
+      if (row == null) {
+        return null;
+      }
+      final started = row.copyWith(status: TaskStatus.inProgress.apiName);
+      await _db.update(_db.localTasks).replace(started);
+      // The server refuses the start if the task changed in the meantime.
+      await _queue.add(
+        entity: SyncEntity.task,
+        entityId: taskId,
+        taskId: taskId,
+        operation: SyncOperation.start,
+        payload: {'version': row.version},
+      );
+      return _toTask(started);
+    });
+  }
+
+  Future<Set<String>> _taskIdsWithUnsentChanges() {
+    final query = _db.selectOnly(_db.localSyncOperations, distinct: true)
+      ..addColumns([_db.localSyncOperations.taskId])
+      ..where(_db.localSyncOperations.status.equals('SYNCED').not());
+    return query.map((row) => row.read(_db.localSyncOperations.taskId)!).get().then((ids) => ids.toSet());
   }
 
   /// Removes tasks that are no longer on the server (with their requirements).
