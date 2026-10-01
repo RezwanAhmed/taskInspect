@@ -35,7 +35,7 @@ void main() {
   testWidgets('shows one requirement at a time with progress', (tester) async {
     await open(tester);
 
-    expect(find.text('Requirement 1 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 1 of 3'), findsOneWidget);
     expect(find.text('Is the gas connection safe?'), findsOneWidget);
     expect(find.text('Required'), findsOneWidget);
     expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Previous')).onPressed, isNull);
@@ -46,7 +46,7 @@ void main() {
 
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
-    expect(find.text('Requirement 2 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 2 of 3'), findsOneWidget);
     expect(find.text('Use the thermometer on the door'), findsOneWidget);
 
     await tester.tap(find.text('Next'));
@@ -56,7 +56,7 @@ void main() {
 
     await tester.tap(find.text('Previous'));
     await tester.pumpAndSettle();
-    expect(find.text('Requirement 2 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 2 of 3'), findsOneWidget);
   });
 
   testWidgets('the checklist jumps to any requirement', (tester) async {
@@ -67,7 +67,7 @@ void main() {
     await tester.tap(find.text('Notes').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('Requirement 3 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 3 of 3'), findsOneWidget);
   });
 
   testWidgets('swiping changes the requirement too', (tester) async {
@@ -76,7 +76,7 @@ void main() {
     await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
     await tester.pumpAndSettle();
 
-    expect(find.text('Requirement 2 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 2 of 3'), findsOneWidget);
   });
 
   testWidgets('an in-progress task can be continued from its details', (tester) async {
@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.byKey(const Key('continue-task')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Requirement 1 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 1 of 3'), findsOneWidget);
   });
 
   testWidgets('starting a task opens the requirements', (tester) async {
@@ -94,6 +94,6 @@ void main() {
     await tester.tap(find.byKey(const Key('start-task')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Requirement 1 of 3'), findsOneWidget);
+    expect(find.textContaining('Requirement 1 of 3'), findsOneWidget);
   });
 }

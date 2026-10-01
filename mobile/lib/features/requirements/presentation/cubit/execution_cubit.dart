@@ -2,15 +2,25 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 class ExecutionState extends Equatable {
-  const ExecutionState({this.task, this.requirements = const [], this.index = 0, this.isLoading = true});
+  const ExecutionState({
+    this.task,
+    this.requirements = const [],
+    this.answers = const {},
+    this.index = 0,
+    this.isLoading = true,
+  });
 
   final Task? task;
   final List<Requirement> requirements;
+
+  /// Answers by requirement ID.
+  final Map<String, Answer> answers;
 
   /// The requirement on screen.
   final int index;
@@ -22,17 +32,30 @@ class ExecutionState extends Equatable {
 
   bool get isLast => index >= requirements.length - 1;
 
-  ExecutionState copyWith({Task? task, List<Requirement>? requirements, int? index, bool? isLoading}) {
+  Answer answerFor(Requirement requirement) => answers[requirement.id] ?? const Answer();
+
+  bool isComplete(Requirement requirement) => answerFor(requirement).completes(requirement);
+
+  int get completedCount => requirements.where(isComplete).length;
+
+  ExecutionState copyWith({
+    Task? task,
+    List<Requirement>? requirements,
+    Map<String, Answer>? answers,
+    int? index,
+    bool? isLoading,
+  }) {
     return ExecutionState(
       task: task ?? this.task,
       requirements: requirements ?? this.requirements,
+      answers: answers ?? this.answers,
       index: index ?? this.index,
       isLoading: isLoading ?? this.isLoading,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, index, isLoading];
+  List<Object?> get props => [task, requirements, answers, index, isLoading];
 }
 
 /// Walks the worker through a task's requirements one at a time.
@@ -52,6 +75,11 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     if (index >= 0 && index < state.requirements.length) {
       emit(state.copyWith(index: index));
     }
+  }
+
+  /// Records the answer to a requirement (saved on the device in task 5.13).
+  void answer(Requirement requirement, Answer answer) {
+    emit(state.copyWith(answers: {...state.answers, requirement.id: answer}));
   }
 
   void next() => goTo(state.index + 1);

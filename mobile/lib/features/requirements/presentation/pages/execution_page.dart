@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/features/requirements/presentation/cubit/execution_cubit.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_card.dart';
+import 'package:taskinspect/features/requirements/presentation/widgets/requirement_input.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 
 /// Requirement-by-requirement execution of a task (spec: "Task Execution").
@@ -48,6 +49,9 @@ class _ExecutionViewState extends State<_ExecutionView> {
               ListTile(
                 leading: Icon(RequirementTypeLook.icon(requirement.type)),
                 title: Text(requirement.title),
+                trailing: state.isComplete(requirement)
+                    ? const Icon(Icons.check_circle, color: Colors.green, semanticLabel: 'Answered')
+                    : null,
                 selected: i == state.index,
                 onTap: () => Navigator.pop(sheetContext, i),
               ),
@@ -92,7 +96,7 @@ class _ExecutionViewState extends State<_ExecutionView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Requirement ${state.index + 1} of $total'),
+                          Text('Requirement ${state.index + 1} of $total · ${state.completedCount} answered'),
                           const SizedBox(height: 4),
                           LinearProgressIndicator(value: (state.index + 1) / total),
                         ],
@@ -107,7 +111,17 @@ class _ExecutionViewState extends State<_ExecutionView> {
                 controller: _pages,
                 itemCount: total,
                 onPageChanged: cubit.goTo,
-                itemBuilder: (context, index) => RequirementCard(requirement: state.requirements[index]),
+                itemBuilder: (context, index) {
+                  final requirement = state.requirements[index];
+                  return RequirementCard(
+                    requirement: requirement,
+                    input: requirementInput(
+                      requirement: requirement,
+                      answer: state.answerFor(requirement),
+                      onChanged: (answer) => cubit.answer(requirement, answer),
+                    ),
+                  );
+                },
               ),
           },
           bottomNavigationBar: total == 0
