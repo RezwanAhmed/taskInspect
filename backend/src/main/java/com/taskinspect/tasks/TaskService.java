@@ -89,6 +89,12 @@ public class TaskService {
         return taskRepository.saveAndFlush(task);
     }
 
+    /** Something of the task changed (e.g. a requirement); see {@link TaskRepository#markChanged}. */
+    @Transactional
+    public void markChanged(UUID id) {
+        taskRepository.markChanged(id, Instant.now());
+    }
+
     /** A task the caller works on: only its assigned worker gets it. */
     @Transactional(readOnly = true)
     public Task requireAssignee(CurrentUser caller, UUID id) {

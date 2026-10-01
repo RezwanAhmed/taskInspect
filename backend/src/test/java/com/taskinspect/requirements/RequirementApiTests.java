@@ -1,5 +1,6 @@
 package com.taskinspect.requirements;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -135,6 +136,21 @@ class RequirementApiTests {
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[1].title").value("Third"))
                 .andExpect(jsonPath("$[1].position").value(1));
+    }
+
+    @Test
+    void changingRequirementsMarksTheTaskChangedButKeepsItsVersion() throws Exception {
+        Task before = taskRepository.findById(task.getId()).orElseThrow();
+
+        String id = idOf(add("{\"title\": \"First\", \"type\": \"CHECKBOX\"}"));
+        Task afterAdd = taskRepository.findById(task.getId()).orElseThrow();
+        mockMvc.perform(as(manager, delete("/api/tasks/{t}/requirements/{r}", task.getId(), id)))
+                .andExpect(status().isNoContent());
+        Task afterDelete = taskRepository.findById(task.getId()).orElseThrow();
+
+        assertThat(afterAdd.getUpdatedAt()).isAfter(before.getUpdatedAt());
+        assertThat(afterDelete.getUpdatedAt()).isAfterOrEqualTo(afterAdd.getUpdatedAt());
+        assertThat(afterDelete.getVersion()).isEqualTo(before.getVersion());
     }
 
     @Test

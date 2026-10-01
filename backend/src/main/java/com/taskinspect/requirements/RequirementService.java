@@ -59,9 +59,11 @@ public class RequirementService {
         Task task = taskService.requireEditable(caller, taskId);
         validate(request);
         int position = (int) requirementRepository.countByTaskId(task.getId());
-        return requirementRepository.save(new Requirement(task, request.title().trim(),
+        Requirement requirement = requirementRepository.save(new Requirement(task, request.title().trim(),
                 clean(request.description()), request.type(), isRequired(request), position, clean(request.unit()),
                 trimmed(request.options())));
+        taskService.markChanged(task.getId());
+        return requirement;
     }
 
     @Transactional
@@ -71,7 +73,9 @@ public class RequirementService {
         Requirement requirement = find(task, requirementId);
         requirement.update(request.title().trim(), clean(request.description()), request.type(),
                 isRequired(request), clean(request.unit()), trimmed(request.options()));
-        return requirementRepository.saveAndFlush(requirement);
+        Requirement saved = requirementRepository.saveAndFlush(requirement);
+        taskService.markChanged(task.getId());
+        return saved;
     }
 
     /** Deletes a requirement and closes the gap in the positions of the others. */
@@ -84,6 +88,7 @@ public class RequirementService {
         for (int i = 0; i < remaining.size(); i++) {
             remaining.get(i).moveTo(i);
         }
+        taskService.markChanged(task.getId());
     }
 
     private Requirement find(Task task, UUID requirementId) {
