@@ -47,7 +47,16 @@ class TaskDetailsPage extends StatelessWidget {
           final auth = context.watch<AuthBloc>().state;
           final userId = auth is Authenticated ? auth.user.id : '';
           return Scaffold(
-            appBar: AppBar(title: const Text('Task')),
+            appBar: AppBar(
+              title: const Text('Task'),
+              actions: [
+                IconButton(
+                  tooltip: 'History',
+                  icon: const Icon(Icons.history),
+                  onPressed: () => context.push(AppRoutes.history(taskId)),
+                ),
+              ],
+            ),
             bottomNavigationBar: task != null && _canReview(task, userId)
                 ? SafeArea(
                     child: Padding(

@@ -2,6 +2,7 @@ import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
+import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -25,6 +26,9 @@ class TaskRepositoryImpl implements TaskRepository {
 
   @override
   Stream<TaskReview?> watchReview(String taskId) => _local.watchReview(taskId);
+
+  @override
+  Future<Result<List<HistoryEntry>>> loadHistory(String taskId) => _remote.fetchHistory(taskId);
 
   @override
   Future<Result<void>> refresh() async {

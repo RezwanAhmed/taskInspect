@@ -1,5 +1,6 @@
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/network/api_client.dart';
+import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -39,6 +40,22 @@ class TaskRemoteDataSource {
       (body) => (body! as List<Object?>)
           .map((json) => requirementFromJson(taskId, json! as Map<String, Object?>))
           .toList(),
+    );
+  }
+
+  /// The task's history, oldest first (GET /api/tasks/{id}/history).
+  Future<Result<List<HistoryEntry>>> fetchHistory(String taskId) {
+    return _api.send(
+      (dio) => dio.get<Object?>('/api/tasks/$taskId/history'),
+      (body) => [
+        for (final json in (body! as List<Object?>).cast<Map<String, Object?>>())
+          HistoryEntry(
+            event: HistoryEvent.tryFromApi(json['event']! as String),
+            byName: ((json['by'] as Map<String, Object?>?)?['fullName'] as String?) ?? '',
+            at: DateTime.parse(json['at']! as String).toUtc(),
+            reason: json['reason'] as String?,
+          ),
+      ],
     );
   }
 

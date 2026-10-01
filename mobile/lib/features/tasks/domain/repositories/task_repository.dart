@@ -1,4 +1,5 @@
 import 'package:taskinspect/core/error/result.dart';
+import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -20,6 +21,9 @@ abstract interface class TaskRepository {
 
   /// The task's latest review (why it came back to the worker), or `null`.
   Stream<TaskReview?> watchReview(String taskId);
+
+  /// The task's history from the server, oldest first (needs a connection).
+  Future<Result<List<HistoryEntry>>> loadHistory(String taskId);
 
   /// Loads the tasks the user may see (with their requirements) from the
   /// server and stores them, removing tasks that are no longer there.

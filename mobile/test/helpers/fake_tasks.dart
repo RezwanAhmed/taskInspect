@@ -12,11 +12,13 @@ import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
+import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
@@ -103,6 +105,14 @@ class FakeTaskRepository implements TaskRepository {
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
   }
+
+  /// The history [loadHistory] returns, or [historyFailure].
+  List<HistoryEntry> history = [];
+  Failure? historyFailure;
+
+  @override
+  Future<Result<List<HistoryEntry>>> loadHistory(String taskId) async =>
+      historyFailure == null ? Ok(history) : Err(historyFailure!);
 
   /// Latest reviews by task ID (set by tests).
   Map<String, TaskReview> reviews = {};
@@ -326,6 +336,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
     () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
+    () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
     () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
     () => getIt.isRegistered<EvidenceRepository>() ? getIt.unregister<EvidenceRepository>() : null,
@@ -340,6 +351,7 @@ void registerFakeTasks(
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
     ..registerFactory(() => SubmitTask(repository))
+    ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())
     ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker())
     ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository())
