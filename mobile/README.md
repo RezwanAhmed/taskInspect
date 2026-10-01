@@ -31,6 +31,10 @@ Run from this `mobile/` folder:
 | `flutter test` | Run the unit and widget tests |
 | `flutter run` | Run the app on a connected device or emulator |
 | `flutter build apk --debug` | Build a debug APK for Android |
+| `dart run build_runner build --delete-conflicting-outputs` | Regenerate code (e.g. the drift database, `*.g.dart`) after changing tables |
+
+Generated `*.g.dart` files are committed, so the app builds right after
+cloning; regenerate them whenever their source changes.
 
 ## Environments
 

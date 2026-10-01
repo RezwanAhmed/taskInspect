@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:taskinspect/core/config/app_config.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
+import 'package:taskinspect/core/storage/app_database.dart';
 
 /// The app's service locator. Every dependency is registered in
 /// [configureDependencies]; widgets and BLoCs never create their own
@@ -16,5 +17,6 @@ Future<void> configureDependencies({AppConfig? config}) async {
   getIt
     ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
     ..registerLazySingleton<ApiClient>(() => ApiClient.forConfig(getIt<AppConfig>()))
-    ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new);
+    ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
+    ..registerLazySingleton<AppDatabase>(AppDatabase.new, dispose: (database) => database.close());
 }
