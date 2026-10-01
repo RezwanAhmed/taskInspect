@@ -1,5 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:taskinspect/core/config/app_config.dart';
+import 'package:taskinspect/core/network/api_client.dart';
 
 /// The app's service locator. Every dependency is registered in
 /// [configureDependencies]; widgets and BLoCs never create their own
@@ -11,5 +12,7 @@ final GetIt getIt = GetIt.instance;
 /// [config] can be given by tests; the app reads it from the build.
 Future<void> configureDependencies({AppConfig? config}) async {
   await getIt.reset();
-  getIt.registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment());
+  getIt
+    ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
+    ..registerLazySingleton<ApiClient>(() => ApiClient.forConfig(getIt<AppConfig>()));
 }
