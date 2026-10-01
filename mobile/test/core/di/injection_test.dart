@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/network/api_client.dart';
+import 'package:taskinspect/core/network/connectivity_monitor.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
@@ -42,6 +43,7 @@ void main() {
     await configureDependencies(database: AppDatabase(NativeDatabase.memory()));
 
     expect(getIt<ApiClient>(), isNotNull);
+    expect(getIt<ConnectivityMonitor>(), isNotNull);
     expect(getIt<TokenStorage>(), isNotNull);
     expect(getIt<SyncQueue>(), isNotNull);
     expect(getIt<AuthRepository>(), isNotNull);

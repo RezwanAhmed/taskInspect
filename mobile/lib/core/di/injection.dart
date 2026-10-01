@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:taskinspect/core/config/app_config.dart';
 import 'package:taskinspect/core/network/api_client.dart';
+import 'package:taskinspect/core/network/connectivity_monitor.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
@@ -58,6 +59,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
       );
       return client;
     })
+    ..registerLazySingleton<ConnectivityMonitor>(DeviceConnectivityMonitor.new)
     ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
     ..registerLazySingleton<AppDatabase>(
       () => database ?? AppDatabase(),
