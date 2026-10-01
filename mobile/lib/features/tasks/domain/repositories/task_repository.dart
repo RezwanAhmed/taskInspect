@@ -21,4 +21,9 @@ abstract interface class TaskRepository {
   /// server and stores them, removing tasks that are no longer there. On
   /// failure the local data stays as it was.
   Future<Result<void>> refresh();
+
+  /// The assigned worker starts the task (or starts again after a reject
+  /// or correction request). Needs a connection until the sync queue
+  /// (task 6.2) lets this work offline.
+  Future<Result<Task>> start(String taskId);
 }

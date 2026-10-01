@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_details_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/status_chip.dart';
@@ -19,12 +21,38 @@ class TaskDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => TaskDetailsCubit(getIt(), taskId),
-      child: BlocBuilder<TaskDetailsCubit, TaskDetailsState>(
+      create: (_) => TaskDetailsCubit(getIt(), getIt(), taskId),
+      child: BlocConsumer<TaskDetailsCubit, TaskDetailsState>(
+        listenWhen: (previous, current) => current.message != null && previous.message != current.message,
+        listener: (context, state) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message!)));
+          context.read<TaskDetailsCubit>().clearMessage();
+        },
         builder: (context, state) {
           final task = state.task;
+          final auth = context.watch<AuthBloc>().state;
+          final userId = auth is Authenticated ? auth.user.id : '';
           return Scaffold(
             appBar: AppBar(title: const Text('Task')),
+            bottomNavigationBar: task != null && StartTask.canStart(task, userId)
+                ? SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FilledButton.icon(
+                        key: const Key('start-task'),
+                        onPressed: state.isStarting ? null : () => context.read<TaskDetailsCubit>().start(),
+                        icon: state.isStarting
+                            ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.play_arrow),
+                        label: Text(switch (task.status) {
+                          TaskStatus.rejected => 'Start again',
+                          TaskStatus.correctionRequested => 'Start correction',
+                          _ => 'Start task',
+                        }),
+                      ),
+                    ),
+                  )
+                : null,
             body: switch ((state.isLoading, task)) {
               (true, _) => const Center(child: CircularProgressIndicator()),
               (false, null) => const Center(child: Text('This task is not on this device.')),

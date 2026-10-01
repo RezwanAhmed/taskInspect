@@ -44,4 +44,13 @@ class TaskRepositoryImpl implements TaskRepository {
     await _local.replaceAll([for (final task in loaded) (task, requirements[task.id]!)]);
     return const Ok(null);
   }
+
+  @override
+  Future<Result<Task>> start(String taskId) async {
+    final result = await _remote.start(taskId);
+    if (result case Ok(:final value)) {
+      await _local.updateTask(value);
+    }
+    return result;
+  }
 }

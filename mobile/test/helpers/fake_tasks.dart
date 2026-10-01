@@ -9,6 +9,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 
@@ -34,6 +35,9 @@ class FakeTaskRepository implements TaskRepository {
   Map<String, List<Requirement>> requirements = {};
   Failure? refreshFailure;
   int refreshes = 0;
+
+  /// When set, starting a task fails with this.
+  Failure? startFailure;
 
   /// Changes the tasks on the "device"; every watcher sees the change.
   void emit(List<Task> tasks) {
@@ -68,6 +72,29 @@ class FakeTaskRepository implements TaskRepository {
   }
 
   @override
+  Future<Result<Task>> start(String taskId) async {
+    if (startFailure != null) {
+      return Err(startFailure!);
+    }
+    final task = current.firstWhere((t) => t.id == taskId);
+    final started = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: TaskStatus.inProgress,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: task.assignee,
+      version: task.version + 1,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? started : t]);
+    return Ok(started);
+  }
+
+  @override
   Future<Result<void>> refresh() async {
     refreshes++;
     return refreshFailure == null ? const Ok(null) : Err(refreshFailure!);
@@ -83,11 +110,15 @@ void registerFakeTasks(FakeTaskRepository repository) {
   if (getIt.isRegistered<WatchTasks>()) {
     getIt.unregister<WatchTasks>();
   }
-  if (getIt.isRegistered<WatchTaskDetails>()) {
-    getIt.unregister<WatchTaskDetails>();
+  for (final unregister in [
+    () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
+    () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
+  ]) {
+    unregister();
   }
   getIt
     ..registerFactory(() => DashboardCubit(repository, RefreshTasks(repository)))
     ..registerFactory(() => WatchTasks(repository))
-    ..registerFactory(() => WatchTaskDetails(repository));
+    ..registerFactory(() => WatchTaskDetails(repository))
+    ..registerFactory(() => StartTask(repository));
 }

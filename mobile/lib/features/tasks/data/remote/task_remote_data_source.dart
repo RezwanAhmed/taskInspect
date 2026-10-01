@@ -42,6 +42,13 @@ class TaskRemoteDataSource {
     );
   }
 
+  Future<Result<Task>> start(String taskId) {
+    return _api.send(
+      (dio) => dio.post<Object?>('/api/tasks/$taskId/start'),
+      (body) => taskFromJson(body! as Map<String, Object?>),
+    );
+  }
+
   static Task taskFromJson(Map<String, Object?> json) => Task(
         id: json['id']! as String,
         title: json['title']! as String,

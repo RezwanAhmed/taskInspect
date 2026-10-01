@@ -8,6 +8,7 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 
 import '../../../helpers/fake_server.dart';
@@ -112,5 +113,28 @@ void main() {
 
     expect(await repository.refresh(), isA<Err<void>>());
     expect((await repository.watchTasks().first).map((t) => t.id), ['t1']);
+  });
+
+  test('starting a task updates it on the device and keeps its requirements', () async {
+    await local.replaceAll([(TaskRemoteDataSource.taskFromJson(taskJson('t1', 'Kitchen')), [
+      TaskRemoteDataSource.requirementFromJson('t1', requirements.first),
+    ])]);
+    serve((path, query) async => path == '/api/tasks/t1/start'
+        ? (200, taskJson('t1', 'Kitchen', status: 'IN_PROGRESS'))
+        : (404, null));
+
+    final result = await repository.start('t1');
+
+    expect((result as Ok<Task>).value.status, TaskStatus.inProgress);
+    expect((await repository.watchTask('t1').first)!.status, TaskStatus.inProgress);
+    expect(await repository.watchRequirements('t1').first, hasLength(1));
+  });
+
+  test('a refused start changes nothing on the device', () async {
+    await local.replaceAll([(TaskRemoteDataSource.taskFromJson(taskJson('t1', 'Kitchen')), [])]);
+    serve((path, query) async => (409, {'code': 'TASK_INVALID_TRANSITION', 'message': 'Cannot start'}));
+
+    expect(await repository.start('t1'), isA<Err<Object?>>());
+    expect((await repository.watchTask('t1').first)!.status, TaskStatus.assigned);
   });
 }

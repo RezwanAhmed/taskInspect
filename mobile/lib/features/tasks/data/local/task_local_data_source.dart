@@ -81,6 +81,9 @@ class TaskLocalDataSource {
     });
   }
 
+  /// Updates a stored task without touching its requirements.
+  Future<void> updateTask(Task task) => _db.into(_db.localTasks).insertOnConflictUpdate(_toTaskRow(task));
+
   /// Stores the server's tasks and removes all others, in one transaction.
   Future<void> replaceAll(List<(Task, List<Requirement>)> tasks) {
     return _db.transaction(() async {

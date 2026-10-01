@@ -18,6 +18,7 @@ import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.d
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 
@@ -63,6 +64,7 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerFactory(() => RefreshTasks(getIt()))
     ..registerFactory(() => WatchTasks(getIt()))
     ..registerFactory(() => WatchTaskDetails(getIt()))
+    ..registerFactory(() => StartTask(getIt()))
     // Dashboard
     ..registerFactory(() => DashboardCubit(getIt(), getIt()));
 }

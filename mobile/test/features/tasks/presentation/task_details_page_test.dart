@@ -61,6 +61,7 @@ void main() {
     expect(find.text('Pending'), findsOneWidget);
     expect(find.text('Is the gas connection safe?'), findsOneWidget);
     expect(find.text('Yes / No · Required'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Number · °C · Required'), 200);
     expect(find.text('Number · °C · Required'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Choose one · Clean / Dirty · Optional'), 200);
     expect(find.text('Choose one · Clean / Dirty · Optional'), findsOneWidget);
