@@ -42,6 +42,15 @@ final class ServerFailure extends Failure {
   bool get isServerError => statusCode >= 500;
 }
 
+/// The user's input was rejected before calling the server, e.g. an
+/// empty email. [field] says which input is wrong.
+final class InvalidInputFailure extends Failure {
+  const InvalidInputFailure({required this.field, required this.message});
+
+  final String field;
+  final String message;
+}
+
 /// A bug or an answer the app could not understand.
 final class UnexpectedFailure extends Failure {
   const UnexpectedFailure(this.error);

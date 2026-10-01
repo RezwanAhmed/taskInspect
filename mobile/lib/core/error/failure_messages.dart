@@ -9,6 +9,7 @@ String userMessage(Failure failure) {
     ServerFailure(isServerError: true) => 'Unable to synchronize. Please try again.',
     ServerFailure(:final message?) => message,
     ServerFailure() => 'Something went wrong. Please try again.',
+    InvalidInputFailure(:final message) => message,
     UnexpectedFailure() => 'Something went wrong. Please try again.',
   };
 }
