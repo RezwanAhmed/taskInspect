@@ -32,8 +32,13 @@ void main() {
     await tester.tap(find.byKey(const Key('start-task')));
     await tester.pumpAndSettle();
 
+    // Starting opens the requirements; the task behind it is now in progress.
+    expect(find.text('This task has no requirements.'), findsOneWidget);
+    Navigator.of(tester.element(find.byType(Scaffold).last)).pop();
+    await tester.pumpAndSettle();
     expect(find.text('In progress'), findsOneWidget);
     expect(find.byKey(const Key('start-task')), findsNothing);
+    expect(find.byKey(const Key('continue-task')), findsOneWidget);
   });
 
   testWidgets('after a correction request the button says Start correction', (tester) async {
