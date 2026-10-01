@@ -56,12 +56,18 @@ class TaskLocalDataSource {
   }
 
   /// Stores a task and replaces its requirements, in one transaction.
+  ///
+  /// Requirements are updated in place, not deleted and inserted again:
+  /// the worker's answers and evidence belong to them (deleting a
+  /// requirement deletes them too). Only requirements the manager removed
+  /// are deleted.
   Future<void> saveTask(Task task, List<Requirement> requirements) {
     return _db.transaction(() async {
       await _db.into(_db.localTasks).insertOnConflictUpdate(_toTaskRow(task));
-      await (_db.delete(_db.localRequirements)..where((r) => r.taskId.equals(task.id))).go();
+      final ids = [for (final requirement in requirements) requirement.id];
+      await (_db.delete(_db.localRequirements)..where((r) => r.taskId.equals(task.id) & r.id.isNotIn(ids))).go();
       for (final requirement in requirements) {
-        await _db.into(_db.localRequirements).insert(LocalRequirementsCompanion.insert(
+        await _db.into(_db.localRequirements).insertOnConflictUpdate(LocalRequirementsCompanion.insert(
               id: requirement.id,
               taskId: task.id,
               title: requirement.title,
@@ -71,6 +77,7 @@ class TaskLocalDataSource {
               position: requirement.position,
               unit: Value(requirement.unit),
             ));
+        await (_db.delete(_db.localRequirementOptions)..where((o) => o.requirementId.equals(requirement.id))).go();
         for (final option in requirement.options) {
           await _db.into(_db.localRequirementOptions).insert(LocalRequirementOptionsCompanion.insert(
                 id: option.id,

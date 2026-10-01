@@ -117,4 +117,26 @@ void main() {
     expect(task('t', 'x', DateTime.utc(2026, 10, 2), status: TaskStatus.approved).isOverdue(now), isFalse);
     expect(task('t', 'x', DateTime.utc(2026, 10, 4)).isOverdue(now), isFalse);
   });
+
+  test("an update from the server keeps the worker's answers and evidence; a removed requirement takes its own", () async {
+    Requirement requirement(String id, int position) =>
+        Requirement(id: id, taskId: 't1', title: 'Q $id', type: RequirementType.yesNo, required: true, position: position);
+    await local.saveTask(task('t1', 'Kitchen', DateTime.utc(2026, 10, 2)), [requirement('r1', 0), requirement('r2', 1)]);
+    for (final id in ['r1', 'r2']) {
+      await db.customStatement(
+          "INSERT INTO local_responses (requirement_id, task_id, boolean_value, updated_at, sync_status) VALUES ('$id', 't1', 1, 0, 'SYNCED')");
+    }
+    await db.customStatement('INSERT INTO local_evidence (id, task_id, requirement_id, local_path, mime_type, size_bytes, '
+        "created_at, upload_status) VALUES ('e1', 't1', 'r1', '/e1.jpg', 'image/jpeg', 5, 0, 'UPLOADED')");
+
+    // The manager renamed r1 and removed r2.
+    await local.saveTask(task('t1', 'Kitchen', DateTime.utc(2026, 10, 2)), const [
+      Requirement(id: 'r1', taskId: 't1', title: 'Renamed', type: RequirementType.yesNo, required: true, position: 0),
+    ]);
+
+    final answers = await db.select(db.localResponses).get();
+    expect(answers.map((a) => a.requirementId), ['r1']);
+    expect(await db.select(db.localEvidence).get(), hasLength(1));
+    expect((await db.select(db.localRequirements).getSingle()).title, 'Renamed');
+  });
 }
