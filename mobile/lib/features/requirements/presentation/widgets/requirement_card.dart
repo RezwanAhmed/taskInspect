@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 
-/// One requirement on the execution screen: what to do, and the input to
-/// answer it ([input]; the inputs per type come in tasks 5.9–5.11).
+/// One requirement on the execution screen: what to do, the [input] to
+/// answer it and an optional [comment] field.
 class RequirementCard extends StatelessWidget {
-  const RequirementCard({required this.requirement, this.input, super.key});
+  const RequirementCard({required this.requirement, this.input, this.comment, super.key});
 
   final Requirement requirement;
   final Widget? input;
+  final Widget? comment;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +50,7 @@ class RequirementCard extends StatelessWidget {
                 ),
                 child: const Text('Answer input', textAlign: TextAlign.center),
               ),
+          if (comment != null) ...[const SizedBox(height: 16), comment!],
         ],
       ),
     );

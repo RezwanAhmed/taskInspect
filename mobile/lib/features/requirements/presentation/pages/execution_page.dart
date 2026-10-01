@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/features/requirements/presentation/cubit/execution_cubit.dart';
+import 'package:taskinspect/features/requirements/presentation/widgets/comment_field.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_card.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_input.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 
 /// Requirement-by-requirement execution of a task (spec: "Task Execution").
@@ -113,11 +115,20 @@ class _ExecutionViewState extends State<_ExecutionView> {
                 onPageChanged: cubit.goTo,
                 itemBuilder: (context, index) {
                   final requirement = state.requirements[index];
+                  final answer = state.answerFor(requirement);
                   return RequirementCard(
                     requirement: requirement,
+                    // A COMMENT requirement's answer already is a comment.
+                    comment: requirement.type == RequirementType.comment
+                        ? null
+                        : CommentField(
+                            key: ValueKey('comment-${requirement.id}'),
+                            value: answer.comment,
+                            onChanged: (text) => cubit.answer(requirement, (a) => a.copyWith(comment: () => text)),
+                          ),
                     input: requirementInput(
                       requirement: requirement,
-                      answer: state.answerFor(requirement),
+                      answer: answer,
                       onChanged: (update) => cubit.answer(requirement, update),
                     ),
                   );
