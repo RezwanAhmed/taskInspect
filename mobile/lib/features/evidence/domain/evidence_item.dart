@@ -10,6 +10,7 @@ class EvidenceItem extends Equatable {
     required this.mimeType,
     required this.sizeBytes,
     required this.createdAt,
+    this.fileName,
     this.uploaded = false,
   });
 
@@ -22,9 +23,12 @@ class EvidenceItem extends Equatable {
   final int sizeBytes;
   final DateTime createdAt;
 
+  /// The original name of a picked document (`null` for photos).
+  final String? fileName;
+
   /// Whether the file reached the server (Phase 6 / 8).
   final bool uploaded;
 
   @override
-  List<Object?> get props => [id, taskId, requirementId, localPath, mimeType, sizeBytes, createdAt, uploaded];
+  List<Object?> get props => [id, taskId, requirementId, localPath, mimeType, sizeBytes, createdAt, fileName, uploaded];
 }

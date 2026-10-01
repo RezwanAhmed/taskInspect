@@ -2352,6 +2352,17 @@ class $LocalEvidenceTable extends LocalEvidence
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _fileNameMeta = const VerificationMeta(
+    'fileName',
+  );
+  @override
+  late final GeneratedColumn<String> fileName = GeneratedColumn<String>(
+    'file_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _uploadStatusMeta = const VerificationMeta(
     'uploadStatus',
   );
@@ -2373,6 +2384,7 @@ class $LocalEvidenceTable extends LocalEvidence
     mimeType,
     sizeBytes,
     createdAt,
+    fileName,
     uploadStatus,
   ];
   @override
@@ -2443,6 +2455,12 @@ class $LocalEvidenceTable extends LocalEvidence
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('file_name')) {
+      context.handle(
+        _fileNameMeta,
+        fileName.isAcceptableOrUnknown(data['file_name']!, _fileNameMeta),
+      );
+    }
     if (data.containsKey('upload_status')) {
       context.handle(
         _uploadStatusMeta,
@@ -2489,6 +2507,10 @@ class $LocalEvidenceTable extends LocalEvidence
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      fileName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}file_name'],
+      ),
       uploadStatus: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}upload_status'],
@@ -2511,6 +2533,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
   final int sizeBytes;
   final DateTime createdAt;
 
+  /// Original name of a picked document; `null` for photos.
+  final String? fileName;
+
   /// PENDING until the file is uploaded, then UPLOADED.
   final String uploadStatus;
   const EvidenceRow({
@@ -2521,6 +2546,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     required this.mimeType,
     required this.sizeBytes,
     required this.createdAt,
+    this.fileName,
     required this.uploadStatus,
   });
   @override
@@ -2533,6 +2559,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     map['mime_type'] = Variable<String>(mimeType);
     map['size_bytes'] = Variable<int>(sizeBytes);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || fileName != null) {
+      map['file_name'] = Variable<String>(fileName);
+    }
     map['upload_status'] = Variable<String>(uploadStatus);
     return map;
   }
@@ -2546,6 +2575,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       mimeType: Value(mimeType),
       sizeBytes: Value(sizeBytes),
       createdAt: Value(createdAt),
+      fileName: fileName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fileName),
       uploadStatus: Value(uploadStatus),
     );
   }
@@ -2563,6 +2595,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       mimeType: serializer.fromJson<String>(json['mimeType']),
       sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      fileName: serializer.fromJson<String?>(json['fileName']),
       uploadStatus: serializer.fromJson<String>(json['uploadStatus']),
     );
   }
@@ -2577,6 +2610,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       'mimeType': serializer.toJson<String>(mimeType),
       'sizeBytes': serializer.toJson<int>(sizeBytes),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'fileName': serializer.toJson<String?>(fileName),
       'uploadStatus': serializer.toJson<String>(uploadStatus),
     };
   }
@@ -2589,6 +2623,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     String? mimeType,
     int? sizeBytes,
     DateTime? createdAt,
+    Value<String?> fileName = const Value.absent(),
     String? uploadStatus,
   }) => EvidenceRow(
     id: id ?? this.id,
@@ -2598,6 +2633,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     mimeType: mimeType ?? this.mimeType,
     sizeBytes: sizeBytes ?? this.sizeBytes,
     createdAt: createdAt ?? this.createdAt,
+    fileName: fileName.present ? fileName.value : this.fileName,
     uploadStatus: uploadStatus ?? this.uploadStatus,
   );
   EvidenceRow copyWithCompanion(LocalEvidenceCompanion data) {
@@ -2611,6 +2647,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
       sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      fileName: data.fileName.present ? data.fileName.value : this.fileName,
       uploadStatus: data.uploadStatus.present
           ? data.uploadStatus.value
           : this.uploadStatus,
@@ -2627,6 +2664,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ..write('mimeType: $mimeType, ')
           ..write('sizeBytes: $sizeBytes, ')
           ..write('createdAt: $createdAt, ')
+          ..write('fileName: $fileName, ')
           ..write('uploadStatus: $uploadStatus')
           ..write(')'))
         .toString();
@@ -2641,6 +2679,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     mimeType,
     sizeBytes,
     createdAt,
+    fileName,
     uploadStatus,
   );
   @override
@@ -2654,6 +2693,7 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           other.mimeType == this.mimeType &&
           other.sizeBytes == this.sizeBytes &&
           other.createdAt == this.createdAt &&
+          other.fileName == this.fileName &&
           other.uploadStatus == this.uploadStatus);
 }
 
@@ -2665,6 +2705,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
   final Value<String> mimeType;
   final Value<int> sizeBytes;
   final Value<DateTime> createdAt;
+  final Value<String?> fileName;
   final Value<String> uploadStatus;
   final Value<int> rowid;
   const LocalEvidenceCompanion({
@@ -2675,6 +2716,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     this.mimeType = const Value.absent(),
     this.sizeBytes = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.fileName = const Value.absent(),
     this.uploadStatus = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2686,6 +2728,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     required String mimeType,
     required int sizeBytes,
     required DateTime createdAt,
+    this.fileName = const Value.absent(),
     this.uploadStatus = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2703,6 +2746,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     Expression<String>? mimeType,
     Expression<int>? sizeBytes,
     Expression<DateTime>? createdAt,
+    Expression<String>? fileName,
     Expression<String>? uploadStatus,
     Expression<int>? rowid,
   }) {
@@ -2714,6 +2758,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
       if (mimeType != null) 'mime_type': mimeType,
       if (sizeBytes != null) 'size_bytes': sizeBytes,
       if (createdAt != null) 'created_at': createdAt,
+      if (fileName != null) 'file_name': fileName,
       if (uploadStatus != null) 'upload_status': uploadStatus,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2727,6 +2772,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     Value<String>? mimeType,
     Value<int>? sizeBytes,
     Value<DateTime>? createdAt,
+    Value<String?>? fileName,
     Value<String>? uploadStatus,
     Value<int>? rowid,
   }) {
@@ -2738,6 +2784,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
       mimeType: mimeType ?? this.mimeType,
       sizeBytes: sizeBytes ?? this.sizeBytes,
       createdAt: createdAt ?? this.createdAt,
+      fileName: fileName ?? this.fileName,
       uploadStatus: uploadStatus ?? this.uploadStatus,
       rowid: rowid ?? this.rowid,
     );
@@ -2767,6 +2814,9 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (fileName.present) {
+      map['file_name'] = Variable<String>(fileName.value);
+    }
     if (uploadStatus.present) {
       map['upload_status'] = Variable<String>(uploadStatus.value);
     }
@@ -2786,6 +2836,7 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
           ..write('mimeType: $mimeType, ')
           ..write('sizeBytes: $sizeBytes, ')
           ..write('createdAt: $createdAt, ')
+          ..write('fileName: $fileName, ')
           ..write('uploadStatus: $uploadStatus, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5057,6 +5108,7 @@ typedef $$LocalEvidenceTableCreateCompanionBuilder =
       required String mimeType,
       required int sizeBytes,
       required DateTime createdAt,
+      Value<String?> fileName,
       Value<String> uploadStatus,
       Value<int> rowid,
     });
@@ -5069,6 +5121,7 @@ typedef $$LocalEvidenceTableUpdateCompanionBuilder =
       Value<String> mimeType,
       Value<int> sizeBytes,
       Value<DateTime> createdAt,
+      Value<String?> fileName,
       Value<String> uploadStatus,
       Value<int> rowid,
     });
@@ -5148,6 +5201,11 @@ class $$LocalEvidenceTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fileName => $composableBuilder(
+    column: $table.fileName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5237,6 +5295,11 @@ class $$LocalEvidenceTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get fileName => $composableBuilder(
+    column: $table.fileName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get uploadStatus => $composableBuilder(
     column: $table.uploadStatus,
     builder: (column) => ColumnOrderings(column),
@@ -5312,6 +5375,9 @@ class $$LocalEvidenceTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get fileName =>
+      $composableBuilder(column: $table.fileName, builder: (column) => column);
 
   GeneratedColumn<String> get uploadStatus => $composableBuilder(
     column: $table.uploadStatus,
@@ -5401,6 +5467,7 @@ class $$LocalEvidenceTableTableManager
                 Value<String> mimeType = const Value.absent(),
                 Value<int> sizeBytes = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<String?> fileName = const Value.absent(),
                 Value<String> uploadStatus = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEvidenceCompanion(
@@ -5411,6 +5478,7 @@ class $$LocalEvidenceTableTableManager
                 mimeType: mimeType,
                 sizeBytes: sizeBytes,
                 createdAt: createdAt,
+                fileName: fileName,
                 uploadStatus: uploadStatus,
                 rowid: rowid,
               ),
@@ -5423,6 +5491,7 @@ class $$LocalEvidenceTableTableManager
                 required String mimeType,
                 required int sizeBytes,
                 required DateTime createdAt,
+                Value<String?> fileName = const Value.absent(),
                 Value<String> uploadStatus = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEvidenceCompanion.insert(
@@ -5433,6 +5502,7 @@ class $$LocalEvidenceTableTableManager
                 mimeType: mimeType,
                 sizeBytes: sizeBytes,
                 createdAt: createdAt,
+                fileName: fileName,
                 uploadStatus: uploadStatus,
                 rowid: rowid,
               ),

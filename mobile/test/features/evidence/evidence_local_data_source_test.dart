@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/evidence/data/image_compressor.dart';
 import 'package:taskinspect/features/evidence/data/local/evidence_local_data_source.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -39,6 +40,7 @@ void main() {
     evidence = EvidenceLocalDataSource(db, compressor, documentsDirectory: () async => documents);
     await TaskLocalDataSource(db).saveTask(fakeTask('t1', status: TaskStatus.inProgress), const [
       Requirement(id: 'r1', taskId: 't1', title: 'Photo', type: RequirementType.photo, required: true, position: 0),
+      Requirement(id: 'r2', taskId: 't1', title: 'Report', type: RequirementType.document, required: true, position: 1),
     ]);
   });
 
@@ -94,6 +96,53 @@ void main() {
 
     expect(await evidence.watchEvidence('t1').first, isEmpty);
     expect(File(item.localPath).existsSync(), isFalse);
+  });
+
+  Future<String> pickedFile(String name, List<int> bytes) async {
+    final file = File('${picked.path}/$name');
+    await file.writeAsBytes(bytes);
+    return file.path;
+  }
+
+  test('a PDF document is copied unchanged and keeps its name', () async {
+    final content = [...'%PDF-1.7\n'.codeUnits, ...List.filled(300, 1)];
+    final source = await pickedFile('report.pdf', content);
+
+    final item = await evidence.addDocument(
+      taskId: 't1',
+      requirementId: 'r2',
+      sourcePath: source,
+      fileName: 'Service report.pdf',
+    );
+
+    expect(compressor.calls, 0);
+    expect(item.mimeType, 'application/pdf');
+    expect(item.sizeBytes, content.length);
+    expect(item.localPath, endsWith('${item.id}.pdf'));
+    expect(await File(item.localPath).readAsBytes(), content);
+    expect(File(source).existsSync(), isTrue);
+    final stored = await evidence.watchEvidence('t1').first;
+    expect(stored['r2']!.single.fileName, 'Service report.pdf');
+  });
+
+  test('files that are not PDFs or too large are rejected and not stored', () async {
+    final notPdf = await pickedFile('fake.pdf', 'hello'.codeUnits);
+    final empty = await pickedFile('empty.pdf', const []);
+    final huge = File('${picked.path}/huge.pdf');
+    final raf = await huge.open(mode: FileMode.write);
+    await raf.writeFrom('%PDF-'.codeUnits);
+    await raf.setPosition(20 * 1024 * 1024);
+    await raf.writeByte(1);
+    await raf.close();
+
+    for (final path in [notPdf, empty, huge.path]) {
+      await expectLater(
+        evidence.addDocument(taskId: 't1', requirementId: 'r2', sourcePath: path, fileName: 'x.pdf'),
+        throwsA(isA<EvidenceRejected>()),
+      );
+    }
+    expect(await evidence.watchEvidence('t1').first, isEmpty);
+    expect(Directory('${documents.path}/evidence/t1').existsSync(), isFalse);
   });
 
   test('sign out deletes all evidence files', () async {

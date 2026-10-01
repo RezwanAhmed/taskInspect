@@ -128,6 +128,9 @@ class FakeEvidencePicker implements EvidencePicker {
   int cameraUses = 0;
   int galleryUses = 0;
 
+  /// Documents returned by [chooseDocument], in order (`null` = cancelled).
+  final List<PickedDocument?> nextDocuments = [];
+
   @override
   Future<String?> takePhoto() async {
     cameraUses++;
@@ -139,6 +142,9 @@ class FakeEvidencePicker implements EvidencePicker {
     galleryUses++;
     return next.isEmpty ? null : next.removeAt(0);
   }
+
+  @override
+  Future<PickedDocument?> chooseDocument() async => nextDocuments.isEmpty ? null : nextDocuments.removeAt(0);
 }
 
 /// In-memory [EvidenceRepository] for widget tests (no compression).
@@ -146,7 +152,7 @@ class FakeEvidenceRepository implements EvidenceRepository {
   final List<EvidenceItem> items = [];
   final List<StreamController<Map<String, List<EvidenceItem>>>> _watchers = [];
 
-  /// When set, adding a photo fails with this.
+  /// When set, adding a photo or document fails with this.
   Object? addError;
 
   Map<String, List<EvidenceItem>> _of(String taskId) {
@@ -187,6 +193,31 @@ class FakeEvidenceRepository implements EvidenceRepository {
       mimeType: 'image/jpeg',
       sizeBytes: 100,
       createdAt: DateTime.utc(2026, 10, 1),
+    );
+    items.add(item);
+    _notify(taskId);
+    return item;
+  }
+
+  @override
+  Future<EvidenceItem> addDocument({
+    required String taskId,
+    required String requirementId,
+    required String sourcePath,
+    required String fileName,
+  }) async {
+    if (addError != null) {
+      throw addError!;
+    }
+    final item = EvidenceItem(
+      id: 'e${items.length + 1}',
+      taskId: taskId,
+      requirementId: requirementId,
+      localPath: sourcePath,
+      mimeType: 'application/pdf',
+      sizeBytes: 2048,
+      createdAt: DateTime.utc(2026, 10, 1),
+      fileName: fileName,
     );
     items.add(item);
     _notify(taskId);

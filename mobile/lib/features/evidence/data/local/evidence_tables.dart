@@ -12,6 +12,9 @@ class LocalEvidence extends Table {
   IntColumn get sizeBytes => integer()();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Original name of a picked document; `null` for photos.
+  TextColumn get fileName => text().nullable()();
+
   /// PENDING until the file is uploaded, then UPLOADED.
   TextColumn get uploadStatus => text().withDefault(const Constant('PENDING'))();
 

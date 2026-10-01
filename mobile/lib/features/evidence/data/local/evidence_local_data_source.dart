@@ -9,7 +9,8 @@ import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:uuid/uuid.dart';
 
 /// [EvidenceRepository] on the local database and the app's files. Files
-/// live in `<documents>/evidence/<taskId>/<id>.jpg`, outside the database.
+/// live in `<documents>/evidence/<taskId>/<id>.jpg` (or `.pdf`), outside the
+/// database.
 class EvidenceLocalDataSource implements EvidenceRepository {
   EvidenceLocalDataSource(
     this._db,
@@ -49,12 +50,9 @@ class EvidenceLocalDataSource implements EvidenceRepository {
   }) async {
     final id = _uuid.v4();
     final bytes = await _compressor.compressToJpeg(sourcePath);
-    final folder = Directory(p.join((await _documents()).path, 'evidence', taskId));
-    await folder.create(recursive: true);
-    final file = File(p.join(folder.path, '$id.jpg'));
+    final file = await _newFile(taskId, '$id.jpg');
     await file.writeAsBytes(bytes, flush: true);
-
-    final item = EvidenceItem(
+    return _record(EvidenceItem(
       id: id,
       taskId: taskId,
       requirementId: requirementId,
@@ -62,7 +60,52 @@ class EvidenceLocalDataSource implements EvidenceRepository {
       mimeType: 'image/jpeg',
       sizeBytes: bytes.length,
       createdAt: _now().toUtc(),
-    );
+    ));
+  }
+
+  @override
+  Future<EvidenceItem> addDocument({
+    required String taskId,
+    required String requirementId,
+    required String sourcePath,
+    required String fileName,
+  }) async {
+    final source = File(sourcePath);
+    final size = await source.length();
+    if (size > maxDocumentBytes) {
+      throw const EvidenceRejected('The PDF is larger than 20 MB.');
+    }
+    if (size == 0 || !await _startsWithPdfHeader(source)) {
+      throw const EvidenceRejected('This file is not a PDF document.');
+    }
+    final id = _uuid.v4();
+    final file = await source.copy((await _newFile(taskId, '$id.pdf')).path);
+    return _record(EvidenceItem(
+      id: id,
+      taskId: taskId,
+      requirementId: requirementId,
+      localPath: file.path,
+      mimeType: 'application/pdf',
+      sizeBytes: size,
+      createdAt: _now().toUtc(),
+      fileName: fileName,
+    ));
+  }
+
+  Future<File> _newFile(String taskId, String name) async {
+    final folder = Directory(p.join((await _documents()).path, 'evidence', taskId));
+    await folder.create(recursive: true);
+    return File(p.join(folder.path, name));
+  }
+
+  /// Every PDF file starts with `%PDF-`.
+  static Future<bool> _startsWithPdfHeader(File file) async {
+    final header = await file.openRead(0, 5).expand((chunk) => chunk).toList();
+    return String.fromCharCodes(header) == '%PDF-';
+  }
+
+  /// Records [item]; its file is deleted again if that fails.
+  Future<EvidenceItem> _record(EvidenceItem item) async {
     try {
       await _db.into(_db.localEvidence).insert(LocalEvidenceCompanion.insert(
             id: item.id,
@@ -72,10 +115,11 @@ class EvidenceLocalDataSource implements EvidenceRepository {
             mimeType: item.mimeType,
             sizeBytes: item.sizeBytes,
             createdAt: item.createdAt,
+            fileName: Value(item.fileName),
           ));
     } on Object {
       // Don't leave an unrecorded file behind.
-      await file.delete();
+      await File(item.localPath).delete();
       rethrow;
     }
     return item;
@@ -106,6 +150,7 @@ class EvidenceLocalDataSource implements EvidenceRepository {
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
         createdAt: row.createdAt.toUtc(),
+        fileName: row.fileName,
         uploaded: row.uploadStatus == 'UPLOADED',
       );
 }

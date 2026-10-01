@@ -16,7 +16,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -32,7 +32,10 @@ class AppDatabase extends _$AppDatabase {
             await migrator.createTable(localResponses);
           }
           if (from < 4) {
+            // Created with every current column, including file_name.
             await migrator.createTable(localEvidence);
+          } else if (from < 5) {
+            await migrator.addColumn(localEvidence, localEvidence.fileName);
           }
         },
         beforeOpen: (details) async {
