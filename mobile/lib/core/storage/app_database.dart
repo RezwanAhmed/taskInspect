@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:taskinspect/features/requirements/data/local/response_tables.dart';
 import 'package:taskinspect/features/tasks/data/local/task_tables.dart';
 
 part 'app_database.g.dart';
@@ -9,12 +10,12 @@ part 'app_database.g.dart';
 ///
 /// Every schema change raises [schemaVersion] and adds a step to
 /// [migration], because devices keep their database between app updates.
-@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions])
+@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -25,6 +26,9 @@ class AppDatabase extends _$AppDatabase {
             await migrator.createTable(localTasks);
             await migrator.createTable(localRequirements);
             await migrator.createTable(localRequirementOptions);
+          }
+          if (from < 3) {
+            await migrator.createTable(localResponses);
           }
         },
         beforeOpen: (details) async {

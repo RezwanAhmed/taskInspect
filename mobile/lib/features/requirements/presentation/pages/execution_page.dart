@@ -17,7 +17,7 @@ class ExecutionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ExecutionCubit(getIt(), taskId),
+      create: (_) => ExecutionCubit(getIt(), getIt(), taskId),
       child: const _ExecutionView(),
     );
   }

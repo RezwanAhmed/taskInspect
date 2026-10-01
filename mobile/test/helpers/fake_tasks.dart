@@ -4,6 +4,8 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
+import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -101,9 +103,24 @@ class FakeTaskRepository implements TaskRepository {
   }
 }
 
+/// In-memory [AnswerRepository] for widget tests.
+class FakeAnswerRepository implements AnswerRepository {
+  final Map<String, Map<String, Answer>> saved = {};
+
+  @override
+  Stream<Map<String, Answer>> watchAnswers(String taskId) async* {
+    yield Map.of(saved[taskId] ?? const {});
+  }
+
+  @override
+  Future<void> saveAnswer({required String taskId, required String requirementId, required Answer answer}) async {
+    (saved[taskId] ??= {})[requirementId] = answer;
+  }
+}
+
 /// Registers the task screens' dependencies with [repository] in the
 /// service locator, as the app does.
-void registerFakeTasks(FakeTaskRepository repository) {
+void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? answers}) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
   }
@@ -113,6 +130,7 @@ void registerFakeTasks(FakeTaskRepository repository) {
   for (final unregister in [
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
+    () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
   ]) {
     unregister();
   }
@@ -120,5 +138,6 @@ void registerFakeTasks(FakeTaskRepository repository) {
     ..registerFactory(() => DashboardCubit(repository, RefreshTasks(repository)))
     ..registerFactory(() => WatchTasks(repository))
     ..registerFactory(() => WatchTaskDetails(repository))
-    ..registerFactory(() => StartTask(repository));
+    ..registerFactory(() => StartTask(repository))
+    ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository());
 }

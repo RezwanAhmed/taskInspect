@@ -13,6 +13,8 @@ import 'package:taskinspect/features/authentication/domain/usecases/logout.dart'
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/requirements/data/local/answer_local_data_source.dart';
+import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
@@ -65,6 +67,8 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerFactory(() => WatchTasks(getIt()))
     ..registerFactory(() => WatchTaskDetails(getIt()))
     ..registerFactory(() => StartTask(getIt()))
+    // Answers
+    ..registerLazySingleton<AnswerRepository>(() => AnswerLocalDataSource(getIt()))
     // Dashboard
     ..registerFactory(() => DashboardCubit(getIt(), getIt()));
 }

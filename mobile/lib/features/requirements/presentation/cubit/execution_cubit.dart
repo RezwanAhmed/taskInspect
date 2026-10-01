@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
+import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
@@ -58,16 +59,27 @@ class ExecutionState extends Equatable {
   List<Object?> get props => [task, requirements, answers, index, isLoading];
 }
 
-/// Walks the worker through a task's requirements one at a time.
+/// Walks the worker through a task's requirements one at a time. Answers
+/// are saved on the device as they change.
 class ExecutionCubit extends Cubit<ExecutionState> {
-  ExecutionCubit(WatchTaskDetails watch, String taskId) : super(const ExecutionState()) {
+  ExecutionCubit(WatchTaskDetails watch, this._answers, this.taskId) : super(const ExecutionState()) {
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: task)));
+    // Saved answers are read once; after that this screen is the only one
+    // changing them, so a slower write can never undo newer typing.
+    unawaited(_answers.watchAnswers(taskId).first.then((saved) {
+      if (!isClosed) {
+        emit(state.copyWith(answers: {...saved, ...state.answers}));
+      }
+    }));
     _requirements = watch.requirements(taskId).listen((requirements) {
       final index = requirements.isEmpty ? 0 : state.index.clamp(0, requirements.length - 1);
       emit(state.copyWith(requirements: requirements, index: index, isLoading: false));
     });
   }
 
+  final AnswerRepository _answers;
+  final String taskId;
+  Future<void> _saving = Future.value();
   late final StreamSubscription<Task?> _task;
   late final StreamSubscription<List<Requirement>> _requirements;
 
@@ -77,12 +89,18 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     }
   }
 
-  /// Changes the answer to a requirement, starting from its latest value
-  /// (saved on the device in task 5.13).
+  /// Changes the answer to a requirement, starting from its latest value,
+  /// and saves it on the device (saves run one after another, in order).
   void answer(Requirement requirement, Answer Function(Answer current) update) {
-    final current = state.answerFor(requirement);
-    emit(state.copyWith(answers: {...state.answers, requirement.id: update(current)}));
+    final changed = update(state.answerFor(requirement));
+    emit(state.copyWith(answers: {...state.answers, requirement.id: changed}));
+    _saving = _saving.then(
+      (_) => _answers.saveAnswer(taskId: taskId, requirementId: requirement.id, answer: changed),
+    );
   }
+
+  /// Completes when every answer so far is saved.
+  Future<void> get saved => _saving;
 
   void next() => goTo(state.index + 1);
 
@@ -90,6 +108,7 @@ class ExecutionCubit extends Cubit<ExecutionState> {
 
   @override
   Future<void> close() async {
+    await _saving;
     await _task.cancel();
     await _requirements.cancel();
     return super.close();

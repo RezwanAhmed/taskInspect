@@ -1668,6 +1668,605 @@ class LocalRequirementOptionsCompanion
   }
 }
 
+class $LocalResponsesTable extends LocalResponses
+    with TableInfo<$LocalResponsesTable, ResponseRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalResponsesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _requirementIdMeta = const VerificationMeta(
+    'requirementId',
+  );
+  @override
+  late final GeneratedColumn<String> requirementId = GeneratedColumn<String>(
+    'requirement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_requirements (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_tasks (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _booleanValueMeta = const VerificationMeta(
+    'booleanValue',
+  );
+  @override
+  late final GeneratedColumn<bool> booleanValue = GeneratedColumn<bool>(
+    'boolean_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("boolean_value" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _textValueMeta = const VerificationMeta(
+    'textValue',
+  );
+  @override
+  late final GeneratedColumn<String> textValue = GeneratedColumn<String>(
+    'text_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _numberValueMeta = const VerificationMeta(
+    'numberValue',
+  );
+  @override
+  late final GeneratedColumn<double> numberValue = GeneratedColumn<double>(
+    'number_value',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _selectedOptionIdsMeta = const VerificationMeta(
+    'selectedOptionIds',
+  );
+  @override
+  late final GeneratedColumn<String> selectedOptionIds =
+      GeneratedColumn<String>(
+        'selected_option_ids',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
+  static const VerificationMeta _commentMeta = const VerificationMeta(
+    'comment',
+  );
+  @override
+  late final GeneratedColumn<String> comment = GeneratedColumn<String>(
+    'comment',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _syncStatusMeta = const VerificationMeta(
+    'syncStatus',
+  );
+  @override
+  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
+    'sync_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('PENDING'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    requirementId,
+    taskId,
+    booleanValue,
+    textValue,
+    numberValue,
+    selectedOptionIds,
+    comment,
+    updatedAt,
+    syncStatus,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_responses';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ResponseRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('requirement_id')) {
+      context.handle(
+        _requirementIdMeta,
+        requirementId.isAcceptableOrUnknown(
+          data['requirement_id']!,
+          _requirementIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_requirementIdMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('boolean_value')) {
+      context.handle(
+        _booleanValueMeta,
+        booleanValue.isAcceptableOrUnknown(
+          data['boolean_value']!,
+          _booleanValueMeta,
+        ),
+      );
+    }
+    if (data.containsKey('text_value')) {
+      context.handle(
+        _textValueMeta,
+        textValue.isAcceptableOrUnknown(data['text_value']!, _textValueMeta),
+      );
+    }
+    if (data.containsKey('number_value')) {
+      context.handle(
+        _numberValueMeta,
+        numberValue.isAcceptableOrUnknown(
+          data['number_value']!,
+          _numberValueMeta,
+        ),
+      );
+    }
+    if (data.containsKey('selected_option_ids')) {
+      context.handle(
+        _selectedOptionIdsMeta,
+        selectedOptionIds.isAcceptableOrUnknown(
+          data['selected_option_ids']!,
+          _selectedOptionIdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('comment')) {
+      context.handle(
+        _commentMeta,
+        comment.isAcceptableOrUnknown(data['comment']!, _commentMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('sync_status')) {
+      context.handle(
+        _syncStatusMeta,
+        syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {requirementId};
+  @override
+  ResponseRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ResponseRow(
+      requirementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}requirement_id'],
+      )!,
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      booleanValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}boolean_value'],
+      ),
+      textValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}text_value'],
+      ),
+      numberValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}number_value'],
+      ),
+      selectedOptionIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}selected_option_ids'],
+      )!,
+      comment: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}comment'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      syncStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_status'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalResponsesTable createAlias(String alias) {
+    return $LocalResponsesTable(attachedDatabase, alias);
+  }
+}
+
+class ResponseRow extends DataClass implements Insertable<ResponseRow> {
+  final String requirementId;
+  final String taskId;
+  final bool? booleanValue;
+  final String? textValue;
+  final double? numberValue;
+
+  /// Selected option IDs as a JSON array.
+  final String selectedOptionIds;
+  final String? comment;
+  final DateTime updatedAt;
+
+  /// PENDING until the answer has reached the server (Phase 6), then SYNCED.
+  final String syncStatus;
+  const ResponseRow({
+    required this.requirementId,
+    required this.taskId,
+    this.booleanValue,
+    this.textValue,
+    this.numberValue,
+    required this.selectedOptionIds,
+    this.comment,
+    required this.updatedAt,
+    required this.syncStatus,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['requirement_id'] = Variable<String>(requirementId);
+    map['task_id'] = Variable<String>(taskId);
+    if (!nullToAbsent || booleanValue != null) {
+      map['boolean_value'] = Variable<bool>(booleanValue);
+    }
+    if (!nullToAbsent || textValue != null) {
+      map['text_value'] = Variable<String>(textValue);
+    }
+    if (!nullToAbsent || numberValue != null) {
+      map['number_value'] = Variable<double>(numberValue);
+    }
+    map['selected_option_ids'] = Variable<String>(selectedOptionIds);
+    if (!nullToAbsent || comment != null) {
+      map['comment'] = Variable<String>(comment);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['sync_status'] = Variable<String>(syncStatus);
+    return map;
+  }
+
+  LocalResponsesCompanion toCompanion(bool nullToAbsent) {
+    return LocalResponsesCompanion(
+      requirementId: Value(requirementId),
+      taskId: Value(taskId),
+      booleanValue: booleanValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(booleanValue),
+      textValue: textValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(textValue),
+      numberValue: numberValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(numberValue),
+      selectedOptionIds: Value(selectedOptionIds),
+      comment: comment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(comment),
+      updatedAt: Value(updatedAt),
+      syncStatus: Value(syncStatus),
+    );
+  }
+
+  factory ResponseRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ResponseRow(
+      requirementId: serializer.fromJson<String>(json['requirementId']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      booleanValue: serializer.fromJson<bool?>(json['booleanValue']),
+      textValue: serializer.fromJson<String?>(json['textValue']),
+      numberValue: serializer.fromJson<double?>(json['numberValue']),
+      selectedOptionIds: serializer.fromJson<String>(json['selectedOptionIds']),
+      comment: serializer.fromJson<String?>(json['comment']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      syncStatus: serializer.fromJson<String>(json['syncStatus']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'requirementId': serializer.toJson<String>(requirementId),
+      'taskId': serializer.toJson<String>(taskId),
+      'booleanValue': serializer.toJson<bool?>(booleanValue),
+      'textValue': serializer.toJson<String?>(textValue),
+      'numberValue': serializer.toJson<double?>(numberValue),
+      'selectedOptionIds': serializer.toJson<String>(selectedOptionIds),
+      'comment': serializer.toJson<String?>(comment),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'syncStatus': serializer.toJson<String>(syncStatus),
+    };
+  }
+
+  ResponseRow copyWith({
+    String? requirementId,
+    String? taskId,
+    Value<bool?> booleanValue = const Value.absent(),
+    Value<String?> textValue = const Value.absent(),
+    Value<double?> numberValue = const Value.absent(),
+    String? selectedOptionIds,
+    Value<String?> comment = const Value.absent(),
+    DateTime? updatedAt,
+    String? syncStatus,
+  }) => ResponseRow(
+    requirementId: requirementId ?? this.requirementId,
+    taskId: taskId ?? this.taskId,
+    booleanValue: booleanValue.present ? booleanValue.value : this.booleanValue,
+    textValue: textValue.present ? textValue.value : this.textValue,
+    numberValue: numberValue.present ? numberValue.value : this.numberValue,
+    selectedOptionIds: selectedOptionIds ?? this.selectedOptionIds,
+    comment: comment.present ? comment.value : this.comment,
+    updatedAt: updatedAt ?? this.updatedAt,
+    syncStatus: syncStatus ?? this.syncStatus,
+  );
+  ResponseRow copyWithCompanion(LocalResponsesCompanion data) {
+    return ResponseRow(
+      requirementId: data.requirementId.present
+          ? data.requirementId.value
+          : this.requirementId,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      booleanValue: data.booleanValue.present
+          ? data.booleanValue.value
+          : this.booleanValue,
+      textValue: data.textValue.present ? data.textValue.value : this.textValue,
+      numberValue: data.numberValue.present
+          ? data.numberValue.value
+          : this.numberValue,
+      selectedOptionIds: data.selectedOptionIds.present
+          ? data.selectedOptionIds.value
+          : this.selectedOptionIds,
+      comment: data.comment.present ? data.comment.value : this.comment,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      syncStatus: data.syncStatus.present
+          ? data.syncStatus.value
+          : this.syncStatus,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ResponseRow(')
+          ..write('requirementId: $requirementId, ')
+          ..write('taskId: $taskId, ')
+          ..write('booleanValue: $booleanValue, ')
+          ..write('textValue: $textValue, ')
+          ..write('numberValue: $numberValue, ')
+          ..write('selectedOptionIds: $selectedOptionIds, ')
+          ..write('comment: $comment, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('syncStatus: $syncStatus')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    requirementId,
+    taskId,
+    booleanValue,
+    textValue,
+    numberValue,
+    selectedOptionIds,
+    comment,
+    updatedAt,
+    syncStatus,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ResponseRow &&
+          other.requirementId == this.requirementId &&
+          other.taskId == this.taskId &&
+          other.booleanValue == this.booleanValue &&
+          other.textValue == this.textValue &&
+          other.numberValue == this.numberValue &&
+          other.selectedOptionIds == this.selectedOptionIds &&
+          other.comment == this.comment &&
+          other.updatedAt == this.updatedAt &&
+          other.syncStatus == this.syncStatus);
+}
+
+class LocalResponsesCompanion extends UpdateCompanion<ResponseRow> {
+  final Value<String> requirementId;
+  final Value<String> taskId;
+  final Value<bool?> booleanValue;
+  final Value<String?> textValue;
+  final Value<double?> numberValue;
+  final Value<String> selectedOptionIds;
+  final Value<String?> comment;
+  final Value<DateTime> updatedAt;
+  final Value<String> syncStatus;
+  final Value<int> rowid;
+  const LocalResponsesCompanion({
+    this.requirementId = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.booleanValue = const Value.absent(),
+    this.textValue = const Value.absent(),
+    this.numberValue = const Value.absent(),
+    this.selectedOptionIds = const Value.absent(),
+    this.comment = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalResponsesCompanion.insert({
+    required String requirementId,
+    required String taskId,
+    this.booleanValue = const Value.absent(),
+    this.textValue = const Value.absent(),
+    this.numberValue = const Value.absent(),
+    this.selectedOptionIds = const Value.absent(),
+    this.comment = const Value.absent(),
+    required DateTime updatedAt,
+    this.syncStatus = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : requirementId = Value(requirementId),
+       taskId = Value(taskId),
+       updatedAt = Value(updatedAt);
+  static Insertable<ResponseRow> custom({
+    Expression<String>? requirementId,
+    Expression<String>? taskId,
+    Expression<bool>? booleanValue,
+    Expression<String>? textValue,
+    Expression<double>? numberValue,
+    Expression<String>? selectedOptionIds,
+    Expression<String>? comment,
+    Expression<DateTime>? updatedAt,
+    Expression<String>? syncStatus,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (requirementId != null) 'requirement_id': requirementId,
+      if (taskId != null) 'task_id': taskId,
+      if (booleanValue != null) 'boolean_value': booleanValue,
+      if (textValue != null) 'text_value': textValue,
+      if (numberValue != null) 'number_value': numberValue,
+      if (selectedOptionIds != null) 'selected_option_ids': selectedOptionIds,
+      if (comment != null) 'comment': comment,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (syncStatus != null) 'sync_status': syncStatus,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalResponsesCompanion copyWith({
+    Value<String>? requirementId,
+    Value<String>? taskId,
+    Value<bool?>? booleanValue,
+    Value<String?>? textValue,
+    Value<double?>? numberValue,
+    Value<String>? selectedOptionIds,
+    Value<String?>? comment,
+    Value<DateTime>? updatedAt,
+    Value<String>? syncStatus,
+    Value<int>? rowid,
+  }) {
+    return LocalResponsesCompanion(
+      requirementId: requirementId ?? this.requirementId,
+      taskId: taskId ?? this.taskId,
+      booleanValue: booleanValue ?? this.booleanValue,
+      textValue: textValue ?? this.textValue,
+      numberValue: numberValue ?? this.numberValue,
+      selectedOptionIds: selectedOptionIds ?? this.selectedOptionIds,
+      comment: comment ?? this.comment,
+      updatedAt: updatedAt ?? this.updatedAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (requirementId.present) {
+      map['requirement_id'] = Variable<String>(requirementId.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (booleanValue.present) {
+      map['boolean_value'] = Variable<bool>(booleanValue.value);
+    }
+    if (textValue.present) {
+      map['text_value'] = Variable<String>(textValue.value);
+    }
+    if (numberValue.present) {
+      map['number_value'] = Variable<double>(numberValue.value);
+    }
+    if (selectedOptionIds.present) {
+      map['selected_option_ids'] = Variable<String>(selectedOptionIds.value);
+    }
+    if (comment.present) {
+      map['comment'] = Variable<String>(comment.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (syncStatus.present) {
+      map['sync_status'] = Variable<String>(syncStatus.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalResponsesCompanion(')
+          ..write('requirementId: $requirementId, ')
+          ..write('taskId: $taskId, ')
+          ..write('booleanValue: $booleanValue, ')
+          ..write('textValue: $textValue, ')
+          ..write('numberValue: $numberValue, ')
+          ..write('selectedOptionIds: $selectedOptionIds, ')
+          ..write('comment: $comment, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1676,6 +2275,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $LocalRequirementsTable(this);
   late final $LocalRequirementOptionsTable localRequirementOptions =
       $LocalRequirementOptionsTable(this);
+  late final $LocalResponsesTable localResponses = $LocalResponsesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1684,6 +2284,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localTasks,
     localRequirements,
     localRequirementOptions,
+    localResponses,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1702,6 +2303,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       result: [
         TableUpdate('local_requirement_options', kind: UpdateKind.delete),
       ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_requirements',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_responses', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_tasks',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_responses', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -1761,6 +2376,24 @@ final class $$LocalTasksTableReferences
     final cache = $_typedResult.readTableOrNull(
       _localRequirementsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalResponsesTable, List<ResponseRow>>
+  _localResponsesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localResponses,
+    aliasName: 'local_tasks__id__local_responses__task_id',
+  );
+
+  $$LocalResponsesTableProcessedTableManager get localResponsesRefs {
+    final manager = $$LocalResponsesTableTableManager(
+      $_db,
+      $_db.localResponses,
+    ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_localResponsesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -1862,6 +2495,31 @@ class $$LocalTasksTableFilterComposer
           }) => $$LocalRequirementsTableFilterComposer(
             $db: $db,
             $table: $db.localRequirements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localResponsesRefs(
+    Expression<bool> Function($$LocalResponsesTableFilterComposer f) f,
+  ) {
+    final $$LocalResponsesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localResponses,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalResponsesTableFilterComposer(
+            $db: $db,
+            $table: $db.localResponses,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -2042,6 +2700,31 @@ class $$LocalTasksTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> localResponsesRefs<T extends Object>(
+    Expression<T> Function($$LocalResponsesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalResponsesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localResponses,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalResponsesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localResponses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalTasksTableTableManager
@@ -2057,7 +2740,10 @@ class $$LocalTasksTableTableManager
           $$LocalTasksTableUpdateCompanionBuilder,
           (TaskRow, $$LocalTasksTableReferences),
           TaskRow,
-          PrefetchHooks Function({bool localRequirementsRefs})
+          PrefetchHooks Function({
+            bool localRequirementsRefs,
+            bool localResponsesRefs,
+          })
         > {
   $$LocalTasksTableTableManager(_$AppDatabase db, $LocalTasksTable table)
     : super(
@@ -2146,38 +2832,63 @@ class $$LocalTasksTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({localRequirementsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (localRequirementsRefs) db.localRequirements,
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (localRequirementsRefs)
-                    await $_getPrefetchedData<
-                      TaskRow,
-                      $LocalTasksTable,
-                      RequirementRow
-                    >(
-                      currentTable: table,
-                      referencedTable: $$LocalTasksTableReferences
-                          ._localRequirementsRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$LocalTasksTableReferences(
-                            db,
-                            table,
-                            p0,
-                          ).localRequirementsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.taskId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({localRequirementsRefs = false, localResponsesRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localRequirementsRefs) db.localRequirements,
+                    if (localResponsesRefs) db.localResponses,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localRequirementsRefs)
+                        await $_getPrefetchedData<
+                          TaskRow,
+                          $LocalTasksTable,
+                          RequirementRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTasksTableReferences
+                              ._localRequirementsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTasksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localRequirementsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.taskId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localResponsesRefs)
+                        await $_getPrefetchedData<
+                          TaskRow,
+                          $LocalTasksTable,
+                          ResponseRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTasksTableReferences
+                              ._localResponsesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTasksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localResponsesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.taskId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -2194,7 +2905,10 @@ typedef $$LocalTasksTableProcessedTableManager =
       $$LocalTasksTableUpdateCompanionBuilder,
       (TaskRow, $$LocalTasksTableReferences),
       TaskRow,
-      PrefetchHooks Function({bool localRequirementsRefs})
+      PrefetchHooks Function({
+        bool localRequirementsRefs,
+        bool localResponsesRefs,
+      })
     >;
 typedef $$LocalRequirementsTableCreateCompanionBuilder =
     LocalRequirementsCompanion Function({
@@ -2268,6 +2982,24 @@ final class $$LocalRequirementsTableReferences
     final cache = $_typedResult.readTableOrNull(
       _localRequirementOptionsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalResponsesTable, List<ResponseRow>>
+  _localResponsesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localResponses,
+    aliasName: 'local_requirements__id__local_responses__requirement_id',
+  );
+
+  $$LocalResponsesTableProcessedTableManager get localResponsesRefs {
+    final manager = $$LocalResponsesTableTableManager(
+      $_db,
+      $_db.localResponses,
+    ).filter((f) => f.requirementId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_localResponsesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -2364,6 +3096,31 @@ class $$LocalRequirementsTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return f(composer);
+  }
+
+  Expression<bool> localResponsesRefs(
+    Expression<bool> Function($$LocalResponsesTableFilterComposer f) f,
+  ) {
+    final $$LocalResponsesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localResponses,
+      getReferencedColumn: (t) => t.requirementId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalResponsesTableFilterComposer(
+            $db: $db,
+            $table: $db.localResponses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 }
@@ -2519,6 +3276,31 @@ class $$LocalRequirementsTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> localResponsesRefs<T extends Object>(
+    Expression<T> Function($$LocalResponsesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalResponsesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localResponses,
+      getReferencedColumn: (t) => t.requirementId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalResponsesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localResponses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalRequirementsTableTableManager
@@ -2537,6 +3319,7 @@ class $$LocalRequirementsTableTableManager
           PrefetchHooks Function({
             bool taskId,
             bool localRequirementOptionsRefs,
+            bool localResponsesRefs,
           })
         > {
   $$LocalRequirementsTableTableManager(
@@ -2608,11 +3391,16 @@ class $$LocalRequirementsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({taskId = false, localRequirementOptionsRefs = false}) {
+              ({
+                taskId = false,
+                localRequirementOptionsRefs = false,
+                localResponsesRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (localRequirementOptionsRefs) db.localRequirementOptions,
+                    if (localResponsesRefs) db.localResponses,
                   ],
                   addJoins:
                       <
@@ -2667,6 +3455,27 @@ class $$LocalRequirementsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (localResponsesRefs)
+                        await $_getPrefetchedData<
+                          RequirementRow,
+                          $LocalRequirementsTable,
+                          ResponseRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalRequirementsTableReferences
+                              ._localResponsesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalRequirementsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localResponsesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.requirementId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -2687,7 +3496,11 @@ typedef $$LocalRequirementsTableProcessedTableManager =
       $$LocalRequirementsTableUpdateCompanionBuilder,
       (RequirementRow, $$LocalRequirementsTableReferences),
       RequirementRow,
-      PrefetchHooks Function({bool taskId, bool localRequirementOptionsRefs})
+      PrefetchHooks Function({
+        bool taskId,
+        bool localRequirementOptionsRefs,
+        bool localResponsesRefs,
+      })
     >;
 typedef $$LocalRequirementOptionsTableCreateCompanionBuilder =
     LocalRequirementOptionsCompanion Function({
@@ -3013,6 +3826,497 @@ typedef $$LocalRequirementOptionsTableProcessedTableManager =
       RequirementOptionRow,
       PrefetchHooks Function({bool requirementId})
     >;
+typedef $$LocalResponsesTableCreateCompanionBuilder =
+    LocalResponsesCompanion Function({
+      required String requirementId,
+      required String taskId,
+      Value<bool?> booleanValue,
+      Value<String?> textValue,
+      Value<double?> numberValue,
+      Value<String> selectedOptionIds,
+      Value<String?> comment,
+      required DateTime updatedAt,
+      Value<String> syncStatus,
+      Value<int> rowid,
+    });
+typedef $$LocalResponsesTableUpdateCompanionBuilder =
+    LocalResponsesCompanion Function({
+      Value<String> requirementId,
+      Value<String> taskId,
+      Value<bool?> booleanValue,
+      Value<String?> textValue,
+      Value<double?> numberValue,
+      Value<String> selectedOptionIds,
+      Value<String?> comment,
+      Value<DateTime> updatedAt,
+      Value<String> syncStatus,
+      Value<int> rowid,
+    });
+
+final class $$LocalResponsesTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalResponsesTable, ResponseRow> {
+  $$LocalResponsesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalRequirementsTable _requirementIdTable(_$AppDatabase db) => db
+      .localRequirements
+      .createAlias('local_responses__requirement_id__local_requirements__id');
+
+  $$LocalRequirementsTableProcessedTableManager get requirementId {
+    final $_column = $_itemColumn<String>('requirement_id')!;
+
+    final manager = $$LocalRequirementsTableTableManager(
+      $_db,
+      $_db.localRequirements,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requirementIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalTasksTable _taskIdTable(_$AppDatabase db) =>
+      db.localTasks.createAlias('local_responses__task_id__local_tasks__id');
+
+  $$LocalTasksTableProcessedTableManager get taskId {
+    final $_column = $_itemColumn<String>('task_id')!;
+
+    final manager = $$LocalTasksTableTableManager(
+      $_db,
+      $_db.localTasks,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_taskIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$LocalResponsesTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalResponsesTable> {
+  $$LocalResponsesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<bool> get booleanValue => $composableBuilder(
+    column: $table.booleanValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get textValue => $composableBuilder(
+    column: $table.textValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get numberValue => $composableBuilder(
+    column: $table.numberValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get selectedOptionIds => $composableBuilder(
+    column: $table.selectedOptionIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get comment => $composableBuilder(
+    column: $table.comment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LocalRequirementsTableFilterComposer get requirementId {
+    final $$LocalRequirementsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requirementId,
+      referencedTable: $db.localRequirements,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalRequirementsTableFilterComposer(
+            $db: $db,
+            $table: $db.localRequirements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalTasksTableFilterComposer get taskId {
+    final $$LocalTasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableFilterComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalResponsesTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalResponsesTable> {
+  $$LocalResponsesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<bool> get booleanValue => $composableBuilder(
+    column: $table.booleanValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get textValue => $composableBuilder(
+    column: $table.textValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get numberValue => $composableBuilder(
+    column: $table.numberValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get selectedOptionIds => $composableBuilder(
+    column: $table.selectedOptionIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get comment => $composableBuilder(
+    column: $table.comment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LocalRequirementsTableOrderingComposer get requirementId {
+    final $$LocalRequirementsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requirementId,
+      referencedTable: $db.localRequirements,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalRequirementsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localRequirements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalTasksTableOrderingComposer get taskId {
+    final $$LocalTasksTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableOrderingComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalResponsesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalResponsesTable> {
+  $$LocalResponsesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<bool> get booleanValue => $composableBuilder(
+    column: $table.booleanValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get textValue =>
+      $composableBuilder(column: $table.textValue, builder: (column) => column);
+
+  GeneratedColumn<double> get numberValue => $composableBuilder(
+    column: $table.numberValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get selectedOptionIds => $composableBuilder(
+    column: $table.selectedOptionIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get comment =>
+      $composableBuilder(column: $table.comment, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => column,
+  );
+
+  $$LocalRequirementsTableAnnotationComposer get requirementId {
+    final $$LocalRequirementsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requirementId,
+          referencedTable: $db.localRequirements,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalRequirementsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localRequirements,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$LocalTasksTableAnnotationComposer get taskId {
+    final $$LocalTasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalResponsesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalResponsesTable,
+          ResponseRow,
+          $$LocalResponsesTableFilterComposer,
+          $$LocalResponsesTableOrderingComposer,
+          $$LocalResponsesTableAnnotationComposer,
+          $$LocalResponsesTableCreateCompanionBuilder,
+          $$LocalResponsesTableUpdateCompanionBuilder,
+          (ResponseRow, $$LocalResponsesTableReferences),
+          ResponseRow,
+          PrefetchHooks Function({bool requirementId, bool taskId})
+        > {
+  $$LocalResponsesTableTableManager(
+    _$AppDatabase db,
+    $LocalResponsesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalResponsesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalResponsesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalResponsesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> requirementId = const Value.absent(),
+                Value<String> taskId = const Value.absent(),
+                Value<bool?> booleanValue = const Value.absent(),
+                Value<String?> textValue = const Value.absent(),
+                Value<double?> numberValue = const Value.absent(),
+                Value<String> selectedOptionIds = const Value.absent(),
+                Value<String?> comment = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalResponsesCompanion(
+                requirementId: requirementId,
+                taskId: taskId,
+                booleanValue: booleanValue,
+                textValue: textValue,
+                numberValue: numberValue,
+                selectedOptionIds: selectedOptionIds,
+                comment: comment,
+                updatedAt: updatedAt,
+                syncStatus: syncStatus,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String requirementId,
+                required String taskId,
+                Value<bool?> booleanValue = const Value.absent(),
+                Value<String?> textValue = const Value.absent(),
+                Value<double?> numberValue = const Value.absent(),
+                Value<String> selectedOptionIds = const Value.absent(),
+                Value<String?> comment = const Value.absent(),
+                required DateTime updatedAt,
+                Value<String> syncStatus = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalResponsesCompanion.insert(
+                requirementId: requirementId,
+                taskId: taskId,
+                booleanValue: booleanValue,
+                textValue: textValue,
+                numberValue: numberValue,
+                selectedOptionIds: selectedOptionIds,
+                comment: comment,
+                updatedAt: updatedAt,
+                syncStatus: syncStatus,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalResponsesTable, ResponseRow>(table),
+                  $$LocalResponsesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({requirementId = false, taskId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (requirementId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.requirementId,
+                        referencedTable: $$LocalResponsesTableReferences
+                            ._requirementIdTable(db),
+                        referencedColumn: $$LocalResponsesTableReferences
+                            ._requirementIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+                    if (taskId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.taskId,
+                        referencedTable: $$LocalResponsesTableReferences
+                            ._taskIdTable(db),
+                        referencedColumn: $$LocalResponsesTableReferences
+                            ._taskIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$LocalResponsesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalResponsesTable,
+      ResponseRow,
+      $$LocalResponsesTableFilterComposer,
+      $$LocalResponsesTableOrderingComposer,
+      $$LocalResponsesTableAnnotationComposer,
+      $$LocalResponsesTableCreateCompanionBuilder,
+      $$LocalResponsesTableUpdateCompanionBuilder,
+      (ResponseRow, $$LocalResponsesTableReferences),
+      ResponseRow,
+      PrefetchHooks Function({bool requirementId, bool taskId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3026,4 +4330,6 @@ class $AppDatabaseManager {
         _db,
         _db.localRequirementOptions,
       );
+  $$LocalResponsesTableTableManager get localResponses =>
+      $$LocalResponsesTableTableManager(_db, _db.localResponses);
 }
