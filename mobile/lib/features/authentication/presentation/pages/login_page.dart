@@ -1,14 +1,113 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 
-/// Placeholder for the login screen (built in task 4.15).
-class LoginPage extends StatelessWidget {
+/// Email and password sign-in. Errors from the [AuthBloc] are shown under
+/// the field they belong to, or above the button.
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
   @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    FocusScope.of(context).unfocus();
+    context.read<AuthBloc>().add(LoginRequested(email: _email.text, password: _password.text));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in')),
-      body: const Center(child: Text('Login comes in task 4.15')),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: BlocBuilder<AuthBloc, AuthState>(
+                builder: (context, state) {
+                  final current = state is Unauthenticated ? state : const Unauthenticated();
+                  final submitting = current.isSubmitting;
+                  String? errorFor(String field) => current.errorField == field ? current.errorMessage : null;
+                  final generalError = current.errorField == null ? current.errorMessage : null;
+                  return AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Icon(Icons.fact_check_outlined, size: 56, color: theme.colorScheme.primary),
+                        const SizedBox(height: 12),
+                        Text('Sign in', textAlign: TextAlign.center, style: theme.textTheme.headlineMedium),
+                        const SizedBox(height: 4),
+                        Text('to TaskInspect', textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
+                        const SizedBox(height: 32),
+                        TextField(
+                          key: const Key('login-email'),
+                          controller: _email,
+                          enabled: !submitting,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.email],
+                          textInputAction: TextInputAction.next,
+                          decoration: InputDecoration(labelText: 'Email', errorText: errorFor('email')),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          key: const Key('login-password'),
+                          controller: _password,
+                          enabled: !submitting,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _submit(),
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            errorText: errorFor('password'),
+                            suffixIcon: IconButton(
+                              tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                              icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (generalError != null) ...[
+                          Text(
+                            generalError,
+                            key: const Key('login-error'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        FilledButton(
+                          key: const Key('login-submit'),
+                          onPressed: submitting ? null : _submit,
+                          child: submitting
+                              ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Text('Sign in'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

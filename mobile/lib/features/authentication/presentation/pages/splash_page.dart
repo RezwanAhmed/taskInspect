@@ -1,26 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:taskinspect/core/router/app_router.dart';
 
-/// Shown while the app starts. For now it continues to the login screen;
-/// with authentication it will check for a saved session first.
-class SplashPage extends StatefulWidget {
+/// Shown while the app checks for a saved session. The router leaves this
+/// screen as soon as the login state is known.
+class SplashPage extends StatelessWidget {
   const SplashPage({super.key});
-
-  @override
-  State<SplashPage> createState() => _SplashPageState();
-}
-
-class _SplashPageState extends State<SplashPage> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.go(AppRoutes.login);
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {

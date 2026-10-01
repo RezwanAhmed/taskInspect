@@ -4,6 +4,8 @@ import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/theme/app_theme.dart';
 import 'package:taskinspect/core/theme/status_colors.dart';
 
+import '../../helpers/fake_auth.dart';
+
 void main() {
   test('light and dark themes use Material 3 and the right brightness', () {
     expect(AppTheme.light.useMaterial3, isTrue);
@@ -26,9 +28,10 @@ void main() {
     tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
 
-    await tester.pumpWidget(const TaskInspectApp());
+    await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository())));
+    await tester.pumpAndSettle();
 
-    final context = tester.element(find.text('TaskInspect'));
+    final context = tester.element(find.text('to TaskInspect'));
     expect(Theme.of(context).colorScheme.brightness, Brightness.dark);
   });
 }

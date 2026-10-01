@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/core/theme/app_theme.dart';
+import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 
 /// The root widget of the TaskInspect app. Follows the device's light or
-/// dark mode setting.
+/// dark mode setting and checks for a saved session when it starts.
 class TaskInspectApp extends StatefulWidget {
-  const TaskInspectApp({super.key, this.initialLocation = AppRoutes.splash});
+  const TaskInspectApp({super.key, this.authBloc, this.initialLocation = AppRoutes.splash});
 
-  /// Where the app starts; tests can start on another screen.
+  /// Tests pass their own bloc; the app takes it from the service locator.
+  final AuthBloc? authBloc;
+
   final String initialLocation;
 
   @override
@@ -16,7 +21,16 @@ class TaskInspectApp extends StatefulWidget {
 }
 
 class _TaskInspectAppState extends State<TaskInspectApp> {
-  late final GoRouter _router = createRouter(initialLocation: widget.initialLocation);
+  late final AuthBloc _authBloc = widget.authBloc ?? getIt<AuthBloc>();
+  late final GoRouter _router = createRouter(_authBloc, initialLocation: widget.initialLocation);
+
+  @override
+  void initState() {
+    super.initState();
+    if (_authBloc.state is AuthUnknown) {
+      _authBloc.add(const AuthStarted());
+    }
+  }
 
   @override
   void dispose() {
@@ -26,11 +40,14 @@ class _TaskInspectAppState extends State<TaskInspectApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'TaskInspect',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      routerConfig: _router,
+    return BlocProvider.value(
+      value: _authBloc,
+      child: MaterialApp.router(
+        title: 'TaskInspect',
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        routerConfig: _router,
+      ),
     );
   }
 }
