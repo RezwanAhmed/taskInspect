@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
+import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 
 /// What the server did with one pushed operation.
 enum SyncResultStatus {
@@ -33,7 +36,22 @@ class SyncResult {
   final String? message;
 }
 
-/// `POST /api/sync/push`: sends queued operations, in order.
+/// What changed on the server since the last pull.
+class PullResult {
+  const PullResult({required this.cursor, required this.taskIds, required this.tasks});
+
+  /// Sent as `since` in the next pull.
+  final String cursor;
+
+  /// Every task the user may see now; the others are removed.
+  final Set<String> taskIds;
+
+  /// The tasks that changed, with their requirements.
+  final List<(Task, List<Requirement>)> tasks;
+}
+
+/// `POST /api/sync/push` sends queued operations, in order; `GET
+/// /api/sync/pull` loads what changed on the server.
 class SyncRemoteDataSource {
   const SyncRemoteDataSource(this._api);
 
@@ -63,6 +81,35 @@ class SyncRemoteDataSource {
           message: result['message'] as String?,
         );
       }).toList(),
+    );
+  }
+
+  /// Everything when [since] is `null`, else the changes since that cursor.
+  Future<Result<PullResult>> pull({String? since}) {
+    return _api.send(
+      (dio) => dio.get<Object?>('/api/sync/pull', queryParameters: {'since': ?since}),
+      (body) {
+        final json = body! as Map<String, Object?>;
+        return PullResult(
+          cursor: json['cursor']! as String,
+          taskIds: (json['taskIds']! as List<Object?>).cast<String>().toSet(),
+          tasks: [
+            for (final pulled in (json['tasks']! as List<Object?>).cast<Map<String, Object?>>())
+              _pulledTask(pulled),
+          ],
+        );
+      },
+    );
+  }
+
+  static (Task, List<Requirement>) _pulledTask(Map<String, Object?> json) {
+    final task = TaskRemoteDataSource.taskFromJson(json['task']! as Map<String, Object?>);
+    return (
+      task,
+      [
+        for (final requirement in (json['requirements']! as List<Object?>).cast<Map<String, Object?>>())
+          TaskRemoteDataSource.requirementFromJson(task.id, requirement),
+      ],
     );
   }
 }

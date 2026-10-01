@@ -70,7 +70,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     )
     ..registerLazySingleton(() => SyncQueue(getIt()))
     ..registerLazySingleton(() => SyncRemoteDataSource(getIt()))
-    ..registerLazySingleton(() => SyncManager(getIt(), getIt()))
+    ..registerLazySingleton(() => SyncManager(getIt(), getIt(), getIt()))
     ..registerLazySingleton(
       () => SyncScheduler(getIt(), getIt()),
       dispose: (scheduler) => scheduler.stop(),

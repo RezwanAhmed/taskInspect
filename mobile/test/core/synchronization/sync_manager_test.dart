@@ -37,7 +37,7 @@ void main() {
     api = ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://api.test'));
     now = DateTime.utc(2026, 10, 1, 9);
     queue = SyncQueue(db, now: () => now = now.add(const Duration(seconds: 1)));
-    manager = SyncManager(db, SyncRemoteDataSource(api), batchSize: 2);
+    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db), batchSize: 2);
     pushes = [];
     for (final id in ['t1', 't2']) {
       await TaskLocalDataSource(db).saveTask(fakeTask(id, status: TaskStatus.inProgress), [
@@ -232,5 +232,119 @@ void main() {
     expect(seen, hasLength(2));
     expect(seen.first, isNull);
     expect(seen.last, isNotNull);
+  });
+
+  group('pull', () {
+    Map<String, Object?> taskJson(String id, String title, {String status = 'ASSIGNED'}) => {
+          'id': id,
+          'title': title,
+          'description': null,
+          'priority': 'HIGH',
+          'status': status,
+          'dueDate': '2026-10-02T09:00:00Z',
+          'createdBy': {'id': 'm1', 'fullName': 'Mia Manager'},
+          'reviewer': {'id': 'm1', 'fullName': 'Mia Manager'},
+          'assignee': {'id': 'u1', 'fullName': 'Wendy Worker'},
+          'version': 4,
+          'createdAt': '2026-10-01T08:00:00Z',
+          'updatedAt': '2026-10-01T08:30:00Z',
+        };
+    Map<String, Object?> pulled(String id, String title) => {
+          'task': taskJson(id, title),
+          'requirements': [
+            {'id': 'r-$id-new', 'title': 'Fridge temperature', 'description': null, 'type': 'NUMBER',
+             'required': true, 'position': 0, 'unit': '°C', 'options': <Object?>[]},
+          ],
+        };
+
+    /// Answers pulls with [body]; records the `since` of every pull.
+    List<Object?> servePull(Map<String, Object?> body) {
+      final sinces = <Object?>[];
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        if (request.path == '/api/sync/pull') {
+          sinces.add(request.queryParameters['since']);
+          return (200, body);
+        }
+        final operations = ((request.data as Map)['operations'] as List).cast<_Sent>();
+        pushes.add(operations);
+        return (200, {
+          'results': [for (final o in operations) {'id': o['id'], 'status': 'APPLIED'}],
+        });
+      });
+      return sinces;
+    }
+
+    Future<List<String>> localTitles() async =>
+        (await TaskLocalDataSource(db).watchTasks().first).map((t) => t.title).toList();
+
+    test('stores changed tasks with their requirements and removes tasks no longer visible', () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't3'],
+        'tasks': [pulled('t1', 'Kitchen (new)'), pulled('t3', 'Warehouse')],
+      });
+
+      expect(await manager.pull(), isA<Ok<void>>());
+
+      expect(await localTitles(), ['Kitchen (new)', 'Warehouse']);
+      final requirements = await TaskLocalDataSource(db).watchRequirements('t3').first;
+      expect(requirements.single.unit, '°C');
+    });
+
+    test('the first pull loads everything, the next one only changes since its cursor', () async {
+      final sinces = servePull({'cursor': '2026-10-01T10:00:00Z', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
+
+      await manager.pull();
+      await manager.pull();
+
+      expect(sinces, [null, '2026-10-01T10:00:00Z']);
+    });
+
+    test('a task with unsent changes keeps its local version and is not removed', () async {
+      await add('t2', 'e1');
+      servePull({'cursor': 'c', 'taskIds': ['t1'], 'tasks': [pulled('t1', 'Kitchen (new)')]});
+
+      await manager.pull();
+
+      expect(await localTitles(), ['Kitchen (new)', 'Task t2']);
+    });
+
+    test('offline: nothing changes and the cursor stays', () async {
+      servePull({'cursor': 'c1', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
+      await manager.pull();
+      api.dio.httpClientAdapter = FakeServer((_) async => (0, null));
+
+      final result = await manager.pull();
+
+      expect((result as Err<void>).failure, isA<NetworkFailure>());
+      expect(await localTitles(), ['Task t1', 'Task t2']);
+      final cursor = await db.select(db.localSyncState).getSingle();
+      expect(cursor.value, 'c1');
+    });
+
+    test('sync pushes first, then pulls', () async {
+      await add('t1', 'e1');
+      final sinces = servePull({'cursor': 'c', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
+
+      expect(await manager.sync(), isA<Ok<void>>());
+
+      expect(pushes, hasLength(1));
+      expect(sinces, hasLength(1));
+      expect(await queued(), isEmpty);
+    });
+
+    test('no pull when the push fails', () async {
+      await add('t1', 'e1');
+      var pulls = 0;
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        if (request.path == '/api/sync/pull') {
+          pulls++;
+        }
+        return (0, null);
+      });
+
+      expect(await manager.sync(), isA<Err<void>>());
+      expect(pulls, 0);
+    });
   });
 }

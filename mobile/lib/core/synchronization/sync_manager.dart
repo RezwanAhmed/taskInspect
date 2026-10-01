@@ -3,6 +3,7 @@ import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
+import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 
 /// Sends the sync queue to the server (docs/architecture.md, "Sync Cycle").
 ///
@@ -12,17 +13,57 @@ import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
 /// the later operations of its task wait, so a change never overtakes one
 /// it depends on. If the push itself fails (e.g. no connection), the
 /// operations stay PENDING for the next try.
+///
+/// [pull] then loads what changed on the server since the last pull.
 class SyncManager {
-  SyncManager(this._db, this._remote, {this.batchSize = 100});
+  SyncManager(this._db, this._remote, this._tasks, {this.batchSize = 100});
+
+  static const pullCursorKey = 'pullCursor';
 
   final AppDatabase _db;
   final SyncRemoteDataSource _remote;
+  final TaskLocalDataSource _tasks;
   final int batchSize;
   Future<Result<void>>? _running;
+  Future<Result<void>>? _syncing;
 
   /// Sends every PENDING operation that may go now. Only one push runs at a
   /// time; calling again meanwhile returns the running one.
   Future<Result<void>> push() => _running ??= _pushAll().whenComplete(() => _running = null);
+
+  /// A full sync cycle: push the local changes first, then pull the
+  /// server's. If the push fails (e.g. offline), there is no pull. Only one
+  /// cycle runs at a time.
+  Future<Result<void>> sync() => _syncing ??= _syncOnce().whenComplete(() => _syncing = null);
+
+  Future<Result<void>> _syncOnce() async {
+    final pushed = await push();
+    if (pushed is Err<void>) {
+      return pushed;
+    }
+    return pull();
+  }
+
+  /// Loads what changed on the server since the last pull (everything the
+  /// first time) and stores it. The new cursor is stored in the same
+  /// transaction as the changes, so a failure half-way loads them again.
+  Future<Result<void>> pull() async {
+    final cursor = await (_db.select(_db.localSyncState)..where((s) => s.key.equals(pullCursorKey)))
+        .map((row) => row.value)
+        .getSingleOrNull();
+    switch (await _remote.pull(since: cursor)) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(:final value):
+        await _db.transaction(() async {
+          await _tasks.applyServerChanges(value.tasks, value.taskIds);
+          await _db
+              .into(_db.localSyncState)
+              .insertOnConflictUpdate(LocalSyncStateCompanion.insert(key: pullCursorKey, value: value.cursor));
+        });
+        return const Ok(null);
+    }
+  }
 
   /// Operations left SYNCING because the app was closed during a push go
   /// back to PENDING. Sending them again is safe: the server doesn't apply

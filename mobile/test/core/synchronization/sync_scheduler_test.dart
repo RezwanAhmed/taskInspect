@@ -36,7 +36,7 @@ void main() {
     latestChange = StreamController<DateTime?>.broadcast();
     when(manager.resetInterrupted).thenAnswer((_) async {});
     when(manager.watchLatestChange).thenAnswer((_) => latestChange.stream);
-    when(manager.push).thenAnswer((_) async => const Ok(null));
+    when(manager.sync).thenAnswer((_) async => const Ok(null));
     scheduler = SyncScheduler(manager, connectivity, delay: const Duration(milliseconds: 20));
   });
 
@@ -48,15 +48,23 @@ void main() {
 
   Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 60));
 
-  test('start resets interrupted operations first', () async {
+  test('start resets interrupted operations, then syncs at once', () async {
     await scheduler.start();
+    await settle();
 
-    verify(manager.resetInterrupted).called(1);
+    verifyInOrder([manager.resetInterrupted, manager.sync]);
     expect(scheduler.isRunning, isTrue);
   });
 
-  test('pushes shortly after local changes, grouping quick ones', () async {
+  /// Starts and forgets the sync that start itself runs.
+  Future<void> started() async {
     await scheduler.start();
+    await settle();
+    clearInteractions(manager);
+  }
+
+  test('syncs shortly after local changes, grouping quick ones', () async {
+    await started();
 
     latestChange
       ..add(DateTime.utc(2026, 10, 1, 9))
@@ -64,51 +72,53 @@ void main() {
       ..add(DateTime.utc(2026, 10, 1, 9, 0, 2));
     await settle();
 
-    verify(manager.push).called(1);
+    verify(manager.sync).called(1);
   });
 
-  test('an empty queue is not pushed', () async {
-    await scheduler.start();
+  test('an empty queue does not trigger a sync', () async {
+    await started();
 
     latestChange.add(null);
     await settle();
 
-    verifyNever(manager.push);
+    verifyNever(manager.sync);
   });
 
-  test('pushes as soon as the connection comes back', () async {
-    await scheduler.start();
+  test('syncs as soon as the connection comes back', () async {
+    await started();
 
     connectivity.changes.add(false);
     await settle();
-    verifyNever(manager.push);
+    verifyNever(manager.sync);
 
     connectivity.changes.add(true);
     await settle();
-    verify(manager.push).called(1);
+    verify(manager.sync).called(1);
   });
 
-  test('does not push while offline', () async {
+  test('does not sync while offline', () async {
     connectivity.online = false;
     await scheduler.start();
 
     latestChange.add(DateTime.utc(2026, 10, 1, 9));
     await settle();
 
-    verifyNever(manager.push);
+    verifyNever(manager.sync);
   });
 
-  test('after stop nothing is pushed any more; starting twice is harmless', () async {
+  test('after stop nothing is synced any more; starting twice is harmless', () async {
     await scheduler.start();
     await scheduler.start();
+    await settle();
     verify(manager.resetInterrupted).called(1);
+    verify(manager.sync).called(1);
 
     await scheduler.stop();
     latestChange.add(DateTime.utc(2026, 10, 1, 9));
     connectivity.changes.add(true);
     await settle();
 
-    verifyNever(manager.push);
+    verifyNever(manager.sync);
     expect(scheduler.isRunning, isFalse);
   });
 }

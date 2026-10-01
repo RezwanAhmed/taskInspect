@@ -89,15 +89,21 @@ class TaskLocalDataSource {
   /// Stores the server's tasks and removes all others, in one transaction.
   /// Tasks with changes in the sync queue that are not sent yet keep their
   /// local version, so the server's older copy can't undo those changes.
-  Future<void> replaceAll(List<(Task, List<Requirement>)> tasks) {
+  Future<void> replaceAll(List<(Task, List<Requirement>)> tasks) =>
+      applyServerChanges(tasks, {for (final (task, _) in tasks) task.id});
+
+  /// Stores the [changed] tasks and removes the tasks that are not in
+  /// [visibleIds] any more, in one transaction. Tasks with unsent changes
+  /// keep their local version, as in [replaceAll].
+  Future<void> applyServerChanges(List<(Task, List<Requirement>)> changed, Set<String> visibleIds) {
     return _db.transaction(() async {
       final unsent = await _taskIdsWithUnsentChanges();
-      for (final (task, requirements) in tasks) {
+      for (final (task, requirements) in changed) {
         if (!unsent.contains(task.id)) {
           await saveTask(task, requirements);
         }
       }
-      await deleteTasksExcept({for (final (task, _) in tasks) task.id, ...unsent});
+      await deleteTasksExcept({...visibleIds, ...unsent});
     });
   }
 
