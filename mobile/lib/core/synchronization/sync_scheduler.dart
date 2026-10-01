@@ -81,6 +81,13 @@ class SyncScheduler {
     await _inFlight;
   }
 
+  /// Syncs at once while running, e.g. after the user tapped Retry.
+  void syncNow() {
+    if (isRunning) {
+      _syncNow();
+    }
+  }
+
   void _syncSoon() {
     _timer?.cancel();
     _timer = Timer(delay, _syncNow);

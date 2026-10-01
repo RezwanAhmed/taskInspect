@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
+import 'package:taskinspect/core/synchronization/sync_status.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
 import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
@@ -252,6 +254,26 @@ class FakeDocumentOpener implements DocumentOpener {
   }
 }
 
+/// A [SyncStatusSource] the test sets: [status] first, then [emit]ted ones.
+class FakeSyncStatusSource implements SyncStatusSource {
+  FakeSyncStatusSource([this.status = const SyncStatus()]);
+
+  SyncStatus status;
+  final _changes = StreamController<SyncStatus>.broadcast();
+  int retries = 0;
+
+  void emit(SyncStatus next) {
+    status = next;
+    _changes.add(next);
+  }
+
+  @override
+  Stream<SyncStatus> watch() async* {
+    yield status;
+    yield* _changes.stream;
+  }
+}
+
 /// Registers the task screens' dependencies with [repository] in the
 /// service locator, as the app does.
 void registerFakeTasks(
@@ -260,6 +282,7 @@ void registerFakeTasks(
   FakeEvidencePicker? picker,
   FakeEvidenceRepository? evidence,
   FakeDocumentOpener? opener,
+  FakeSyncStatusSource? syncStatus,
 }) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
@@ -274,6 +297,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
     () => getIt.isRegistered<EvidenceRepository>() ? getIt.unregister<EvidenceRepository>() : null,
     () => getIt.isRegistered<DocumentOpener>() ? getIt.unregister<DocumentOpener>() : null,
+    () => getIt.isRegistered<SyncStatusCubit>() ? getIt.unregister<SyncStatusCubit>() : null,
   ]) {
     unregister();
   }
@@ -286,4 +310,6 @@ void registerFakeTasks(
     ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker())
     ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository())
     ..registerSingleton<DocumentOpener>(opener ?? FakeDocumentOpener());
+  final source = syncStatus ?? FakeSyncStatusSource();
+  getIt.registerFactory(() => SyncStatusCubit(source, () async => source.retries++));
 }

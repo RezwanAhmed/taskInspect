@@ -14,6 +14,8 @@ import 'package:taskinspect/core/synchronization/sync_manager.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
 import 'package:taskinspect/core/synchronization/sync_scheduler.dart';
+import 'package:taskinspect/core/synchronization/sync_status.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/core/synchronization/sync_turns.dart';
 import 'package:taskinspect/features/authentication/data/auth_interceptor.dart';
 import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
@@ -81,7 +83,10 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     ..registerLazySingleton(() => SyncRemoteDataSource(getIt()))
     ..registerLazySingleton(() => EvidenceRemoteDataSource(getIt()))
     ..registerLazySingleton(() => EvidenceUploader(getIt(), getIt()))
-    ..registerLazySingleton(() => SyncManager(getIt(), getIt(), getIt(), getIt()))
+    ..registerLazySingleton(
+      () => SyncManager(getIt(), getIt(), getIt(), getIt()),
+      dispose: (manager) => manager.dispose(),
+    )
     ..registerLazySingleton(
       () => SyncScheduler(getIt(), getIt()),
       dispose: (scheduler) => scheduler.stop(),
@@ -98,6 +103,13 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
       ),
     )
     ..registerFactory(() => BackgroundSync(getIt(), getIt(), getIt(), getIt()))
+    ..registerLazySingleton<SyncStatusSource>(() => DatabaseSyncStatusSource(getIt(), getIt(), getIt()))
+    ..registerFactory(
+      () => SyncStatusCubit(getIt(), () async {
+        await getIt<SyncManager>().retryFailed();
+        getIt<SyncScheduler>().syncNow();
+      }),
+    )
     // Authentication
     ..registerLazySingleton(() => AuthRemoteDataSource(getIt<ApiClient>()))
     ..registerLazySingleton(() => TokenRefresher(getIt(), getIt(), lock: IsolateRefreshLock()))

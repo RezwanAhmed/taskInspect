@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -47,6 +48,15 @@ class SyncManager {
   final int batchSize;
   Future<Result<void>>? _running;
   Future<Result<void>>? _syncing;
+  final _syncingChanges = StreamController<bool>.broadcast();
+
+  /// Whether a sync cycle is running.
+  bool get isSyncing => _syncing != null;
+
+  /// Emits `true` when a sync cycle starts and `false` when it ends.
+  Stream<bool> get syncingChanges => _syncingChanges.stream;
+
+  Future<void> dispose() => _syncingChanges.close();
 
   /// Sends every PENDING operation that may go now. Only one push runs at a
   /// time; calling again meanwhile returns the running one.
@@ -57,7 +67,16 @@ class SyncManager {
   /// (e.g. offline), nothing else is tried. A failed upload doesn't stop
   /// the pull, but its failure is returned (so the sync is retried). Only
   /// one cycle runs at a time.
-  Future<Result<void>> sync() => _syncing ??= _syncOnce().whenComplete(() => _syncing = null);
+  Future<Result<void>> sync() {
+    if (_syncing case final running?) {
+      return running;
+    }
+    _syncingChanges.add(true);
+    return _syncing = _syncOnce().whenComplete(() {
+      _syncing = null;
+      _syncingChanges.add(false);
+    });
+  }
 
   Future<Result<void>> _syncOnce() async {
     final pushed = await push();

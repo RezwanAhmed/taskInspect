@@ -9,6 +9,7 @@ import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubi
 import 'package:taskinspect/features/dashboard/presentation/widgets/count_tile.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
+import 'package:taskinspect/shared/widgets/sync_status_banner.dart';
 
 /// The dashboard: how many tasks are in each status, and which are overdue.
 class HomePage extends StatelessWidget {
@@ -116,6 +117,8 @@ class _DashboardView extends StatelessWidget {
                 if (user != null) Text('Hello, ${user.fullName}', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 4),
                 Text('${state.total} tasks on this device', style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 12),
+                const SyncStatusBanner(),
                 if (state.message != null) ...[
                   const SizedBox(height: 12),
                   MaterialBanner(

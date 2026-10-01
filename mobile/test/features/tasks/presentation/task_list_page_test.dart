@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/core/synchronization/sync_status.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
 
@@ -98,5 +99,16 @@ void main() {
     await tester.tap(find.text('Clear filters'));
     await tester.pumpAndSettle();
     expect(find.text('Kitchen check'), findsOneWidget);
+  });
+
+  testWidgets('tasks with changes not on the server yet are marked, with the sync status on top', (tester) async {
+    registerFakeTasks(tasks, syncStatus: FakeSyncStatusSource(const SyncStatus(unsent: 1, unsentTaskIds: {'2'})));
+    await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testWorker))));
+    await tester.pumpAndSettle();
+    await go(tester, AppRoutes.tasks);
+
+    expect(find.byKey(const Key('task-unsent')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('task-unsent')), matching: find.text('Not synced yet')), findsOneWidget);
+    expect(find.text('1 change waiting to sync.'), findsOneWidget);
   });
 }

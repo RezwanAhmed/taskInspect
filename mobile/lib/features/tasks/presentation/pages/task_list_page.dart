@@ -1,13 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_list_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/task_filter.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/task_filter_sheet.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/task_tile.dart';
+import 'package:taskinspect/shared/widgets/sync_status_banner.dart';
 
 /// All tasks on the device, in tabs by status, with filters for priority,
 /// due date and status that apply to every tab.
@@ -33,13 +36,20 @@ class TaskListPage extends StatelessWidget {
               tabs: [for (final tab in TaskTab.values) Tab(text: tab.label)],
             ),
           ),
-          body: TabBarView(
+          body: Column(
             children: [
-              for (final tab in TaskTab.values)
-                BlocProvider(
-                  create: (_) => TaskListCubit(getIt(), tab),
-                  child: const _TaskTabView(),
+              const Padding(padding: EdgeInsets.fromLTRB(8, 8, 8, 0), child: SyncStatusBanner()),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    for (final tab in TaskTab.values)
+                      BlocProvider(
+                        create: (_) => TaskListCubit(getIt(), tab),
+                        child: const _TaskTabView(),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
@@ -78,12 +88,27 @@ class _FilterButton extends StatelessWidget {
   }
 }
 
+/// Compared by content, so the list rebuilds only when the tasks with
+/// unsent changes change (not on every sync status update).
+class _UnsentTasks {
+  const _UnsentTasks(this.ids);
+
+  final Set<String> ids;
+
+  @override
+  bool operator ==(Object other) => other is _UnsentTasks && setEquals(other.ids, ids);
+
+  @override
+  int get hashCode => Object.hashAllUnordered(ids);
+}
+
 class _TaskTabView extends StatelessWidget {
   const _TaskTabView();
 
   @override
   Widget build(BuildContext context) {
     final filter = context.watch<TaskFilterCubit>().state;
+    final unsent = context.select((SyncStatusCubit cubit) => _UnsentTasks(cubit.state.unsentTaskIds)).ids;
     return BlocBuilder<TaskListCubit, TaskListState>(
       builder: (context, state) {
         if (state.isLoading) {
@@ -112,6 +137,7 @@ class _TaskTabView extends StatelessWidget {
           itemBuilder: (context, index) => TaskTile(
             task: tasks[index],
             now: now,
+            hasUnsentChanges: unsent.contains(tasks[index].id),
             onTap: () => context.push(AppRoutes.task(tasks[index].id)),
           ),
         );
