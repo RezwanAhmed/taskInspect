@@ -1,0 +1,31 @@
+# TaskInspect — local development environment
+#
+#   1. Copy .env.example to .env and set DB_PASSWORD.
+#   2. docker compose up -d
+#
+# Values come from .env in this folder (Docker Compose reads it
+# automatically). The backend service is added in task 8.8.
+
+name: taskinspect
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-taskinspect}
+      POSTGRES_USER: ${DB_USERNAME:-taskinspect}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env (copy .env.example)}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      # PostgreSQL 18+ images keep their data under /var/lib/postgresql
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:

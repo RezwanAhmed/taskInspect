@@ -4,13 +4,17 @@
 
 TaskInspect lets a manager create a task, define the requirements that must be
 completed, and assign it to a worker. The worker completes each requirement on
-a mobile device — with structured answers and photo evidence — even without a
+a mobile device — with structured answers, photos and PDF documents — even without a
 network connection, then submits it for review. A reviewer approves the task,
 rejects it, or requests a correction, and every step is recorded in the task's
 history.
 
-> **Status:** in early development — the repository currently contains the
-> project structure and documentation; the app and API are being built.
+> **Status:** in development — the backend (Spring Boot, PostgreSQL,
+> Flyway, JWT login, users and roles, task management with requirements,
+> assignment, answers, state machine, history and audit log) and the
+> Flutter app foundation (architecture, theme, routing, API client,
+> secure storage, local database, login with token refresh) are in place;
+> task execution on mobile is next.
 
 ## Project Overview
 
@@ -19,9 +23,10 @@ CRUD demo. It consists of:
 
 - **Mobile app** — Flutter, where workers execute tasks and managers review them.
   Works offline and synchronizes in the background when connectivity returns.
+  Released on Google Play first, then on the Apple App Store.
 - **Backend API** — Java / Spring Boot REST API with PostgreSQL, which owns the
   business rules: who can do what, and which task state changes are allowed.
-- **Cloud storage** — photo evidence is stored in object storage (AWS S3), not in
+- **Cloud storage** — evidence files (photos, PDFs) are stored in object storage (AWS S3), not in
   the database.
 
 The same workflow fits many industries — kitchen safety checks, facility
@@ -46,11 +51,11 @@ flowchart LR
 1. **Create** — a manager creates a task with a title, description, priority
    and deadline.
 2. **Define requirements** — each requirement has a type: checkbox, yes/no,
-   text, number, dropdown, multiple selection, photo or comment.
+   text, number, dropdown, multiple selection, photo, PDF document or comment.
 3. **Assign** — the task is assigned to a worker.
 4. **Execute** — the worker completes each requirement on their phone. This works
    offline: answers are saved locally and synchronized later.
-5. **Attach evidence** — photos, values and comments show that the work was
+5. **Attach evidence** — photos, PDF documents, values and comments show that the work was
    actually done.
 6. **Submit** — the worker submits the task for review.
 7. **Review** — the reviewer checks every response and piece of evidence, then
@@ -86,7 +91,7 @@ Planned for the first release:
 
 - Create tasks with a title, description, priority and deadline
 - Configurable requirements per task — checkbox, yes/no, text, number (with
-  unit), dropdown, multiple selection, photo and comment
+  unit), dropdown, multiple selection, photo, PDF document and comment
 - Assign tasks to workers and track them by status: pending, in progress,
   submitted, approved, rejected
 - A strict task state machine: invalid status changes are rejected by the API
@@ -96,15 +101,16 @@ Planned for the first release:
 - Dashboard with task counts per status, and a filterable task list
 - Step-by-step requirement execution with structured answers and comments
 - Photo evidence from the camera or gallery, compressed before upload
+- PDF documents (certificates, reports) attached from the device's files
 - Save progress at any time and continue later
 
 ### Offline-first synchronization
 
-- Tasks, answers and photos are stored on the device, so work continues
+- Tasks, answers, photos and PDFs are stored on the device, so work continues
   without a network connection
 - Local changes are queued and synchronized in the background when
   connectivity returns, with retries and conflict handling
-- Photo uploads are queued separately, so a slow upload never blocks a
+- File uploads are queued separately, so a slow upload never blocks a
   submission
 - The app always shows the sync state: offline, syncing, synced or failed
 
@@ -112,7 +118,10 @@ Planned for the first release:
 
 - Review every response and piece of evidence of a submitted task
 - Approve, reject or request a correction with a reason
-- Rejected tasks go back to the worker to be corrected and resubmitted
+- Reject sends the whole task back; a correction request sends back only
+  the requirements that need fixing
+- Each task has its own reviewer — one manager can assign and another review
+- Solo users can review their own tasks, like a personal checklist
 - A full history timeline for every task
 
 ### Security and platform
@@ -122,7 +131,7 @@ Planned for the first release:
 - Audit log of important actions (task created, assigned, submitted,
   approved, rejected)
 - Push notifications for assignments, submissions and review results
-- Photo evidence stored in AWS S3; only metadata is kept in the database
+- Evidence files (photos, PDFs) stored in AWS S3; only metadata is kept in the database
 
 ## Tech Stack
 
@@ -134,7 +143,7 @@ Planned for the first release:
 | Cloud    | AWS S3 (evidence), AWS CloudWatch (logging), Firebase Cloud Messaging (push notifications) |
 | DevOps   | Docker, Docker Compose, GitHub Actions (build, test, deploy) |
 | Testing  | JUnit, Mockito, Spring Boot Test, Flutter unit / widget / integration tests |
-| Tools    | Git, GitHub, Gradle, Android Studio, IntelliJ IDEA |
+| Tools    | Git, GitHub, Gradle, Android Studio, IntelliJ IDEA, Xcode (iOS, on a cloud Mac) |
 
 ## Repository Structure
 
@@ -144,10 +153,10 @@ taskInspect/
 ├── backend/           # Java / Spring Boot REST API — Security + JWT, JPA, PostgreSQL
 ├── infrastructure/    # Docker, deployment and AWS configuration
 ├── docs/              # Architecture, API, database, sync and deployment docs
-│   └── decisions/     # Architecture Decision Records (planned)
+│   └── decisions/     # Architecture Decision Records
 ├── .github/           # GitHub Actions workflows (planned)
-├── docker-compose.yml # Local PostgreSQL + backend (planned)
-├── LICENSE            # MIT License
+├── docker-compose.yml # Local PostgreSQL (backend service added later)
+├── LICENSE            # All rights reserved
 └── README.md
 ```
 
@@ -161,21 +170,30 @@ The project is built in small steps, one phase at a time.
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 1  | Repository and architecture — structure, README, architecture docs, ADRs | In progress |
-| 2  | Backend foundation — Spring Boot, PostgreSQL, Flyway, JWT authentication, users and roles | Planned |
-| 3  | Task management (backend) — tasks, requirements, assignment, state machine, audit log | Planned |
-| 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Planned |
-| 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo evidence | Planned |
+| 1  | Repository and architecture — structure, README, architecture docs, ADRs | Done |
+| 2  | Backend foundation — Spring Boot, PostgreSQL, Flyway, JWT authentication, users and roles | Done |
+| 3  | Task management (backend) — tasks, requirements, assignment, state machine, audit log | Done |
+| 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Done |
+| 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo and PDF evidence | Planned |
 | 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Planned |
 | 7  | Review workflow — submit, approve / reject / request correction, resubmit, history | Planned |
 | 8  | Cloud — S3 evidence storage, push notifications, Docker image, cloud deployment | Planned |
 | 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | Planned |
 | 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | Planned |
 | 11 | Production release — signed Android app, Google Play, monitoring, final docs | Planned |
+| 12 | iOS release — iOS build on a cloud Mac, push notifications, TestFlight, App Store | Planned |
+
+Android comes first; the iOS release follows the Google Play release.
+The app is built with both platforms in mind from the start (see
+[ADR-0001](docs/decisions/0001-flutter-for-cross-platform-mobile.md)).
 
 Setup, API, testing and deployment instructions will be added to this README
 as those parts are built.
 
 ## License
 
-TaskInspect is released under the [MIT License](LICENSE).
+Copyright (c) 2026 Rezwan Ahmed Heera. All rights reserved.
+
+The source code is public so that it can be viewed, but it is not open
+source: it may not be used, copied, modified or distributed without
+written permission. See [LICENSE](LICENSE).

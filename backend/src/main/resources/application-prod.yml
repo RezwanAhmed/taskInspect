@@ -1,0 +1,17 @@
+# Production: quiet logs, no error details sent to clients
+logging:
+  level:
+    root: INFO
+    com.taskinspect: INFO
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+
+# API documentation is for development only
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

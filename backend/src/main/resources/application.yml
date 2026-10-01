@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: taskinspect-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  config:
+    # Local development: read a .env file (repository root or backend/)
+    # if it exists. Real environment variables always win.
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskinspect}
+    username: ${DB_USERNAME:taskinspect}
+    password: ${DB_PASSWORD:}
+  jpa:
+    # The schema is changed only by Flyway migrations; Hibernate just checks it
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    # Versioned SQL migrations in src/main/resources/db/migration
+    locations: classpath:db/migration
+    # Never allow dropping the whole schema from the app
+    clean-disabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+taskinspect:
+  jwt:
+    # HMAC-SHA256 signing key, at least 32 characters (never commit it)
+    secret: ${JWT_SECRET:}
+    issuer: taskinspect
+    access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:15m}
+  refresh-token:
+    ttl: ${REFRESH_TOKEN_TTL:30d}
+  # First administrator, created on startup if no administrator exists yet
+  admin:
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+    full-name: ${ADMIN_FULL_NAME:Administrator}
+  # Evidence files (ADR-0005): "local" = folder on this machine (development;
+  # AWS S3 follows in Phase 8)
+  storage:
+    type: ${STORAGE_TYPE:local}
+    local:
+      directory: ${STORAGE_LOCAL_DIR:./data/evidence}
+
+logging:
+  pattern:
+    # Adds the request ID (see RequestIdFilter) to every log line
+    level: "%5p [%X{requestId:-}]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

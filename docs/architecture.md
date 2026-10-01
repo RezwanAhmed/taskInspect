@@ -2,7 +2,7 @@
 
 This document describes how TaskInspect is put together: the main
 components, what each one is responsible for, and how they talk to each
-other. The offline sync section is added as the project grows.
+other.
 
 ## System Overview
 
@@ -10,7 +10,7 @@ TaskInspect has three parts:
 
 - **Mobile app (Flutter)** — used by workers to execute tasks and by
   managers to create, assign and review them. The app is offline-first:
-  tasks, answers and photos are stored in a local database on the device,
+  tasks, answers and evidence files are stored in a local database on the device,
   and a sync manager exchanges changes with the backend whenever a
   connection is available.
 - **Backend API (Spring Boot)** — a stateless REST API that owns the
@@ -19,9 +19,9 @@ TaskInspect has three parts:
   important action. The mobile app never writes to the database or
   storage directly — it goes through the API.
 - **Data and cloud services** — PostgreSQL is the source of truth for all
-  business data. Photo evidence goes to AWS S3; the database keeps only its
-  metadata. Firebase Cloud Messaging delivers push notifications, and
-  CloudWatch collects backend logs.
+  business data. Evidence files (photos and PDFs) go to AWS S3; the
+  database keeps only their metadata. Firebase Cloud Messaging delivers
+  push notifications, and CloudWatch collects backend logs.
 
 Everything is kept deliberately small: one backend service, one database
 and a few managed cloud services, so that the whole system can be
@@ -34,7 +34,7 @@ flowchart LR
     subgraph Device["Mobile device — Flutter app"]
         UI["UI<br/>(screens + BLoC)"]
         Sync["Sync manager<br/>(background)"]
-        Local[("Local database<br/>+ photo files")]
+        Local[("Local database<br/>+ evidence files")]
         UI --> Local
         Sync --> Local
     end
@@ -46,13 +46,13 @@ flowchart LR
 
     PG[("PostgreSQL<br/>business data")]
     Redis[("Redis<br/>cache, optional")]
-    S3[("AWS S3<br/>photo evidence")]
+    S3[("AWS S3<br/>evidence files")]
     FCM["Firebase Cloud<br/>Messaging"]
     CW["AWS CloudWatch<br/>logs"]
 
     UI -->|"REST + JWT"| API
     Sync -->|"REST + JWT<br/>push / pull"| API
-    Sync -->|"upload photo<br/>(pre-signed URL)"| S3
+    Sync -->|"upload files<br/>(pre-signed URL)"| S3
     API --> PG
     API -.-> Redis
     API -->|"pre-signed URLs"| S3
@@ -73,13 +73,13 @@ notifications from it).
 |-----------|----------------|
 | Flutter UI | Screens for login, dashboard, task list, requirement execution and review. State is managed with BLoC; the UI reads and writes the local database, so it works the same online and offline. |
 | Local database | Stores tasks, requirements, answers and the sync queue on the device. It is the source of truth for the UI while offline. |
-| Local photo files | Compressed photos waiting to be uploaded, referenced from the local database. |
-| Sync manager | Pushes queued local changes to the backend, pulls server changes, uploads photos and retries failed operations with backoff. Runs in the background. |
+| Local evidence files | Compressed photos and attached PDF documents waiting to be uploaded, referenced from the local database. |
+| Sync manager | Pushes queued local changes to the backend, pulls server changes, uploads evidence files and retries failed operations with backoff. Runs in the background. |
 | Spring Boot REST API | Authentication (JWT access + refresh tokens), role-based authorization, task and requirement management, the task state machine, review, audit log and the sync endpoints. Documented with OpenAPI / Swagger. |
 | Notification service | Sends notifications for assignment, submission and review results through FCM to the users' registered devices. |
 | PostgreSQL | Users, roles, tasks, requirements, responses, reviews, status history, audit log and evidence metadata. Schema managed with Flyway migrations. |
 | Redis | Optional cache / short-lived data where it clearly helps; the system works without it. |
-| AWS S3 | Stores photo evidence. The backend issues a pre-signed upload URL, the app uploads the photo directly, and the backend stores the file's metadata (task, requirement, storage key, type, size). |
+| AWS S3 | Stores evidence files (photos and PDF documents). The backend issues a pre-signed upload URL, the app uploads the file directly, and the backend stores the file's metadata (task, requirement, storage key, type, size). |
 | Firebase Cloud Messaging | Delivers push notifications to the mobile app (foreground, background and tap to open the task). |
 | AWS CloudWatch | Central backend logs, together with Spring Boot Actuator health checks. |
 
@@ -91,7 +91,7 @@ notifications from it).
   changes are saved locally first and synchronized later.
 - **Idempotent synchronization.** Every queued operation has an ID, so
   sending the same request twice never creates duplicate data.
-- **Files outside the database.** Photos live in object storage; the
+- **Files outside the database.** Photos and PDFs live in object storage; the
   database stores only metadata.
 - **Stateless API.** Authentication uses JWT, so the backend can be
   restarted or scaled without losing sessions.
@@ -112,14 +112,17 @@ stateDiagram-v2
     ASSIGNED --> IN_PROGRESS: start
     IN_PROGRESS --> SUBMITTED: submit
     SUBMITTED --> APPROVED: approve
-    SUBMITTED --> REJECTED: reject /<br/>request correction
-    REJECTED --> IN_PROGRESS: start correction
+    SUBMITTED --> REJECTED: reject
+    SUBMITTED --> CORRECTION_REQUESTED: request<br/>correction
+    REJECTED --> IN_PROGRESS: start again
+    CORRECTION_REQUESTED --> IN_PROGRESS: start correction
     APPROVED --> [*]
 
     DRAFT --> CANCELLED: cancel
     ASSIGNED --> CANCELLED: cancel
     IN_PROGRESS --> CANCELLED: cancel
     REJECTED --> CANCELLED: cancel
+    CORRECTION_REQUESTED --> CANCELLED: cancel
     CANCELLED --> [*]
 ```
 
@@ -131,7 +134,8 @@ stateDiagram-v2
 | `ASSIGNED` | Assigned to a worker, who has not started it yet (shown as *pending* in the app). |
 | `IN_PROGRESS` | The worker is completing the requirements and attaching evidence. |
 | `SUBMITTED` | The worker has submitted the task; it is waiting for review. |
-| `REJECTED` | The reviewer rejected the task or requested a correction, with a reason. It is back with the worker. |
+| `REJECTED` | The reviewer rejected the whole task, with a reason. It is back with the worker, who can change any answer or photo. |
+| `CORRECTION_REQUESTED` | The reviewer marked only some requirements as needing a fix, each with a comment. It is back with the worker, who can change only the marked requirements. |
 | `APPROVED` | The reviewer accepted the task. Final — it can no longer be changed. |
 | `CANCELLED` | A manager cancelled the task. Final. |
 
@@ -139,19 +143,47 @@ stateDiagram-v2
 
 | From | To | Action | Who | Conditions |
 |------|----|--------|-----|------------|
-| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. |
+| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. A reviewer is set (defaults to the creator). |
 | `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
 | `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `IN_PROGRESS` | `SUBMITTED` | Submit (`POST /api/tasks/{id}/submit`) | Assigned worker | Every required requirement has a response. |
-| `SUBMITTED` | `APPROVED` | Approve | Manager / reviewer | The reviewer is not the assignee. |
-| `SUBMITTED` | `REJECTED` | Reject or request correction | Manager / reviewer | A reason is given; the reviewer is not the assignee. |
-| `REJECTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
-| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED` | `CANCELLED` | Cancel | Manager | — |
+| `SUBMITTED` | `APPROVED` | Approve | Task's reviewer | The reviewer is not the assignee (except solo accounts). |
+| `SUBMITTED` | `REJECTED` | Reject | Task's reviewer | A reason is given; the reviewer is not the assignee (except solo accounts). |
+| `SUBMITTED` | `CORRECTION_REQUESTED` | Request correction | Task's reviewer | At least one requirement is marked, each with a comment; the reviewer is not the assignee (except solo accounts). |
+| `REJECTED` | `IN_PROGRESS` | Start again (`POST /api/tasks/{id}/start`) | Assigned worker | — |
+| `CORRECTION_REQUESTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
+| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED`, `CORRECTION_REQUESTED` | `CANCELLED` | Cancel | Manager | — |
 
-*Reject* and *request correction* lead to the same state. The review
-record stores which one the reviewer chose, the reason, and (optionally)
-the requirements that need to be redone, so the worker knows exactly what
-to fix.
+*Reject* and *request correction* are two different results:
+
+- **Reject** sends the whole task back. The worker can change every
+  answer and photo before submitting again.
+- **Request correction** sends back only the requirements the reviewer
+  marked (for example *"Please retake the refrigerator photo."*). The
+  worker can change only those; all other answers stay as submitted.
+
+Either way the review record stores the result, the reason and the
+marked requirements, and the worker is notified.
+
+### Reviewers and Account Types
+
+Every task has its own **reviewer**, chosen when the task is created or
+assigned. The reviewer can be a different manager from the one who
+created and assigned the task — for example one manager assigns the
+work and another reviews and closes it.
+
+TaskInspect is meant for three sizes of account:
+
+| Account | Example | Review rule |
+|---------|---------|-------------|
+| Solo | One person using tasks as a personal checklist | The same person creates, does and approves the task (self-review is allowed). |
+| Small team | One manager with about 10 workers | The reviewer is never the assigned worker. |
+| Organization | Many managers, each with their own workers | The reviewer is never the assigned worker; any manager can be a task's reviewer. |
+
+The first release has one default organization; users and tasks already
+carry an `organization_id` so that full organizations (sign-up, several
+organizations, managers with their own workers) can be added later
+without reshaping the data.
 
 ### Rules
 
@@ -161,17 +193,22 @@ to fix.
   final task returns a specific code such as `TASK_ALREADY_APPROVED`.
 - **Roles are checked on every call.** A worker can never approve or
   reject a task — including their own — even with a hand-crafted request.
+  Only the task's reviewer can review it; in a solo account that is the
+  same person, who holds both the manager and worker roles.
 - **Responses are editable only while the task is `IN_PROGRESS`.** Once a
-  task is submitted, the worker's answers and evidence are locked until the
-  task is rejected back to them.
+  task is submitted, the worker's answers and evidence are locked. After a
+  *reject* they are all editable again; after a *request correction* only
+  the marked requirements are.
 - **Final states are final.** `APPROVED` and `CANCELLED` tasks cannot be
   modified.
 - **Every change is recorded.** Each transition writes a row to the task's
   status history (old state, new state, user, time, reason) and an entry
   in the audit log. These rows build the task history timeline (created,
-  assigned, started, submitted, rejected, resubmitted, approved).
-- **Changes trigger notifications.** Assigning, submitting, approving and
-  rejecting notify the other party through push notifications.
+  assigned, started, submitted, rejected, correction requested,
+  resubmitted, approved).
+- **Changes trigger notifications.** Assigning, submitting, approving,
+  rejecting and requesting a correction notify the other party through
+  push notifications.
 - **Offline actions are applied when they reach the server.** A worker can
   start and submit a task offline; the app shows it as *submitted locally*
   and the state machine checks the action when it is synchronized (see
@@ -204,7 +241,7 @@ flowchart TB
     end
 
     API["Backend REST API"]
-    DB[("Local database<br/>+ photo files")]
+    DB[("Local database<br/>+ evidence files")]
 
     W -->|"events"| B
     B -->|"calls"| UC
@@ -281,9 +318,9 @@ online and offline:
 5. Later, the SyncManager sends the queued operation to the backend and
    marks the record `SYNCED` (see the offline sync section).
 
-Actions that only make sense online — logging in, or a manager creating
-and assigning tasks — go straight to the API through the remote data
-source, and the result is then stored locally.
+Actions that only make sense online — logging in, or a manager
+assigning or reviewing tasks — go straight to the API through the remote
+data source, and the result is then stored locally.
 
 ### State Management (BLoC)
 
@@ -349,8 +386,9 @@ the module boundary stays the same.
 | `audit` | Audit log of important actions | 3.13 |
 | `common` | Security config, error handling, request ID logging, OpenAPI | 2.7-2.8, 2.13, 2.21 |
 
-Organizations (multi-tenant support, spec section 14) are not part of
-the first release.
+Full organizations (multi-tenant support, spec section 14) come after
+the first release. Users and tasks carry an `organization_id` from the
+start, with one default organization (see *Reviewers and Account Types*).
 
 Modules use each other only through services — for example the reviews
 module calls `TaskService` to change a task's state, never
@@ -405,10 +443,10 @@ sequenceDiagram
     App->>F: POST /api/tasks/{id}/approve<br/>Authorization: Bearer JWT
     F->>F: Add request ID, validate JWT,<br/>load user + roles
     F->>C: Authenticated request
-    C->>C: Check role (manager / reviewer)
+    C->>C: Check role (manager)
     C->>S: approve(taskId, user)
     S->>DB: Load task
-    S->>S: State machine: SUBMITTED → APPROVED?<br/>Reviewer is not the assignee?
+    S->>S: State machine: SUBMITTED → APPROVED?<br/>User is the task's reviewer?
     S->>DB: Update task, insert review,<br/>status history and audit log (one transaction)
     S-->>C: Approved task
     C-->>App: 200 OK + task DTO
@@ -428,6 +466,34 @@ handler turns every error into the same JSON shape:
   "requestId": "3f2a9c1e"
 }
 ```
+
+### API Permissions
+
+Every endpoint checks the caller's role (`@PreAuthorize`) and, where it
+matters, ownership in the service. Tasks a user may not see answer
+`404`, so their existence is not revealed.
+
+| Endpoint | Allowed | Everyone else |
+|----------|---------|---------------|
+| `POST /api/auth/login`, `/refresh`, `/logout` | Anyone | — |
+| `GET /api/auth/me` | Any logged-in user | `401` |
+| `GET /api/users` | Administrators, managers | `403` |
+| `GET /api/users/{id}` | Administrators, managers; others only themselves | `403` |
+| `POST /api/users` | Administrators | `403` |
+| `POST /api/tasks` | Managers | `403` |
+| `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them | `404` (hidden) |
+| `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
+| `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
+| `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
+| `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
+| `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
+| `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
+| `POST /api/tasks/{id}/requirements/{rid}/evidence`, `POST …/evidence/{eid}/upload-url`, `POST …/evidence/{eid}/complete`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
+| `GET /api/tasks/{id}/evidence/{eid}/download-url` | Anyone who can see the task | `404` |
+| `PUT/GET /api/files/…` (local file storage only) | Anyone with a valid signed URL from the endpoints above | `403` |
+
+Without a valid access token every endpoint except login, refresh,
+logout, health checks, API docs and signed file URLs answers `401`.
 
 ### Cross-cutting Concerns
 
@@ -451,3 +517,178 @@ handler turns every error into the same JSON shape:
   Spring Boot Actuator health checks, and CloudWatch in production.
 - **API documentation** — OpenAPI / Swagger UI generated from the
   controllers.
+
+## Offline Sync
+
+Workers often inspect sites with a weak or no connection, so the app is
+built to work fully offline and to catch up with the server later. The
+local database is the app's source of truth; a **SyncManager** in
+`core/synchronization/` moves changes between the device and the backend
+in the background.
+
+### What Works Offline
+
+| Offline | Online only |
+|---------|-------------|
+| Open tasks already downloaded to the device | Log in |
+| Create and edit draft tasks and their requirements (manager) | Assign tasks (manager) |
+| Start a task | Review: approve, reject, request correction |
+| Answer requirements, add comments | Download tasks not yet on the device |
+| Take photos, attach PDF documents | |
+| Submit a task (shown as *submitted locally*) | |
+
+A task created offline gets its ID on the device and is sent to the
+server as a `DRAFT` at the next sync; the manager assigns it once
+online.
+
+Online-only actions go straight to the API and show a clear message when
+there is no connection.
+
+### Sync Queue
+
+Every offline change is written to the local database **and** added to
+the sync queue in the same local transaction (see *Data Flow* above).
+Each queued operation has:
+
+| Field | Example | Purpose |
+|-------|---------|---------|
+| `id` | UUID created on the device | Idempotency key — the server never applies the same operation twice. |
+| `entityType` | `TaskResponse` | What changed. |
+| `entityId` | `8c1f…` | Which record changed. |
+| `operation` | `UPDATE` | `CREATE`, `UPDATE`, `DELETE` or a task action (`START`, `SUBMIT`). |
+| `payload` | `{ "value": "YES" }` | The data to send. |
+| `createdAt` | `2026-10-01T09:30:00Z` | Keeps operations in order. |
+| `retryCount` | `2` | How many times sending has failed. |
+| `lastError` | `NETWORK_TIMEOUT` | Why the last attempt failed. |
+| `status` | `PENDING` | See the states below. |
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PENDING: change saved locally
+    PENDING --> SYNCING: SyncManager sends it
+    SYNCING --> SYNCED: server accepted
+    SYNCING --> FAILED: sync failed<br/>(data kept on device,<br/>user is told)
+    FAILED --> PENDING: automatic retry while online /<br/>user taps Retry
+    SYNCED --> [*]
+```
+
+The queue is stored in the database, not in memory, so nothing is lost
+when the app is closed or the phone restarts. Its contents can be shown
+in the app and inspected in tests.
+
+### Sync Cycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Worker
+    participant App as App + local DB
+    participant SM as SyncManager
+    participant API as Backend API
+    participant S3 as AWS S3
+
+    W->>App: Answer, photo, submit (offline)
+    App->>App: Save locally + queue operations
+    App-->>W: Shown at once as pending
+    Note over SM: Connection returns
+    SM->>API: Request pre-signed URL for each new file
+    SM->>S3: Upload photos and PDFs
+    SM->>API: POST /api/sync/push (queued operations, in order)
+    API->>API: Skip already-applied IDs,<br/>check rules, save
+    API-->>SM: Result per operation
+    SM->>App: Mark SYNCED / FAILED
+    SM->>API: GET /api/sync/pull?since=cursor
+    API-->>SM: Changed tasks, reviews, status
+    SM->>App: Update local records + cursor
+```
+
+1. **Files first.** Photos and PDFs are uploaded before the operations that
+   depend on them, so a task is never submitted to the server with
+   evidence the server cannot find. Files have their own upload queue
+   with the same statuses and retries (task 6.12).
+2. **Push.** `POST /api/sync/push` sends pending operations in the order
+   they were created. The server records every applied operation ID in
+   `sync_records`; if an ID arrives again (for example after a timeout),
+   it returns the earlier result instead of applying it twice. Each
+   operation goes through the same services and rules as a normal API
+   call — the task state machine, role and ownership checks.
+3. **Pull.** `GET /api/sync/pull?since=<cursor>` returns everything that
+   changed on the server since the last pull: new assignments, status
+   changes, review results and reasons. The app stores the new cursor
+   only after the changes are saved locally.
+4. **Order per task.** If an operation for a task fails, later
+   operations for the same task wait, so for example a submit is never
+   sent before the answers it depends on. Other tasks keep syncing.
+
+### When Sync Runs
+
+The rule is simple: **whenever the device is online, the app tries to
+sync.**
+
+- As soon as the connection comes back (connectivity detection, task
+  6.3).
+- When the app starts or returns to the foreground.
+- Shortly after a local change, grouped so that quick edits are sent
+  together.
+- Periodically in the background (task 6.11). Android schedules this
+  with WorkManager; on iOS, background time is limited and decided by the
+  system, so the app also syncs every time it is opened. Both platforms
+  use the same SyncManager.
+
+### Retries and Errors
+
+| Error | What happens |
+|-------|--------------|
+| No connection, timeout, `5xx` | Temporary: the operation becomes `FAILED`, the user is told and gets a **Retry** button. While the device is online the app keeps retrying automatically with a growing delay (30 s, 1 min, 2 min, … up to 5 min), and it retries at once when the connection comes back. It never gives up on unsent data. |
+| `401` — access token expired | The app refreshes the token once and retries. If the refresh token has also expired, sync pauses, the queue is kept and the user is asked to sign in again; sync continues after login. |
+| `4xx` business error (e.g. `TASK_INVALID_TRANSITION`) | The server refused the change: the operation becomes `FAILED` with the server's reason shown to the user (for example *"This task was cancelled by the manager"*). It is not retried automatically, because the same request would fail again; the Retry button is still there. |
+
+Whatever happens, **data is never lost**: a failed change stays in the
+local database and the sync queue until it is synced, and is never
+deleted silently.
+
+### Conflicts
+
+The server is the source of truth for a task's status; the device is the
+source of truth for the worker's own unsent answers.
+
+- **The task changed on the server while the worker was offline** — for
+  example the manager cancelled it. The worker's `SUBMIT` is rejected with
+  a clear error code, the operation becomes `FAILED`, the next pull
+  brings the new status, and the app shows why (*"This task was cancelled
+  by the manager"*). The worker's answers stay on the device for
+  reference.
+- **Stale updates** — tasks carry a version number (optimistic locking).
+  An operation based on an old version of a task is rejected instead of
+  overwriting newer data.
+- **Answers** — only the assigned worker can change a task's answers, so
+  two people never edit the same response. When the same answer is
+  changed several times offline, the operations are applied in order and
+  the last one wins.
+
+### Sync Status in the App
+
+| Situation | What the user sees |
+|-----------|--------------------|
+| No connection | Offline banner: *"Changes saved locally. They will sync when you're online."* |
+| Changes waiting | Pending badge on the task and a count of unsent changes |
+| Syncing | Progress indicator |
+| Submitted offline | *"Submitted locally — waiting for synchronization."* |
+| Failed | *"Unable to synchronize. Your changes are saved on this device."* with a **Retry** button |
+| Session expired | *"Your session has expired. Please sign in again."* |
+
+### Built In
+
+| Part | Tasks |
+|------|-------|
+| Sync queue table and recording changes | 6.1-6.2 |
+| Connectivity detection | 6.3 |
+| Push endpoint + SyncManager push | 6.4-6.5 |
+| Pull endpoint + SyncManager pull | 6.6-6.7 |
+| Retries, expired login, conflicts | 6.8-6.10 |
+| Background sync, evidence upload queue | 6.11-6.12 |
+| Sync status UI and tests | 6.13-6.14 |
+
+The full sync API and edge cases are documented in `docs/offline-sync.md`
+(task 11.9).

@@ -27,6 +27,8 @@ backend/.gradle/
 backend/target/
 backend/out/
 backend/bin/
+# Local evidence file storage (taskinspect.storage.local.directory)
+backend/data/
 !backend/gradle/wrapper/gradle-wrapper.jar
 
 # ---------- Mobile (Flutter / Dart) ----------
