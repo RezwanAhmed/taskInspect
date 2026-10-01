@@ -77,4 +77,26 @@ void main() {
 
     expect(find.text('No tasks here'), findsOneWidget);
   });
+
+  testWidgets('filters narrow every tab and can be cleared', (tester) async {
+    await openApp(tester);
+    await go(tester, AppRoutes.tasks);
+
+    await tester.tap(find.byTooltip('Filter'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Overdue'));
+    await tester.tap(find.byKey(const Key('apply-filters')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Warehouse'), findsOneWidget);
+    expect(find.text('Kitchen check'), findsNothing);
+
+    await tester.tap(find.widgetWithText(Tab, 'Pending'));
+    await tester.pumpAndSettle();
+    expect(find.text('No tasks match the filters'), findsOneWidget);
+
+    await tester.tap(find.text('Clear filters'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kitchen check'), findsOneWidget);
+  });
 }
