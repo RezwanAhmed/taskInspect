@@ -189,10 +189,20 @@ class FakeEvidenceRepository implements EvidenceRepository {
       createdAt: DateTime.utc(2026, 10, 1),
     );
     items.add(item);
+    _notify(taskId);
+    return item;
+  }
+
+  @override
+  Future<void> remove(EvidenceItem item) async {
+    items.removeWhere((i) => i.id == item.id);
+    _notify(item.taskId);
+  }
+
+  void _notify(String taskId) {
     for (final watcher in _watchers) {
       watcher.add(_of(taskId));
     }
-    return item;
   }
 }
 

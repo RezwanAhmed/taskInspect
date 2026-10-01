@@ -8,4 +8,7 @@ abstract interface class EvidenceRepository {
   /// Compresses the photo at [sourcePath], stores the copy in the app's
   /// files and records it (waiting for upload).
   Future<EvidenceItem> addPhoto({required String taskId, required String requirementId, required String sourcePath});
+
+  /// Removes an evidence file from the device (record and file).
+  Future<void> remove(EvidenceItem item);
 }

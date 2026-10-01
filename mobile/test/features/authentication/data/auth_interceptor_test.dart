@@ -63,10 +63,11 @@ void main() {
       );
     now = DateTime.utc(2026, 10, 1, 9);
     expiredCalls = 0;
+    final refresher = TokenRefresher(AuthRemoteDataSource(api), storage);
     api.dio.interceptors.add(AuthInterceptor(
       dio: api.dio,
       storage: storage,
-      refresher: TokenRefresher(AuthRemoteDataSource(api), storage),
+      refresher: () => refresher,
       onSessionExpired: () => expiredCalls++,
       now: () => now,
     ));

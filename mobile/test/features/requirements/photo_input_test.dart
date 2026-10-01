@@ -89,4 +89,30 @@ void main() {
     expect(find.text('The photo could not be saved. Please try again.'), findsOneWidget);
     expect(find.byKey(const Key('photo-0')), findsNothing);
   });
+
+  testWidgets('a photo opens full screen and can be removed after confirming', (tester) async {
+    final picker = await open(tester);
+    picker.next.add('/photos/fridge.jpg');
+    await tester.tap(find.byKey(const Key('take-photo')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('photo-0')));
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('remove-evidence')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsOneWidget, reason: 'cancel keeps the photo');
+
+    await tester.tap(find.byKey(const Key('remove-evidence')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(InteractiveViewer), findsNothing);
+    expect(find.byKey(const Key('photo-0')), findsNothing);
+    expect(find.textContaining('0 answered'), findsOneWidget);
+  });
 }

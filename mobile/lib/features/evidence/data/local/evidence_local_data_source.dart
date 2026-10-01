@@ -81,6 +81,23 @@ class EvidenceLocalDataSource implements EvidenceRepository {
     return item;
   }
 
+  @override
+  Future<void> remove(EvidenceItem item) async {
+    await (_db.delete(_db.localEvidence)..where((e) => e.id.equals(item.id))).go();
+    final file = File(item.localPath);
+    if (file.existsSync()) {
+      await file.delete();
+    }
+  }
+
+  /// Deletes every evidence file of every task (sign out).
+  Future<void> deleteAllFiles() async {
+    final folder = Directory(p.join((await _documents()).path, 'evidence'));
+    if (folder.existsSync()) {
+      await folder.delete(recursive: true);
+    }
+  }
+
   static EvidenceItem _toItem(EvidenceRow row) => EvidenceItem(
         id: row.id,
         taskId: row.taskId,

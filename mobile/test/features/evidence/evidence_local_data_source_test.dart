@@ -86,4 +86,22 @@ void main() {
     final files = Directory('${documents.path}/evidence/t1').listSync();
     expect(files, isEmpty);
   });
+
+  test('removing deletes the record and the file', () async {
+    final item = await evidence.addPhoto(taskId: 't1', requirementId: 'r1', sourcePath: await pickedPhoto('a.jpg'));
+
+    await evidence.remove(item);
+
+    expect(await evidence.watchEvidence('t1').first, isEmpty);
+    expect(File(item.localPath).existsSync(), isFalse);
+  });
+
+  test('sign out deletes all evidence files', () async {
+    final item = await evidence.addPhoto(taskId: 't1', requirementId: 'r1', sourcePath: await pickedPhoto('a.jpg'));
+
+    await evidence.deleteAllFiles();
+
+    expect(File(item.localPath).existsSync(), isFalse);
+    expect(Directory('${documents.path}/evidence').existsSync(), isFalse);
+  });
 }

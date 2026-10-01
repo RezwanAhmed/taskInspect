@@ -26,14 +26,17 @@ class AuthInterceptor extends Interceptor {
   final Dio dio;
   final Duration refreshMargin;
   final TokenStorage _storage;
-  final TokenRefresher _refresher;
+
+  /// Looked up when first needed: the refresher itself calls the API
+  /// through the client this interceptor belongs to.
+  final TokenRefresher Function() _refresher;
   final void Function() _onSessionExpired;
   final DateTime Function() _now;
 
   static const _retried = 'auth_retried';
 
-  static bool _isAuthEndpoint(RequestOptions options) => options.path.startsWith('/api/auth/') &&
-      !options.path.startsWith('/api/auth/me');
+  static bool _isAuthEndpoint(RequestOptions options) =>
+      options.path.startsWith('/api/auth/') && !options.path.startsWith('/api/auth/me');
 
   @override
   Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
@@ -42,7 +45,7 @@ class AuthInterceptor extends Interceptor {
     }
     var tokens = await _storage.read();
     if (tokens != null && tokens.isAccessTokenExpired(_now().add(refreshMargin))) {
-      final outcome = await _refresher.refresh();
+      final outcome = await _refresher().refresh();
       if (outcome == RefreshOutcome.refused) {
         _onSessionExpired();
       }
@@ -60,7 +63,7 @@ class AuthInterceptor extends Interceptor {
     if (err.response?.statusCode != 401 || _isAuthEndpoint(options) || options.extra[_retried] == true) {
       return handler.next(err);
     }
-    switch (await _refresher.refresh()) {
+    switch (await _refresher().refresh()) {
       case RefreshOutcome.refreshed:
         final tokens = await _storage.read();
         options.extra[_retried] = true;

@@ -37,8 +37,9 @@ final GetIt getIt = GetIt.instance;
 
 /// Registers all dependencies. Called once in `main()` before the app starts.
 ///
-/// [config] can be given by tests; the app reads it from the build.
-Future<void> configureDependencies({AppConfig? config}) async {
+/// Tests can pass [config] and an in-memory [database]; the app reads the
+/// config from the build and opens its database file on the device.
+Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) async {
   await getIt.reset();
   getIt
     ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
@@ -48,7 +49,7 @@ Future<void> configureDependencies({AppConfig? config}) async {
         AuthInterceptor(
           dio: client.dio,
           storage: getIt(),
-          refresher: getIt(),
+          refresher: getIt.call<TokenRefresher>,
           onSessionExpired: () => getIt<AuthBloc>().add(const SessionExpired()),
         ),
       );
@@ -56,7 +57,7 @@ Future<void> configureDependencies({AppConfig? config}) async {
     })
     ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
     ..registerLazySingleton<AppDatabase>(
-      AppDatabase.new,
+      () => database ?? AppDatabase(),
       dispose: (database) => database.close(),
     )
     // Authentication
@@ -67,7 +68,13 @@ Future<void> configureDependencies({AppConfig? config}) async {
         getIt(),
         getIt(),
         getIt(),
-        clearLocalData: () => getIt<AppDatabase>().clearUserData(),
+        clearLocalData: () async {
+          await getIt<AppDatabase>().clearUserData();
+          final evidence = getIt<EvidenceRepository>();
+          if (evidence is EvidenceLocalDataSource) {
+            await evidence.deleteAllFiles();
+          }
+        },
       ),
     )
     ..registerFactory(() => Login(getIt()))

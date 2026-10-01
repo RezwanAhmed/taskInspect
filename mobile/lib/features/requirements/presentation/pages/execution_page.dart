@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/features/evidence/presentation/pages/evidence_preview_page.dart';
 import 'package:taskinspect/features/requirements/presentation/cubit/execution_cubit.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/comment_field.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/inputs/photo_input.dart';
@@ -136,6 +137,12 @@ class _ExecutionViewState extends State<_ExecutionView> {
                             photoPaths: [for (final photo in state.photosFor(requirement)) photo.localPath],
                             onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
                             onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
+                            onOpenPhoto: (photoIndex) async {
+                              final photo = state.photosFor(requirement)[photoIndex];
+                              if (await EvidencePreviewPage.show(context, photo)) {
+                                await cubit.removePhoto(photo);
+                              }
+                            },
                           )
                         : requirementInput(
                       requirement: requirement,

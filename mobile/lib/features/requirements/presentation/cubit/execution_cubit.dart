@@ -144,6 +144,9 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     }
   }
 
+  /// Removes a photo from the device.
+  Future<void> removePhoto(EvidenceItem item) => _evidence.remove(item);
+
   /// Completes when every answer so far is saved.
   Future<void> get saved => _saving;
 
