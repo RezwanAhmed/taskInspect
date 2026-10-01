@@ -94,6 +94,9 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  @override
+  Future<void> endExpiredSession() => _storage.clear();
+
   Future<AuthUser?> _readUser() async {
     final json = await _storage.readUserProfile();
     if (json == null) {

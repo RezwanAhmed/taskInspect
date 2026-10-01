@@ -5,6 +5,7 @@ import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
@@ -16,21 +17,27 @@ class _MockRestoreSession extends Mock implements RestoreSession {}
 
 class _MockLogout extends Mock implements Logout {}
 
+class _MockEndExpiredSession extends Mock implements EndExpiredSession {}
+
 const _user = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'Wendy', roles: {UserRole.worker});
 
 void main() {
   late _MockLogin login;
   late _MockRestoreSession restoreSession;
   late _MockLogout logout;
+  late _MockEndExpiredSession endExpiredSession;
 
   setUp(() {
     login = _MockLogin();
     restoreSession = _MockRestoreSession();
     logout = _MockLogout();
     when(() => logout()).thenAnswer((_) async {});
+    endExpiredSession = _MockEndExpiredSession();
+    when(() => endExpiredSession()).thenAnswer((_) async {});
   });
 
-  AuthBloc build() => AuthBloc(login: login, restoreSession: restoreSession, logout: logout);
+  AuthBloc build() =>
+      AuthBloc(login: login, restoreSession: restoreSession, logout: logout, endExpiredSession: endExpiredSession);
 
   void loginReturns(Result<AuthUser> result) {
     when(() => login(email: any(named: 'email'), password: any(named: 'password'))).thenAnswer((_) async => result);
@@ -108,10 +115,14 @@ void main() {
   );
 
   blocTest<AuthBloc, AuthState>(
-    'expired session logs out with a message',
+    'expired session asks to sign in again but keeps the data on the device',
     build: build,
     seed: () => const Authenticated(_user),
     act: (bloc) => bloc.add(const SessionExpired()),
     expect: () => [const Unauthenticated(errorMessage: 'Your session has expired. Please sign in again.')],
+    verify: (_) {
+      verify(() => endExpiredSession()).called(1);
+      verifyNever(() => logout());
+    },
   );
 }

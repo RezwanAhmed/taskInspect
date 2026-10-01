@@ -13,4 +13,9 @@ abstract interface class AuthRepository {
 
   /// Ends the session on the server (best effort) and on the device.
   Future<void> logout();
+
+  /// Removes the expired session from the device but keeps the user's data
+  /// and unsent changes, so synchronization goes on after they sign in
+  /// again (docs/architecture.md, "Retries and Errors").
+  Future<void> endExpiredSession();
 }

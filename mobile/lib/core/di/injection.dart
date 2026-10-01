@@ -15,6 +15,7 @@ import 'package:taskinspect/features/authentication/data/datasources/auth_remote
 import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
 import 'package:taskinspect/features/authentication/data/token_refresher.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
@@ -91,8 +92,9 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     ..registerFactory(() => Login(getIt()))
     ..registerFactory(() => RestoreSession(getIt()))
     ..registerFactory(() => Logout(getIt()))
+    ..registerFactory(() => EndExpiredSession(getIt()))
     ..registerLazySingleton(
-      () => AuthBloc(login: getIt(), restoreSession: getIt(), logout: getIt()),
+      () => AuthBloc(login: getIt(), restoreSession: getIt(), logout: getIt(), endExpiredSession: getIt()),
       dispose: (bloc) => bloc.close(),
     )
     // Tasks

@@ -150,4 +150,13 @@ void main() {
 
     expect(claimedBy, isEmpty);
   });
+
+  test('an expired session removes the tokens but keeps the local data', () async {
+    await loggedIn();
+
+    await repository.endExpiredSession();
+
+    expect(storage.tokens, isNull);
+    expect(clearedLocalData, 0);
+  });
 }

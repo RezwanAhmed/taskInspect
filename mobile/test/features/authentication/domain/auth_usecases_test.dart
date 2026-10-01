@@ -4,6 +4,7 @@ import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
+import 'package:taskinspect/features/authentication/domain/usecases/end_expired_session.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
@@ -13,6 +14,7 @@ const _worker = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'Wendy
 class _FakeRepository implements AuthRepository {
   String? loginEmail;
   bool loggedOut = false;
+  bool sessionEnded = false;
   AuthUser? saved = _worker;
 
   @override
@@ -26,6 +28,9 @@ class _FakeRepository implements AuthRepository {
 
   @override
   Future<void> logout() async => loggedOut = true;
+
+  @override
+  Future<void> endExpiredSession() async => sessionEnded = true;
 }
 
 void main() {
@@ -75,5 +80,12 @@ void main() {
         roles: {UserRole.manager, UserRole.worker});
     expect(solo.isManager && solo.isWorker, isTrue);
     expect(_worker.isManager, isFalse);
+  });
+
+  test('EndExpiredSession asks the repository', () async {
+    await EndExpiredSession(repository)();
+
+    expect(repository.sessionEnded, isTrue);
+    expect(repository.loggedOut, isFalse);
   });
 }
