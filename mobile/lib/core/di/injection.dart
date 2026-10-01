@@ -13,6 +13,8 @@ import 'package:taskinspect/features/authentication/domain/usecases/logout.dart'
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/evidence/data/image_picker_evidence_picker.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/requirements/data/local/answer_local_data_source.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
@@ -81,7 +83,8 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerFactory(() => WatchTasks(getIt()))
     ..registerFactory(() => WatchTaskDetails(getIt()))
     ..registerFactory(() => StartTask(getIt()))
-    // Answers
+    // Answers and evidence
+    ..registerLazySingleton<EvidencePicker>(ImagePickerEvidencePicker.new)
     ..registerLazySingleton<AnswerRepository>(
       () => AnswerLocalDataSource(getIt()),
     )

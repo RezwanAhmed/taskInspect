@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 class ExecutionState extends Equatable {
@@ -13,6 +15,7 @@ class ExecutionState extends Equatable {
     this.task,
     this.requirements = const [],
     this.answers = const {},
+    this.photos = const {},
     this.index = 0,
     this.isLoading = true,
   });
@@ -22,6 +25,9 @@ class ExecutionState extends Equatable {
 
   /// Answers by requirement ID.
   final Map<String, Answer> answers;
+
+  /// Photo file paths by requirement ID (stored on the device in task 5.15).
+  final Map<String, List<String>> photos;
 
   /// The requirement on screen.
   final int index;
@@ -35,7 +41,11 @@ class ExecutionState extends Equatable {
 
   Answer answerFor(Requirement requirement) => answers[requirement.id] ?? const Answer();
 
-  bool isComplete(Requirement requirement) => answerFor(requirement).completes(requirement);
+  List<String> photosFor(Requirement requirement) => photos[requirement.id] ?? const [];
+
+  bool isComplete(Requirement requirement) => requirement.type == RequirementType.photo
+      ? photosFor(requirement).isNotEmpty
+      : answerFor(requirement).completes(requirement);
 
   int get completedCount => requirements.where(isComplete).length;
 
@@ -43,6 +53,7 @@ class ExecutionState extends Equatable {
     Task? task,
     List<Requirement>? requirements,
     Map<String, Answer>? answers,
+    Map<String, List<String>>? photos,
     int? index,
     bool? isLoading,
   }) {
@@ -50,19 +61,20 @@ class ExecutionState extends Equatable {
       task: task ?? this.task,
       requirements: requirements ?? this.requirements,
       answers: answers ?? this.answers,
+      photos: photos ?? this.photos,
       index: index ?? this.index,
       isLoading: isLoading ?? this.isLoading,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, answers, index, isLoading];
+  List<Object?> get props => [task, requirements, answers, photos, index, isLoading];
 }
 
 /// Walks the worker through a task's requirements one at a time. Answers
 /// are saved on the device as they change.
 class ExecutionCubit extends Cubit<ExecutionState> {
-  ExecutionCubit(WatchTaskDetails watch, this._answers, this.taskId) : super(const ExecutionState()) {
+  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this.taskId) : super(const ExecutionState()) {
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: task)));
     // Saved answers are read once; after that this screen is the only one
     // changing them, so a slower write can never undo newer typing.
@@ -78,6 +90,7 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   }
 
   final AnswerRepository _answers;
+  final EvidencePicker _picker;
   final String taskId;
   Future<void> _saving = Future.value();
   late final StreamSubscription<Task?> _task;
@@ -97,6 +110,16 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     _saving = _saving.then(
       (_) => _answers.saveAnswer(taskId: taskId, requirementId: requirement.id, answer: changed),
     );
+  }
+
+  /// Takes a photo with the camera (or chooses one from the gallery) for a
+  /// PHOTO requirement. Nothing changes when the worker cancels.
+  Future<void> addPhoto(Requirement requirement, {required bool fromCamera}) async {
+    final path = fromCamera ? await _picker.takePhoto() : await _picker.chooseFromGallery();
+    if (path == null || isClosed) {
+      return;
+    }
+    emit(state.copyWith(photos: {...state.photos, requirement.id: [...state.photosFor(requirement), path]}));
   }
 
   /// Completes when every answer so far is saved.

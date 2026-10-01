@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/features/requirements/presentation/cubit/execution_cubit.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/comment_field.dart';
+import 'package:taskinspect/features/requirements/presentation/widgets/inputs/photo_input.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_card.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_input.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -17,7 +18,7 @@ class ExecutionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ExecutionCubit(getIt(), getIt(), taskId),
+      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), taskId),
       child: const _ExecutionView(),
     );
   }
@@ -126,7 +127,13 @@ class _ExecutionViewState extends State<_ExecutionView> {
                             value: answer.comment,
                             onChanged: (text) => cubit.answer(requirement, (a) => a.copyWith(comment: () => text)),
                           ),
-                    input: requirementInput(
+                    input: requirement.type == RequirementType.photo
+                        ? PhotoInput(
+                            photoPaths: state.photosFor(requirement),
+                            onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
+                            onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
+                          )
+                        : requirementInput(
                       requirement: requirement,
                       answer: answer,
                       onChanged: (update) => cubit.answer(requirement, update),

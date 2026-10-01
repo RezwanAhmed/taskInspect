@@ -4,6 +4,7 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
@@ -118,9 +119,29 @@ class FakeAnswerRepository implements AnswerRepository {
   }
 }
 
+/// [EvidencePicker] for widget tests: returns the next queued path
+/// (`null` = the worker cancelled).
+class FakeEvidencePicker implements EvidencePicker {
+  final List<String?> next = [];
+  int cameraUses = 0;
+  int galleryUses = 0;
+
+  @override
+  Future<String?> takePhoto() async {
+    cameraUses++;
+    return next.isEmpty ? null : next.removeAt(0);
+  }
+
+  @override
+  Future<String?> chooseFromGallery() async {
+    galleryUses++;
+    return next.isEmpty ? null : next.removeAt(0);
+  }
+}
+
 /// Registers the task screens' dependencies with [repository] in the
 /// service locator, as the app does.
-void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? answers}) {
+void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? answers, FakeEvidencePicker? picker}) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
   }
@@ -131,6 +152,7 @@ void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? ans
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
+    () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
   ]) {
     unregister();
   }
@@ -139,5 +161,6 @@ void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? ans
     ..registerFactory(() => WatchTasks(repository))
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
-    ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository());
+    ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())
+    ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker());
 }

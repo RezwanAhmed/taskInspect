@@ -30,6 +30,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>TaskInspect uses the camera to take photos as evidence for inspection tasks.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TaskInspect lets you choose photos from your library as evidence for inspection tasks.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
