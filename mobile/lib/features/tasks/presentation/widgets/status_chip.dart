@@ -10,6 +10,7 @@ class StatusChip extends StatelessWidget {
 
   static String label(TaskStatus status) => switch (status) {
         TaskStatus.draft => 'Draft',
+        TaskStatus.open => 'Open',
         TaskStatus.assigned => 'Pending',
         TaskStatus.inProgress => 'In progress',
         TaskStatus.submitted => 'Submitted',
@@ -23,6 +24,7 @@ class StatusChip extends StatelessWidget {
     final colors = Theme.of(context).extension<StatusColors>()!;
     return switch (status) {
       TaskStatus.draft => colors.draft,
+      TaskStatus.open => colors.open,
       TaskStatus.assigned => colors.assigned,
       TaskStatus.inProgress => colors.inProgress,
       TaskStatus.submitted => colors.submitted,

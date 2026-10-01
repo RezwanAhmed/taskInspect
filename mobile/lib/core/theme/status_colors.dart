@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 class StatusColors extends ThemeExtension<StatusColors> {
   const StatusColors({
     required this.draft,
+    required this.open,
     required this.assigned,
     required this.inProgress,
     required this.submitted,
@@ -17,6 +18,7 @@ class StatusColors extends ThemeExtension<StatusColors> {
 
   static const light = StatusColors(
     draft: Color(0xFF616161),
+    open: Color(0xFF00838F),
     assigned: Color(0xFF1565C0),
     inProgress: Color(0xFFB26A00),
     submitted: Color(0xFF6A1B9A),
@@ -28,6 +30,7 @@ class StatusColors extends ThemeExtension<StatusColors> {
 
   static const dark = StatusColors(
     draft: Color(0xFFBDBDBD),
+    open: Color(0xFF80DEEA),
     assigned: Color(0xFF90CAF9),
     inProgress: Color(0xFFFFCC80),
     submitted: Color(0xFFCE93D8),
@@ -38,6 +41,7 @@ class StatusColors extends ThemeExtension<StatusColors> {
   );
 
   final Color draft;
+  final Color open;
   final Color assigned;
   final Color inProgress;
   final Color submitted;
@@ -49,6 +53,7 @@ class StatusColors extends ThemeExtension<StatusColors> {
   @override
   StatusColors copyWith({
     Color? draft,
+    Color? open,
     Color? assigned,
     Color? inProgress,
     Color? submitted,
@@ -59,6 +64,7 @@ class StatusColors extends ThemeExtension<StatusColors> {
   }) {
     return StatusColors(
       draft: draft ?? this.draft,
+      open: open ?? this.open,
       assigned: assigned ?? this.assigned,
       inProgress: inProgress ?? this.inProgress,
       submitted: submitted ?? this.submitted,
@@ -76,6 +82,7 @@ class StatusColors extends ThemeExtension<StatusColors> {
     }
     return StatusColors(
       draft: Color.lerp(draft, other.draft, t)!,
+      open: Color.lerp(open, other.open, t)!,
       assigned: Color.lerp(assigned, other.assigned, t)!,
       inProgress: Color.lerp(inProgress, other.inProgress, t)!,
       submitted: Color.lerp(submitted, other.submitted, t)!,

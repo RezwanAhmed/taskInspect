@@ -40,6 +40,19 @@ void main() {
     expect(find.text('Draft'), findsNothing, reason: 'workers have no drafts');
   });
 
+  testWidgets('managers also see their drafts and open tasks', (tester) async {
+    registerFakeTasks(FakeTaskRepository([
+      fakeTask('1', status: TaskStatus.draft),
+      fakeTask('2', status: TaskStatus.open),
+      fakeTask('3', status: TaskStatus.open),
+    ]));
+    await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testManager))));
+    await tester.pumpAndSettle();
+
+    expect(countOn(tester, 'Draft'), 1);
+    expect(countOn(tester, 'Open'), 2);
+  });
+
   testWidgets('offline shows a message with retry', (tester) async {
     final tasks = FakeTaskRepository([fakeTask('1')])..refreshFailure = const NetworkFailure();
     await open(tester, tasks);

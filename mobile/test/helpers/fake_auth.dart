@@ -12,6 +12,7 @@ import 'package:taskinspect/features/authentication/domain/usecases/restore_sess
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 
 const testWorker = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'Wendy Worker', roles: {UserRole.worker});
+const testManager = AuthUser(id: 'm1', email: 'manager@example.com', fullName: 'Mia Manager', roles: {UserRole.manager});
 
 /// An [AuthRepository] for widget tests: one known user and password.
 class FakeAuthRepository implements AuthRepository {

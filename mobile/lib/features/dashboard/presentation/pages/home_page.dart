@@ -83,8 +83,10 @@ class _DashboardView extends StatelessWidget {
           }
           void open(TaskTab tab) => context.push(AppRoutes.tasksOn(tab));
           final tiles = <Widget>[
-            if (user?.isManager ?? false)
+            if (user?.isManager ?? false) ...[
               CountTile(label: 'Draft', count: state.count(TaskStatus.draft), color: colors.draft),
+              CountTile(label: 'Open', count: state.count(TaskStatus.open), color: colors.open),
+            ],
             CountTile(
               label: 'Pending',
               count: state.count(TaskStatus.assigned),

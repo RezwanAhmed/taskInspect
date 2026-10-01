@@ -1,6 +1,9 @@
 /// Task status, as in the backend's task lifecycle.
 enum TaskStatus {
   draft('DRAFT'),
+
+  /// Published without an assignee; a worker may take it (Phase 7A).
+  open('OPEN'),
   assigned('ASSIGNED'),
   inProgress('IN_PROGRESS'),
   submitted('SUBMITTED'),
