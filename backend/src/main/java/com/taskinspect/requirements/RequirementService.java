@@ -47,6 +47,12 @@ public class RequirementService {
                         "Requirement not found"));
     }
 
+    /** The requirements of a task, for callers that have already checked access to it. */
+    @Transactional(readOnly = true)
+    public List<Requirement> listForTask(UUID taskId) {
+        return requirementRepository.findAllByTaskIdOrderByPosition(taskId);
+    }
+
     /** How many requirements a task has, e.g. to check that it can be assigned. */
     @Transactional(readOnly = true)
     public long count(UUID taskId) {

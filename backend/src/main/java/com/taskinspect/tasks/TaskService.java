@@ -13,6 +13,7 @@ import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.tasks.dto.CreateTaskRequest;
 import com.taskinspect.tasks.dto.UpdateTaskRequest;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import com.taskinspect.users.RoleName;
 import com.taskinspect.users.User;
@@ -142,12 +143,21 @@ public class TaskService {
      */
     @Transactional(readOnly = true)
     public Page<Task> list(CurrentUser caller, TaskFilter filter, Pageable pageable) {
-        User user = userService.requireCaller(caller);
-        Specification<Task> visible = canSeeAllTasks(user)
-                ? inOrganization(user.getOrganization().getId())
-                : Specification.allOf(inOrganization(user.getOrganization().getId()), assignedTo(user.getId()));
+        Specification<Task> visible = visibleTo(userService.requireCaller(caller));
         return taskRepository.findAll(Specification.allOf(visible, hasStatus(filter.status()),
                 hasPriority(filter.priority()), dueFrom(filter.dueFrom()), dueBefore(filter.dueBefore())), pageable);
+    }
+
+    /** Every task the caller may see (same rules as {@link #list}), e.g. for the sync pull. */
+    @Transactional(readOnly = true)
+    public List<Task> listVisible(CurrentUser caller) {
+        return taskRepository.findAll(visibleTo(userService.requireCaller(caller)));
+    }
+
+    private static Specification<Task> visibleTo(User user) {
+        return canSeeAllTasks(user)
+                ? inOrganization(user.getOrganization().getId())
+                : Specification.allOf(inOrganization(user.getOrganization().getId()), assignedTo(user.getId()));
     }
 
     /** One task the caller may see; 404 for tasks that don't exist or aren't visible. */

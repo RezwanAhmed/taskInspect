@@ -1,6 +1,7 @@
 package com.taskinspect.tasks;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -25,6 +26,10 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
     @Override
     @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
     Page<Task> findAll(Specification<Task> spec, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
+    List<Task> findAll(Specification<Task> spec);
 
     /**
      * Sets {@code updatedAt} without a new version, e.g. when a requirement
