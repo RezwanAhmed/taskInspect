@@ -48,11 +48,12 @@ public class SubmissionService {
     private final ResponseRepository responseRepository;
     private final EvidenceRepository evidenceRepository;
     private final UserService userService;
+    private final ReviewRepository reviewRepository;
 
     public SubmissionService(TaskService taskService, TaskStateMachine stateMachine,
             TaskTransitionService transitions, TaskRepository taskRepository,
             RequirementRepository requirementRepository, ResponseRepository responseRepository,
-            EvidenceRepository evidenceRepository, UserService userService) {
+            EvidenceRepository evidenceRepository, UserService userService, ReviewRepository reviewRepository) {
         this.taskService = taskService;
         this.stateMachine = stateMachine;
         this.transitions = transitions;
@@ -61,6 +62,7 @@ public class SubmissionService {
         this.responseRepository = responseRepository;
         this.evidenceRepository = evidenceRepository;
         this.userService = userService;
+        this.reviewRepository = reviewRepository;
     }
 
     @Transactional
@@ -93,7 +95,9 @@ public class SubmissionService {
                     missing);
         }
 
-        transitions.apply(task, TaskAction.SUBMIT, userService.requireCaller(caller), null);
+        // After a reject or a correction request the history shows the resubmit.
+        String reason = reviewRepository.existsByTaskId(task.getId()) ? "Resubmitted" : null;
+        transitions.apply(task, TaskAction.SUBMIT, userService.requireCaller(caller), reason);
         return taskRepository.saveAndFlush(task);
     }
 

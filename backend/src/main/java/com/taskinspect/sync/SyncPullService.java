@@ -3,6 +3,8 @@ package com.taskinspect.sync;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.requirements.RequirementService;
 import com.taskinspect.requirements.dto.RequirementResponse;
+import com.taskinspect.reviews.ReviewRepository;
+import com.taskinspect.reviews.dto.ReviewResponse;
 import com.taskinspect.sync.dto.SyncPullResponse;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskService;
@@ -31,11 +33,14 @@ public class SyncPullService {
 
     private final TaskService taskService;
     private final RequirementService requirementService;
+    private final ReviewRepository reviewRepository;
     private final Clock clock;
 
-    public SyncPullService(TaskService taskService, RequirementService requirementService, Clock clock) {
+    public SyncPullService(TaskService taskService, RequirementService requirementService,
+            ReviewRepository reviewRepository, Clock clock) {
         this.taskService = taskService;
         this.requirementService = requirementService;
+        this.reviewRepository = reviewRepository;
         this.clock = clock;
     }
 
@@ -48,7 +53,9 @@ public class SyncPullService {
         List<SyncPullResponse.PulledTask> changed = visible.stream()
                 .filter(task -> from == null || !task.getUpdatedAt().isBefore(from))
                 .map(task -> new SyncPullResponse.PulledTask(TaskResponse.from(task),
-                        requirementService.listForTask(task.getId()).stream().map(RequirementResponse::from).toList()))
+                        requirementService.listForTask(task.getId()).stream().map(RequirementResponse::from).toList(),
+                        reviewRepository.findFirstByTaskIdOrderByCreatedAtDescIdDesc(task.getId())
+                                .map(ReviewResponse::from).orElse(null)))
                 .toList();
         return new SyncPullResponse(cursor, visible.stream().map(Task::getId).toList(), changed);
     }
