@@ -489,6 +489,8 @@ matters, ownership in the service. Tasks a user may not see answer
 | `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
 | `POST /api/tasks/{id}/submit` | The assigned worker, while IN_PROGRESS; every required requirement answered (files uploaded) | `403` / `404` |
+| `POST /api/tasks/{id}/approve`, `…/reject`, `…/request-correction` | The task's reviewer (a manager), while SUBMITTED; never the task's worker, except a personal task a manager assigned to themself | `403` / `404` |
+| `GET /api/tasks/{id}/reviews` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/requirements/{rid}/evidence`, `POST …/evidence/{eid}/upload-url`, `POST …/evidence/{eid}/complete`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
 | `GET /api/tasks/{id}/evidence/{eid}/download-url` | Anyone who can see the task | `404` |
 | `PUT/GET /api/files/…` (local file storage only) | Anyone with a valid signed URL from the endpoints above | `403` |

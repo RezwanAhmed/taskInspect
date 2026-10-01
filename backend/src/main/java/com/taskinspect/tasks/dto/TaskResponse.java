@@ -32,7 +32,7 @@ public record TaskResponse(
     /** A short reference to a user. */
     public record UserRef(UUID id, String fullName) {
 
-        static UserRef from(User user) {
+        public static UserRef from(User user) {
             return user == null ? null : new UserRef(user.getId(), user.getFullName());
         }
 

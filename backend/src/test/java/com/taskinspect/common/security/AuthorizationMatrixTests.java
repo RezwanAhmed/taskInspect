@@ -97,6 +97,18 @@ class AuthorizationMatrixTests {
     // which shows the call was allowed.
     private static final Endpoint SUBMIT = new Endpoint("POST /api/tasks/{id}/submit", TaskStatus.IN_PROGRESS,
             (f, a) -> post("/api/tasks/{id}/submit", f.task().getId()));
+    private static final Endpoint APPROVE = new Endpoint("POST /api/tasks/{id}/approve", TaskStatus.SUBMITTED,
+            (f, a) -> post("/api/tasks/{id}/approve", f.task().getId()));
+    private static final Endpoint REJECT = new Endpoint("POST /api/tasks/{id}/reject", TaskStatus.SUBMITTED,
+            (f, a) -> post("/api/tasks/{id}/reject", f.task().getId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"reason\": \"Wrong room\"}"));
+    private static final Endpoint REQUEST_CORRECTION = new Endpoint("POST /api/tasks/{id}/request-correction",
+            TaskStatus.SUBMITTED, (f, a) -> post("/api/tasks/{id}/request-correction", f.task().getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"requirements\": [{\"requirementId\": \"" + f.requirement().getId()
+                            + "\", \"comment\": \"Fix\"}]}"));
+    private static final Endpoint LIST_REVIEWS = new Endpoint("GET /api/tasks/{id}/reviews", TaskStatus.SUBMITTED,
+            (f, a) -> get("/api/tasks/{id}/reviews", f.task().getId()));
     private static final Endpoint LIST_RESPONSES = new Endpoint("GET /api/tasks/{id}/responses",
             TaskStatus.IN_PROGRESS, (f, a) -> get("/api/tasks/{id}/responses", f.task().getId()));
 
@@ -113,6 +125,10 @@ class AuthorizationMatrixTests {
                 row(START, 401, 403, 403, 403, 200, 404),
                 row(ANSWER, 401, 403, 403, 403, 200, 404),
                 row(SUBMIT, 401, 403, 403, 403, 409, 404),
+                row(APPROVE, 401, 403, 200, 403, 403, 403),
+                row(REJECT, 401, 403, 200, 403, 403, 403),
+                row(REQUEST_CORRECTION, 401, 403, 200, 403, 403, 403),
+                row(LIST_REVIEWS, 401, 200, 200, 200, 200, 404),
                 row(LIST_RESPONSES, 401, 200, 200, 200, 200, 404))
                 .flatMap(Function.identity());
     }
@@ -189,8 +205,11 @@ class AuthorizationMatrixTests {
             TaskFixtures.assign(task, users.get(Actor.ASSIGNED_WORKER));
             stateMachine.apply(task, TaskAction.ASSIGN);
         }
-        if (wanted == TaskStatus.IN_PROGRESS) {
+        if (wanted == TaskStatus.IN_PROGRESS || wanted == TaskStatus.SUBMITTED) {
             stateMachine.apply(task, TaskAction.START);
+        }
+        if (wanted == TaskStatus.SUBMITTED) {
+            stateMachine.apply(task, TaskAction.SUBMIT);
         }
         return new Fixture(users, taskRepository.save(task), requirement);
     }
