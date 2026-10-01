@@ -12,16 +12,30 @@ import 'package:taskinspect/features/authentication/domain/repositories/auth_rep
 /// the user's profile) is kept on the device, so a logged-in worker can
 /// open the app and keep working without a connection.
 class AuthRepositoryImpl implements AuthRepository {
-  AuthRepositoryImpl(this._remote, this._storage, this._refresher, {DateTime Function()? now})
-      : _now = now ?? DateTime.now;
+  AuthRepositoryImpl(
+    this._remote,
+    this._storage,
+    this._refresher, {
+    DateTime Function()? now,
+    Future<void> Function()? clearLocalData,
+  }) : _now = now ?? DateTime.now,
+       _clearLocalData = clearLocalData ?? _nothing;
 
   final AuthRemoteDataSource _remote;
   final TokenStorage _storage;
   final TokenRefresher _refresher;
   final DateTime Function() _now;
 
+  /// Removes the user's data from the device at sign out.
+  final Future<void> Function() _clearLocalData;
+
+  static Future<void> _nothing() async {}
+
   @override
-  Future<Result<AuthUser>> login({required String email, required String password}) async {
+  Future<Result<AuthUser>> login({
+    required String email,
+    required String password,
+  }) async {
     final result = await _remote.login(email: email, password: password);
     switch (result) {
       case Ok(:final value):
@@ -58,6 +72,8 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> logout() async {
     final tokens = await _storage.read();
     await _storage.clear();
+    // TODO(phase-6): warn before signing out when answers are not synced yet.
+    await _clearLocalData();
     if (tokens != null) {
       // Best effort: the token is already gone from the device.
       await _remote.logout(tokens.refreshToken);

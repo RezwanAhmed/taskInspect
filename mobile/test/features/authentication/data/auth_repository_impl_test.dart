@@ -31,6 +31,7 @@ void main() {
   late InMemoryTokenStorage storage;
   late DateTime now;
   late AuthRepositoryImpl repository;
+  late int clearedLocalData;
 
   setUp(() {
     final api = ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://api.test'));
@@ -38,7 +39,9 @@ void main() {
     storage = InMemoryTokenStorage();
     now = DateTime.utc(2026, 10, 1, 9);
     final remote = AuthRemoteDataSource(api);
-    repository = AuthRepositoryImpl(remote, storage, TokenRefresher(remote, storage), now: () => now);
+    clearedLocalData = 0;
+    repository = AuthRepositoryImpl(remote, storage, TokenRefresher(remote, storage),
+        now: () => now, clearLocalData: () async => clearedLocalData++);
   });
 
   Future<void> loggedIn() async {
@@ -123,5 +126,6 @@ void main() {
 
     expect(storage.tokens, isNull);
     expect(serverCalled, isTrue);
+    expect(clearedLocalData, 1, reason: 'the user\'s tasks and answers are removed from the device');
   });
 }

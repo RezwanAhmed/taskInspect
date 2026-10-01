@@ -49,4 +49,18 @@ void main() {
     final version = await old.customSelect('PRAGMA user_version').getSingle();
     expect(version.read<int>('user_version'), 3);
   });
+
+  test('clearUserData removes every row', () async {
+    await database.customStatement(
+        "INSERT INTO local_tasks VALUES ('t1', 'Kitchen', NULL, 'HIGH', 'ASSIGNED', 0, 'm', 'M', 'm', 'M', NULL, NULL, 1, 0)");
+    await database.customStatement(
+        "INSERT INTO local_requirements VALUES ('r1', 't1', 'Ok?', NULL, 'YES_NO', 1, 0, NULL)");
+
+    await database.clearUserData();
+
+    for (final table in ['local_tasks', 'local_requirements', 'local_responses']) {
+      final count = await database.customSelect('SELECT COUNT(*) AS c FROM $table').getSingle();
+      expect(count.read<int>('c'), 0, reason: table);
+    }
+  });
 }

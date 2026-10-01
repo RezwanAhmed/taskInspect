@@ -37,5 +37,15 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
+  /// Deletes all user data (tasks, requirements, answers), e.g. at sign
+  /// out, so the next user of the device cannot see it.
+  Future<void> clearUserData() {
+    return transaction(() async {
+      for (final table in allTables.toList().reversed) {
+        await delete(table).go();
+      }
+    });
+  }
+
   static QueryExecutor _openDefault() => driftDatabase(name: 'taskinspect');
 }

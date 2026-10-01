@@ -38,20 +38,32 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
     ..registerLazySingleton<ApiClient>(() {
       final client = ApiClient.forConfig(getIt<AppConfig>());
-      client.dio.interceptors.add(AuthInterceptor(
-        dio: client.dio,
-        storage: getIt(),
-        refresher: getIt(),
-        onSessionExpired: () => getIt<AuthBloc>().add(const SessionExpired()),
-      ));
+      client.dio.interceptors.add(
+        AuthInterceptor(
+          dio: client.dio,
+          storage: getIt(),
+          refresher: getIt(),
+          onSessionExpired: () => getIt<AuthBloc>().add(const SessionExpired()),
+        ),
+      );
       return client;
     })
     ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
-    ..registerLazySingleton<AppDatabase>(AppDatabase.new, dispose: (database) => database.close())
+    ..registerLazySingleton<AppDatabase>(
+      AppDatabase.new,
+      dispose: (database) => database.close(),
+    )
     // Authentication
     ..registerLazySingleton(() => AuthRemoteDataSource(getIt<ApiClient>()))
     ..registerLazySingleton(() => TokenRefresher(getIt(), getIt()))
-    ..registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(getIt(), getIt(), getIt()))
+    ..registerLazySingleton<AuthRepository>(
+      () => AuthRepositoryImpl(
+        getIt(),
+        getIt(),
+        getIt(),
+        clearLocalData: () => getIt<AppDatabase>().clearUserData(),
+      ),
+    )
     ..registerFactory(() => Login(getIt()))
     ..registerFactory(() => RestoreSession(getIt()))
     ..registerFactory(() => Logout(getIt()))
@@ -62,13 +74,17 @@ Future<void> configureDependencies({AppConfig? config}) async {
     // Tasks
     ..registerLazySingleton(() => TaskLocalDataSource(getIt()))
     ..registerLazySingleton(() => TaskRemoteDataSource(getIt()))
-    ..registerLazySingleton<TaskRepository>(() => TaskRepositoryImpl(getIt(), getIt()))
+    ..registerLazySingleton<TaskRepository>(
+      () => TaskRepositoryImpl(getIt(), getIt()),
+    )
     ..registerFactory(() => RefreshTasks(getIt()))
     ..registerFactory(() => WatchTasks(getIt()))
     ..registerFactory(() => WatchTaskDetails(getIt()))
     ..registerFactory(() => StartTask(getIt()))
     // Answers
-    ..registerLazySingleton<AnswerRepository>(() => AnswerLocalDataSource(getIt()))
+    ..registerLazySingleton<AnswerRepository>(
+      () => AnswerLocalDataSource(getIt()),
+    )
     // Dashboard
     ..registerFactory(() => DashboardCubit(getIt(), getIt()));
 }
