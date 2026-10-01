@@ -73,3 +73,14 @@ reports), through a new *Document (PDF)* requirement type.
 - PDFs follow the same path as photos: local file, upload queue,
   pre-signed upload to S3, metadata in the `evidence` table, and
   pre-signed download URLs for reviewers.
+
+**2026-10-01** — Local file storage built (task 5.17b). The backend's
+`filestorage` module has a `FileStorage` interface (upload URL, download
+URL, stored size, delete). Until the S3 implementation (task 8.2), a
+local implementation stores files in a folder (`STORAGE_LOCAL_DIR`) and
+issues its own signed, time-limited URLs (`/api/files/...`, HMAC
+signature, 10 minutes) that behave like S3 pre-signed URLs: no login,
+fixed content type, maximum size. The app therefore uses the same
+upload flow for both: register -> upload URL -> `PUT` the file ->
+complete (the backend checks the stored size) -> download URL for
+viewing.

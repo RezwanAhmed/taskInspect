@@ -1,13 +1,18 @@
 package com.taskinspect.evidence;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.taskinspect.TestcontainersConfiguration;
 import com.taskinspect.auth.JwtService;
+import com.taskinspect.filestorage.FileStorage;
 import com.taskinspect.requirements.Requirement;
 import com.taskinspect.requirements.RequirementRepository;
 import com.taskinspect.requirements.RequirementType;
@@ -22,6 +27,8 @@ import com.taskinspect.users.RoleName;
 import com.taskinspect.users.RoleRepository;
 import com.taskinspect.users.User;
 import com.taskinspect.users.UserRepository;
+import com.jayway.jsonpath.JsonPath;
+import java.net.URI;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.UUID;
@@ -67,6 +74,9 @@ class EvidenceApiTests {
 
     @Autowired
     private OrganizationRepository organizationRepository;
+
+    @Autowired
+    private FileStorage fileStorage;
 
     private User manager;
     private User worker;
@@ -190,6 +200,92 @@ class EvidenceApiTests {
                 .andExpect(jsonPath("$.code").value("EVIDENCE_NOT_FOUND"));
         mockMvc.perform(as(worker, get("/api/tasks/{t}/evidence", task.getId())))
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void fileIsUploadedConfirmedAndDownloaded() throws Exception {
+        UUID id = UUID.randomUUID();
+        byte[] file = "%PDF-1.7 fake report".getBytes();
+        register(document, id, "report.pdf", "application/pdf", file.length).andExpect(status().isCreated());
+
+        String upload = mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/upload-url", task.getId(), id)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.method").value("PUT"))
+                .andExpect(jsonPath("$.headers.Content-Type").value("application/pdf"))
+                .andReturn().getResponse().getContentAsString();
+        String uploadUrl = JsonPath.read(upload, "$.url");
+
+        mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/complete", task.getId(), id)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("UPLOAD_INCOMPLETE"));
+
+        // No Authorization header: the signed URL is the permission
+        mockMvc.perform(put(URI.create(uploadUrl)).contentType("application/pdf").content(file))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/complete", task.getId(), id)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UPLOADED"))
+                .andExpect(jsonPath("$.uploadedAt").isNotEmpty());
+        mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/complete", task.getId(), id)))
+                .andExpect(status().isOk());
+        mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/upload-url", task.getId(), id)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EVIDENCE_ALREADY_UPLOADED"));
+
+        String download = mockMvc.perform(as(manager,
+                        get("/api/tasks/{t}/evidence/{e}/download-url", task.getId(), id)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        mockMvc.perform(get(URI.create(JsonPath.read(download, "$.url"))))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(content().bytes(file));
+    }
+
+    @Test
+    void signedUrlsCannotBeMisused() throws Exception {
+        UUID id = UUID.randomUUID();
+        register(photo, id, "fridge.jpg", "image/jpeg", 10).andExpect(status().isCreated());
+        String upload = mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/upload-url", task.getId(), id)))
+                .andReturn().getResponse().getContentAsString();
+        String uploadUrl = JsonPath.read(upload, "$.url");
+
+        mockMvc.perform(put(URI.create(uploadUrl)).contentType("image/png").content(new byte[10]))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("INVALID_SIGNATURE"));
+        mockMvc.perform(put(URI.create(uploadUrl.replace("maxBytes=10", "maxBytes=99")))
+                        .contentType("image/jpeg").content(new byte[10]))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put(URI.create(uploadUrl.substring(0, uploadUrl.indexOf('?'))))
+                        .contentType("image/jpeg").content(new byte[10]))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put(URI.create(uploadUrl)).contentType("image/jpeg").content(new byte[11]))
+                .andExpect(status().is(413))
+                .andExpect(jsonPath("$.code").value("FILE_TOO_LARGE"));
+        // The upload URL does not work for downloading
+        mockMvc.perform(get(URI.create(uploadUrl))).andExpect(status().isForbidden());
+
+        mockMvc.perform(as(manager, get("/api/tasks/{t}/evidence/{e}/download-url", task.getId(), id)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EVIDENCE_NOT_UPLOADED"));
+    }
+
+    @Test
+    void deletingEvidenceDeletesTheStoredFile() throws Exception {
+        UUID id = UUID.randomUUID();
+        register(photo, id, "fridge.jpg", "image/jpeg", 3).andExpect(status().isCreated());
+        String upload = mockMvc.perform(as(worker, post("/api/tasks/{t}/evidence/{e}/upload-url", task.getId(), id)))
+                .andReturn().getResponse().getContentAsString();
+        mockMvc.perform(put(URI.create(JsonPath.read(upload, "$.url"))).contentType("image/jpeg")
+                .content(new byte[] {1, 2, 3})).andExpect(status().isOk());
+        String key = "tasks/" + task.getId() + "/" + id + ".jpg";
+        assertThat(fileStorage.size(key)).hasValue(3);
+
+        mockMvc.perform(as(worker, delete("/api/tasks/{t}/evidence/{e}", task.getId(), id)))
+                .andExpect(status().isNoContent());
+
+        assertThat(fileStorage.size(key)).isEmpty();
     }
 
     private ResultActions register(Requirement requirement, UUID id, String fileName, String type, long size)

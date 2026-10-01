@@ -5,6 +5,7 @@ import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.common.security.Roles;
 import com.taskinspect.evidence.dto.EvidenceResponse;
 import com.taskinspect.evidence.dto.RegisterEvidenceRequest;
+import com.taskinspect.evidence.dto.SignedUrlResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -58,6 +59,32 @@ public class EvidenceController {
         return registration.created()
                 ? ResponseEntity.created(URI.create("/api/tasks/" + taskId + "/evidence/" + body.id())).body(body)
                 : ResponseEntity.ok(body);
+    }
+
+    @PostMapping("/evidence/{evidenceId}/upload-url")
+    @PreAuthorize(Roles.WORKER)
+    @Operation(summary = "Get a URL for uploading the file",
+            description = "The assigned worker, while IN_PROGRESS. Upload the file with the returned method and "
+                    + "headers (no Authorization header) before the URL expires, then call complete.")
+    public SignedUrlResponse uploadUrl(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID taskId,
+            @PathVariable UUID evidenceId) {
+        return SignedUrlResponse.from(evidenceService.uploadUrl(CurrentUser.from(jwt), taskId, evidenceId));
+    }
+
+    @PostMapping("/evidence/{evidenceId}/complete")
+    @PreAuthorize(Roles.WORKER)
+    @Operation(summary = "Confirm that the file was uploaded",
+            description = "Checks the stored file's size and marks the evidence UPLOADED; safe to send again.")
+    public EvidenceResponse complete(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID taskId,
+            @PathVariable UUID evidenceId) {
+        return EvidenceResponse.from(evidenceService.complete(CurrentUser.from(jwt), taskId, evidenceId));
+    }
+
+    @GetMapping("/evidence/{evidenceId}/download-url")
+    @Operation(summary = "Get a URL for viewing an uploaded file", description = "Anyone who can see the task.")
+    public SignedUrlResponse downloadUrl(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID taskId,
+            @PathVariable UUID evidenceId) {
+        return SignedUrlResponse.from(evidenceService.downloadUrl(CurrentUser.from(jwt), taskId, evidenceId));
     }
 
     @DeleteMapping("/evidence/{evidenceId}")

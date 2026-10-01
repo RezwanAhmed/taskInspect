@@ -488,10 +488,12 @@ matters, ownership in the service. Tasks a user may not see answer
 | `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
 | `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
-| `POST /api/tasks/{id}/requirements/{rid}/evidence`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
+| `POST /api/tasks/{id}/requirements/{rid}/evidence`, `POST …/evidence/{eid}/upload-url`, `POST …/evidence/{eid}/complete`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
+| `GET /api/tasks/{id}/evidence/{eid}/download-url` | Anyone who can see the task | `404` |
+| `PUT/GET /api/files/…` (local file storage only) | Anyone with a valid signed URL from the endpoints above | `403` |
 
 Without a valid access token every endpoint except login, refresh,
-logout, health checks and API docs answers `401`.
+logout, health checks, API docs and signed file URLs answers `401`.
 
 ### Cross-cutting Concerns
 

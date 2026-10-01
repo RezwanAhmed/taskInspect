@@ -16,7 +16,8 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 /**
  * Base security for the REST API: stateless (no sessions or cookies),
  * no form or basic login, secure response headers, and every endpoint
- * protected except health checks, API docs and the login endpoints.
+ * protected except health checks, API docs, the login endpoints and the
+ * signed file URLs of the local file storage.
  * Requests authenticate with a JWT access token
  * ({@code Authorization: Bearer <token>}); the token's roles become
  * authorities such as {@code ROLE_MANAGER}.
@@ -31,6 +32,8 @@ public class SecurityConfig {
         "/actuator/health", "/actuator/health/**", "/actuator/info",
         "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**",
         "/api/auth/login", "/api/auth/refresh", "/api/auth/logout",
+        // Local file storage: the signature in the URL is the permission
+        "/api/files/**",
         "/error"
     };
 

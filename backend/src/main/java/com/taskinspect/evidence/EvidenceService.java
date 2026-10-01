@@ -3,6 +3,8 @@ package com.taskinspect.evidence;
 import com.taskinspect.common.error.ApiException;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.evidence.dto.RegisterEvidenceRequest;
+import com.taskinspect.filestorage.FileStorage;
+import com.taskinspect.filestorage.SignedUrl;
 import com.taskinspect.requirements.Requirement;
 import com.taskinspect.requirements.RequirementService;
 import com.taskinspect.requirements.RequirementType;
@@ -10,14 +12,19 @@ import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskService;
 import com.taskinspect.tasks.TaskStatus;
 import com.taskinspect.users.UserService;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Evidence metadata. Only the assigned worker adds or removes evidence, and
@@ -32,6 +39,12 @@ public class EvidenceService {
     static final String EVIDENCE_LOCKED = "EVIDENCE_LOCKED";
     static final String EVIDENCE_ID_CONFLICT = "EVIDENCE_ID_CONFLICT";
     static final String EVIDENCE_NOT_FOUND = "EVIDENCE_NOT_FOUND";
+    static final String EVIDENCE_ALREADY_UPLOADED = "EVIDENCE_ALREADY_UPLOADED";
+    static final String UPLOAD_INCOMPLETE = "UPLOAD_INCOMPLETE";
+    static final String EVIDENCE_NOT_UPLOADED = "EVIDENCE_NOT_UPLOADED";
+
+    /** How long upload and download URLs work. */
+    static final Duration URL_VALIDITY = Duration.ofMinutes(10);
 
     /** Photos: JPEG or PNG, at most 10 MB (photos are compressed on the device). */
     static final long MAX_PHOTO_BYTES = 10L * 1024 * 1024;
@@ -50,13 +63,17 @@ public class EvidenceService {
     private final TaskService taskService;
     private final RequirementService requirementService;
     private final UserService userService;
+    private final FileStorage fileStorage;
+    private final Clock clock;
 
     public EvidenceService(EvidenceRepository evidenceRepository, TaskService taskService,
-            RequirementService requirementService, UserService userService) {
+            RequirementService requirementService, UserService userService, FileStorage fileStorage, Clock clock) {
         this.evidenceRepository = evidenceRepository;
         this.taskService = taskService;
         this.requirementService = requirementService;
         this.userService = userService;
+        this.fileStorage = fileStorage;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -109,14 +126,65 @@ public class EvidenceService {
         return new Registration(evidence, true);
     }
 
-    /** Removes evidence from the task (the stored file follows with file storage, task 5.17b). */
+    /** A signed URL for uploading the registered file (pre-signed S3 URL in production). */
+    @Transactional(readOnly = true)
+    public SignedUrl uploadUrl(CurrentUser caller, UUID taskId, UUID evidenceId) {
+        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        if (evidence.getStatus() == EvidenceStatus.UPLOADED) {
+            throw new ApiException(HttpStatus.CONFLICT, EVIDENCE_ALREADY_UPLOADED, "The file is already uploaded");
+        }
+        return fileStorage.uploadUrl(evidence.getStorageKey(), evidence.getContentType(), evidence.getSizeBytes(),
+                URL_VALIDITY);
+    }
+
+    /**
+     * Marks the evidence as uploaded after checking that the stored file has
+     * the registered size. Calling it again after success is harmless.
+     */
+    @Transactional
+    public Evidence complete(CurrentUser caller, UUID taskId, UUID evidenceId) {
+        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        if (evidence.getStatus() == EvidenceStatus.UPLOADED) {
+            return evidence;
+        }
+        OptionalLong stored = fileStorage.size(evidence.getStorageKey());
+        if (stored.isEmpty() || stored.getAsLong() != evidence.getSizeBytes()) {
+            throw new ApiException(HttpStatus.CONFLICT, UPLOAD_INCOMPLETE, stored.isEmpty()
+                    ? "The file has not been uploaded yet"
+                    : "The uploaded file has " + stored.getAsLong() + " bytes, registered " + evidence.getSizeBytes());
+        }
+        evidence.markUploaded(clock.instant());
+        return evidence;
+    }
+
+    /** A signed URL for viewing an uploaded file; for anyone who can see the task. */
+    @Transactional(readOnly = true)
+    public SignedUrl downloadUrl(CurrentUser caller, UUID taskId, UUID evidenceId) {
+        Evidence evidence = find(taskService.get(caller, taskId), evidenceId);
+        if (evidence.getStatus() != EvidenceStatus.UPLOADED) {
+            throw new ApiException(HttpStatus.CONFLICT, EVIDENCE_NOT_UPLOADED, "The file has not been uploaded yet");
+        }
+        return fileStorage.downloadUrl(evidence.getStorageKey(), URL_VALIDITY);
+    }
+
+    /** Removes evidence from the task; the stored file is deleted once the change is committed. */
     @Transactional
     public void delete(CurrentUser caller, UUID taskId, UUID evidenceId) {
-        Task task = requireWritable(caller, taskId);
-        Evidence evidence = evidenceRepository.findById(evidenceId)
+        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        evidenceRepository.delete(evidence);
+        String key = evidence.getStorageKey();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                fileStorage.delete(key);
+            }
+        });
+    }
+
+    private Evidence find(Task task, UUID evidenceId) {
+        return evidenceRepository.findById(evidenceId)
                 .filter(e -> e.getTask().getId().equals(task.getId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, EVIDENCE_NOT_FOUND, "Evidence not found"));
-        evidenceRepository.delete(evidence);
     }
 
     private Task requireWritable(CurrentUser caller, UUID taskId) {
