@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
@@ -16,6 +18,7 @@ class ExecutionState extends Equatable {
     this.requirements = const [],
     this.answers = const {},
     this.photos = const {},
+    this.photoError,
     this.index = 0,
     this.isLoading = true,
   });
@@ -26,8 +29,11 @@ class ExecutionState extends Equatable {
   /// Answers by requirement ID.
   final Map<String, Answer> answers;
 
-  /// Photo file paths by requirement ID (stored on the device in task 5.15).
-  final Map<String, List<String>> photos;
+  /// Evidence stored on the device, by requirement ID.
+  final Map<String, List<EvidenceItem>> photos;
+
+  /// Set when a photo could not be stored.
+  final String? photoError;
 
   /// The requirement on screen.
   final int index;
@@ -41,7 +47,7 @@ class ExecutionState extends Equatable {
 
   Answer answerFor(Requirement requirement) => answers[requirement.id] ?? const Answer();
 
-  List<String> photosFor(Requirement requirement) => photos[requirement.id] ?? const [];
+  List<EvidenceItem> photosFor(Requirement requirement) => photos[requirement.id] ?? const [];
 
   bool isComplete(Requirement requirement) => requirement.type == RequirementType.photo
       ? photosFor(requirement).isNotEmpty
@@ -53,7 +59,8 @@ class ExecutionState extends Equatable {
     Task? task,
     List<Requirement>? requirements,
     Map<String, Answer>? answers,
-    Map<String, List<String>>? photos,
+    Map<String, List<EvidenceItem>>? photos,
+    String? Function()? photoError,
     int? index,
     bool? isLoading,
   }) {
@@ -62,19 +69,22 @@ class ExecutionState extends Equatable {
       requirements: requirements ?? this.requirements,
       answers: answers ?? this.answers,
       photos: photos ?? this.photos,
+      photoError: photoError != null ? photoError() : this.photoError,
       index: index ?? this.index,
       isLoading: isLoading ?? this.isLoading,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, answers, photos, index, isLoading];
+  List<Object?> get props => [task, requirements, answers, photos, photoError, index, isLoading];
 }
 
 /// Walks the worker through a task's requirements one at a time. Answers
 /// are saved on the device as they change.
 class ExecutionCubit extends Cubit<ExecutionState> {
-  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this.taskId) : super(const ExecutionState()) {
+  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this._evidence, this.taskId)
+      : super(const ExecutionState()) {
+    _evidenceSubscription = _evidence.watchEvidence(taskId).listen((photos) => emit(state.copyWith(photos: photos)));
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: task)));
     // Saved answers are read once; after that this screen is the only one
     // changing them, so a slower write can never undo newer typing.
@@ -91,6 +101,8 @@ class ExecutionCubit extends Cubit<ExecutionState> {
 
   final AnswerRepository _answers;
   final EvidencePicker _picker;
+  final EvidenceRepository _evidence;
+  late final StreamSubscription<Map<String, List<EvidenceItem>>> _evidenceSubscription;
   final String taskId;
   Future<void> _saving = Future.value();
   late final StreamSubscription<Task?> _task;
@@ -119,7 +131,17 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     if (path == null || isClosed) {
       return;
     }
-    emit(state.copyWith(photos: {...state.photos, requirement.id: [...state.photosFor(requirement), path]}));
+    try {
+      // Stored and compressed on the device; the screen updates from the database.
+      await _evidence.addPhoto(taskId: taskId, requirementId: requirement.id, sourcePath: path);
+      if (!isClosed) {
+        emit(state.copyWith(photoError: () => null));
+      }
+    } on Object {
+      if (!isClosed) {
+        emit(state.copyWith(photoError: () => 'The photo could not be saved. Please try again.'));
+      }
+    }
   }
 
   /// Completes when every answer so far is saved.
@@ -132,6 +154,7 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   @override
   Future<void> close() async {
     await _saving;
+    await _evidenceSubscription.cancel();
     await _task.cancel();
     await _requirements.cancel();
     return super.close();

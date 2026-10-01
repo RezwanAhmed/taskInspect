@@ -4,7 +4,9 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
+import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
@@ -139,9 +141,69 @@ class FakeEvidencePicker implements EvidencePicker {
   }
 }
 
+/// In-memory [EvidenceRepository] for widget tests (no compression).
+class FakeEvidenceRepository implements EvidenceRepository {
+  final List<EvidenceItem> items = [];
+  final List<StreamController<Map<String, List<EvidenceItem>>>> _watchers = [];
+
+  /// When set, adding a photo fails with this.
+  Object? addError;
+
+  Map<String, List<EvidenceItem>> _of(String taskId) {
+    final byRequirement = <String, List<EvidenceItem>>{};
+    for (final item in items.where((i) => i.taskId == taskId)) {
+      (byRequirement[item.requirementId] ??= []).add(item);
+    }
+    return byRequirement;
+  }
+
+  @override
+  Stream<Map<String, List<EvidenceItem>>> watchEvidence(String taskId) {
+    late final StreamController<Map<String, List<EvidenceItem>>> controller;
+    controller = StreamController(
+      onListen: () {
+        _watchers.add(controller);
+        controller.add(_of(taskId));
+      },
+      onCancel: () => _watchers.remove(controller),
+    );
+    return controller.stream;
+  }
+
+  @override
+  Future<EvidenceItem> addPhoto({
+    required String taskId,
+    required String requirementId,
+    required String sourcePath,
+  }) async {
+    if (addError != null) {
+      throw addError!;
+    }
+    final item = EvidenceItem(
+      id: 'e${items.length + 1}',
+      taskId: taskId,
+      requirementId: requirementId,
+      localPath: sourcePath,
+      mimeType: 'image/jpeg',
+      sizeBytes: 100,
+      createdAt: DateTime.utc(2026, 10, 1),
+    );
+    items.add(item);
+    for (final watcher in _watchers) {
+      watcher.add(_of(taskId));
+    }
+    return item;
+  }
+}
+
 /// Registers the task screens' dependencies with [repository] in the
 /// service locator, as the app does.
-void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? answers, FakeEvidencePicker? picker}) {
+void registerFakeTasks(
+  FakeTaskRepository repository, {
+  FakeAnswerRepository? answers,
+  FakeEvidencePicker? picker,
+  FakeEvidenceRepository? evidence,
+}) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
   }
@@ -153,6 +215,7 @@ void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? ans
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
     () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
+    () => getIt.isRegistered<EvidenceRepository>() ? getIt.unregister<EvidenceRepository>() : null,
   ]) {
     unregister();
   }
@@ -162,5 +225,6 @@ void registerFakeTasks(FakeTaskRepository repository, {FakeAnswerRepository? ans
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())
-    ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker());
+    ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker())
+    ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository());
 }

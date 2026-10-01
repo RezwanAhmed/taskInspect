@@ -2267,6 +2267,532 @@ class LocalResponsesCompanion extends UpdateCompanion<ResponseRow> {
   }
 }
 
+class $LocalEvidenceTable extends LocalEvidence
+    with TableInfo<$LocalEvidenceTable, EvidenceRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalEvidenceTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_tasks (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _requirementIdMeta = const VerificationMeta(
+    'requirementId',
+  );
+  @override
+  late final GeneratedColumn<String> requirementId = GeneratedColumn<String>(
+    'requirement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_requirements (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _localPathMeta = const VerificationMeta(
+    'localPath',
+  );
+  @override
+  late final GeneratedColumn<String> localPath = GeneratedColumn<String>(
+    'local_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mimeTypeMeta = const VerificationMeta(
+    'mimeType',
+  );
+  @override
+  late final GeneratedColumn<String> mimeType = GeneratedColumn<String>(
+    'mime_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sizeBytesMeta = const VerificationMeta(
+    'sizeBytes',
+  );
+  @override
+  late final GeneratedColumn<int> sizeBytes = GeneratedColumn<int>(
+    'size_bytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _uploadStatusMeta = const VerificationMeta(
+    'uploadStatus',
+  );
+  @override
+  late final GeneratedColumn<String> uploadStatus = GeneratedColumn<String>(
+    'upload_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('PENDING'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    taskId,
+    requirementId,
+    localPath,
+    mimeType,
+    sizeBytes,
+    createdAt,
+    uploadStatus,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_evidence';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EvidenceRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('requirement_id')) {
+      context.handle(
+        _requirementIdMeta,
+        requirementId.isAcceptableOrUnknown(
+          data['requirement_id']!,
+          _requirementIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_requirementIdMeta);
+    }
+    if (data.containsKey('local_path')) {
+      context.handle(
+        _localPathMeta,
+        localPath.isAcceptableOrUnknown(data['local_path']!, _localPathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localPathMeta);
+    }
+    if (data.containsKey('mime_type')) {
+      context.handle(
+        _mimeTypeMeta,
+        mimeType.isAcceptableOrUnknown(data['mime_type']!, _mimeTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_mimeTypeMeta);
+    }
+    if (data.containsKey('size_bytes')) {
+      context.handle(
+        _sizeBytesMeta,
+        sizeBytes.isAcceptableOrUnknown(data['size_bytes']!, _sizeBytesMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sizeBytesMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('upload_status')) {
+      context.handle(
+        _uploadStatusMeta,
+        uploadStatus.isAcceptableOrUnknown(
+          data['upload_status']!,
+          _uploadStatusMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  EvidenceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EvidenceRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      requirementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}requirement_id'],
+      )!,
+      localPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_path'],
+      )!,
+      mimeType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mime_type'],
+      )!,
+      sizeBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}size_bytes'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      uploadStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}upload_status'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalEvidenceTable createAlias(String alias) {
+    return $LocalEvidenceTable(attachedDatabase, alias);
+  }
+}
+
+class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
+  final String id;
+  final String taskId;
+  final String requirementId;
+  final String localPath;
+  final String mimeType;
+  final int sizeBytes;
+  final DateTime createdAt;
+
+  /// PENDING until the file is uploaded, then UPLOADED.
+  final String uploadStatus;
+  const EvidenceRow({
+    required this.id,
+    required this.taskId,
+    required this.requirementId,
+    required this.localPath,
+    required this.mimeType,
+    required this.sizeBytes,
+    required this.createdAt,
+    required this.uploadStatus,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['task_id'] = Variable<String>(taskId);
+    map['requirement_id'] = Variable<String>(requirementId);
+    map['local_path'] = Variable<String>(localPath);
+    map['mime_type'] = Variable<String>(mimeType);
+    map['size_bytes'] = Variable<int>(sizeBytes);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['upload_status'] = Variable<String>(uploadStatus);
+    return map;
+  }
+
+  LocalEvidenceCompanion toCompanion(bool nullToAbsent) {
+    return LocalEvidenceCompanion(
+      id: Value(id),
+      taskId: Value(taskId),
+      requirementId: Value(requirementId),
+      localPath: Value(localPath),
+      mimeType: Value(mimeType),
+      sizeBytes: Value(sizeBytes),
+      createdAt: Value(createdAt),
+      uploadStatus: Value(uploadStatus),
+    );
+  }
+
+  factory EvidenceRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EvidenceRow(
+      id: serializer.fromJson<String>(json['id']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      requirementId: serializer.fromJson<String>(json['requirementId']),
+      localPath: serializer.fromJson<String>(json['localPath']),
+      mimeType: serializer.fromJson<String>(json['mimeType']),
+      sizeBytes: serializer.fromJson<int>(json['sizeBytes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      uploadStatus: serializer.fromJson<String>(json['uploadStatus']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'taskId': serializer.toJson<String>(taskId),
+      'requirementId': serializer.toJson<String>(requirementId),
+      'localPath': serializer.toJson<String>(localPath),
+      'mimeType': serializer.toJson<String>(mimeType),
+      'sizeBytes': serializer.toJson<int>(sizeBytes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'uploadStatus': serializer.toJson<String>(uploadStatus),
+    };
+  }
+
+  EvidenceRow copyWith({
+    String? id,
+    String? taskId,
+    String? requirementId,
+    String? localPath,
+    String? mimeType,
+    int? sizeBytes,
+    DateTime? createdAt,
+    String? uploadStatus,
+  }) => EvidenceRow(
+    id: id ?? this.id,
+    taskId: taskId ?? this.taskId,
+    requirementId: requirementId ?? this.requirementId,
+    localPath: localPath ?? this.localPath,
+    mimeType: mimeType ?? this.mimeType,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    createdAt: createdAt ?? this.createdAt,
+    uploadStatus: uploadStatus ?? this.uploadStatus,
+  );
+  EvidenceRow copyWithCompanion(LocalEvidenceCompanion data) {
+    return EvidenceRow(
+      id: data.id.present ? data.id.value : this.id,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      requirementId: data.requirementId.present
+          ? data.requirementId.value
+          : this.requirementId,
+      localPath: data.localPath.present ? data.localPath.value : this.localPath,
+      mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
+      sizeBytes: data.sizeBytes.present ? data.sizeBytes.value : this.sizeBytes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      uploadStatus: data.uploadStatus.present
+          ? data.uploadStatus.value
+          : this.uploadStatus,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EvidenceRow(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('requirementId: $requirementId, ')
+          ..write('localPath: $localPath, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('uploadStatus: $uploadStatus')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    taskId,
+    requirementId,
+    localPath,
+    mimeType,
+    sizeBytes,
+    createdAt,
+    uploadStatus,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EvidenceRow &&
+          other.id == this.id &&
+          other.taskId == this.taskId &&
+          other.requirementId == this.requirementId &&
+          other.localPath == this.localPath &&
+          other.mimeType == this.mimeType &&
+          other.sizeBytes == this.sizeBytes &&
+          other.createdAt == this.createdAt &&
+          other.uploadStatus == this.uploadStatus);
+}
+
+class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
+  final Value<String> id;
+  final Value<String> taskId;
+  final Value<String> requirementId;
+  final Value<String> localPath;
+  final Value<String> mimeType;
+  final Value<int> sizeBytes;
+  final Value<DateTime> createdAt;
+  final Value<String> uploadStatus;
+  final Value<int> rowid;
+  const LocalEvidenceCompanion({
+    this.id = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.requirementId = const Value.absent(),
+    this.localPath = const Value.absent(),
+    this.mimeType = const Value.absent(),
+    this.sizeBytes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.uploadStatus = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalEvidenceCompanion.insert({
+    required String id,
+    required String taskId,
+    required String requirementId,
+    required String localPath,
+    required String mimeType,
+    required int sizeBytes,
+    required DateTime createdAt,
+    this.uploadStatus = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       taskId = Value(taskId),
+       requirementId = Value(requirementId),
+       localPath = Value(localPath),
+       mimeType = Value(mimeType),
+       sizeBytes = Value(sizeBytes),
+       createdAt = Value(createdAt);
+  static Insertable<EvidenceRow> custom({
+    Expression<String>? id,
+    Expression<String>? taskId,
+    Expression<String>? requirementId,
+    Expression<String>? localPath,
+    Expression<String>? mimeType,
+    Expression<int>? sizeBytes,
+    Expression<DateTime>? createdAt,
+    Expression<String>? uploadStatus,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (taskId != null) 'task_id': taskId,
+      if (requirementId != null) 'requirement_id': requirementId,
+      if (localPath != null) 'local_path': localPath,
+      if (mimeType != null) 'mime_type': mimeType,
+      if (sizeBytes != null) 'size_bytes': sizeBytes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (uploadStatus != null) 'upload_status': uploadStatus,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalEvidenceCompanion copyWith({
+    Value<String>? id,
+    Value<String>? taskId,
+    Value<String>? requirementId,
+    Value<String>? localPath,
+    Value<String>? mimeType,
+    Value<int>? sizeBytes,
+    Value<DateTime>? createdAt,
+    Value<String>? uploadStatus,
+    Value<int>? rowid,
+  }) {
+    return LocalEvidenceCompanion(
+      id: id ?? this.id,
+      taskId: taskId ?? this.taskId,
+      requirementId: requirementId ?? this.requirementId,
+      localPath: localPath ?? this.localPath,
+      mimeType: mimeType ?? this.mimeType,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
+      createdAt: createdAt ?? this.createdAt,
+      uploadStatus: uploadStatus ?? this.uploadStatus,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (requirementId.present) {
+      map['requirement_id'] = Variable<String>(requirementId.value);
+    }
+    if (localPath.present) {
+      map['local_path'] = Variable<String>(localPath.value);
+    }
+    if (mimeType.present) {
+      map['mime_type'] = Variable<String>(mimeType.value);
+    }
+    if (sizeBytes.present) {
+      map['size_bytes'] = Variable<int>(sizeBytes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (uploadStatus.present) {
+      map['upload_status'] = Variable<String>(uploadStatus.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalEvidenceCompanion(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('requirementId: $requirementId, ')
+          ..write('localPath: $localPath, ')
+          ..write('mimeType: $mimeType, ')
+          ..write('sizeBytes: $sizeBytes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('uploadStatus: $uploadStatus, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2276,6 +2802,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalRequirementOptionsTable localRequirementOptions =
       $LocalRequirementOptionsTable(this);
   late final $LocalResponsesTable localResponses = $LocalResponsesTable(this);
+  late final $LocalEvidenceTable localEvidence = $LocalEvidenceTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2285,6 +2812,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localRequirements,
     localRequirementOptions,
     localResponses,
+    localEvidence,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -2317,6 +2845,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('local_responses', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_tasks',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_evidence', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_requirements',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_evidence', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -2394,6 +2936,24 @@ final class $$LocalTasksTableReferences
     ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_localResponsesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalEvidenceTable, List<EvidenceRow>>
+  _localEvidenceRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localEvidence,
+    aliasName: 'local_tasks__id__local_evidence__task_id',
+  );
+
+  $$LocalEvidenceTableProcessedTableManager get localEvidenceRefs {
+    final manager = $$LocalEvidenceTableTableManager(
+      $_db,
+      $_db.localEvidence,
+    ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_localEvidenceRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -2520,6 +3080,31 @@ class $$LocalTasksTableFilterComposer
           }) => $$LocalResponsesTableFilterComposer(
             $db: $db,
             $table: $db.localResponses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localEvidenceRefs(
+    Expression<bool> Function($$LocalEvidenceTableFilterComposer f) f,
+  ) {
+    final $$LocalEvidenceTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localEvidence,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalEvidenceTableFilterComposer(
+            $db: $db,
+            $table: $db.localEvidence,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -2725,6 +3310,31 @@ class $$LocalTasksTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> localEvidenceRefs<T extends Object>(
+    Expression<T> Function($$LocalEvidenceTableAnnotationComposer a) f,
+  ) {
+    final $$LocalEvidenceTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localEvidence,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalEvidenceTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localEvidence,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalTasksTableTableManager
@@ -2743,6 +3353,7 @@ class $$LocalTasksTableTableManager
           PrefetchHooks Function({
             bool localRequirementsRefs,
             bool localResponsesRefs,
+            bool localEvidenceRefs,
           })
         > {
   $$LocalTasksTableTableManager(_$AppDatabase db, $LocalTasksTable table)
@@ -2833,12 +3444,17 @@ class $$LocalTasksTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({localRequirementsRefs = false, localResponsesRefs = false}) {
+              ({
+                localRequirementsRefs = false,
+                localResponsesRefs = false,
+                localEvidenceRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (localRequirementsRefs) db.localRequirements,
                     if (localResponsesRefs) db.localResponses,
+                    if (localEvidenceRefs) db.localEvidence,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -2885,6 +3501,27 @@ class $$LocalTasksTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (localEvidenceRefs)
+                        await $_getPrefetchedData<
+                          TaskRow,
+                          $LocalTasksTable,
+                          EvidenceRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTasksTableReferences
+                              ._localEvidenceRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTasksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localEvidenceRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.taskId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -2908,6 +3545,7 @@ typedef $$LocalTasksTableProcessedTableManager =
       PrefetchHooks Function({
         bool localRequirementsRefs,
         bool localResponsesRefs,
+        bool localEvidenceRefs,
       })
     >;
 typedef $$LocalRequirementsTableCreateCompanionBuilder =
@@ -3000,6 +3638,24 @@ final class $$LocalRequirementsTableReferences
     ).filter((f) => f.requirementId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_localResponsesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalEvidenceTable, List<EvidenceRow>>
+  _localEvidenceRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localEvidence,
+    aliasName: 'local_requirements__id__local_evidence__requirement_id',
+  );
+
+  $$LocalEvidenceTableProcessedTableManager get localEvidenceRefs {
+    final manager = $$LocalEvidenceTableTableManager(
+      $_db,
+      $_db.localEvidence,
+    ).filter((f) => f.requirementId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_localEvidenceRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -3115,6 +3771,31 @@ class $$LocalRequirementsTableFilterComposer
           }) => $$LocalResponsesTableFilterComposer(
             $db: $db,
             $table: $db.localResponses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localEvidenceRefs(
+    Expression<bool> Function($$LocalEvidenceTableFilterComposer f) f,
+  ) {
+    final $$LocalEvidenceTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localEvidence,
+      getReferencedColumn: (t) => t.requirementId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalEvidenceTableFilterComposer(
+            $db: $db,
+            $table: $db.localEvidence,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3301,6 +3982,31 @@ class $$LocalRequirementsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> localEvidenceRefs<T extends Object>(
+    Expression<T> Function($$LocalEvidenceTableAnnotationComposer a) f,
+  ) {
+    final $$LocalEvidenceTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localEvidence,
+      getReferencedColumn: (t) => t.requirementId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalEvidenceTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localEvidence,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalRequirementsTableTableManager
@@ -3320,6 +4026,7 @@ class $$LocalRequirementsTableTableManager
             bool taskId,
             bool localRequirementOptionsRefs,
             bool localResponsesRefs,
+            bool localEvidenceRefs,
           })
         > {
   $$LocalRequirementsTableTableManager(
@@ -3395,12 +4102,14 @@ class $$LocalRequirementsTableTableManager
                 taskId = false,
                 localRequirementOptionsRefs = false,
                 localResponsesRefs = false,
+                localEvidenceRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (localRequirementOptionsRefs) db.localRequirementOptions,
                     if (localResponsesRefs) db.localResponses,
+                    if (localEvidenceRefs) db.localEvidence,
                   ],
                   addJoins:
                       <
@@ -3476,6 +4185,27 @@ class $$LocalRequirementsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (localEvidenceRefs)
+                        await $_getPrefetchedData<
+                          RequirementRow,
+                          $LocalRequirementsTable,
+                          EvidenceRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalRequirementsTableReferences
+                              ._localEvidenceRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalRequirementsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localEvidenceRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.requirementId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -3500,6 +4230,7 @@ typedef $$LocalRequirementsTableProcessedTableManager =
         bool taskId,
         bool localRequirementOptionsRefs,
         bool localResponsesRefs,
+        bool localEvidenceRefs,
       })
     >;
 typedef $$LocalRequirementOptionsTableCreateCompanionBuilder =
@@ -4317,6 +5048,470 @@ typedef $$LocalResponsesTableProcessedTableManager =
       ResponseRow,
       PrefetchHooks Function({bool requirementId, bool taskId})
     >;
+typedef $$LocalEvidenceTableCreateCompanionBuilder =
+    LocalEvidenceCompanion Function({
+      required String id,
+      required String taskId,
+      required String requirementId,
+      required String localPath,
+      required String mimeType,
+      required int sizeBytes,
+      required DateTime createdAt,
+      Value<String> uploadStatus,
+      Value<int> rowid,
+    });
+typedef $$LocalEvidenceTableUpdateCompanionBuilder =
+    LocalEvidenceCompanion Function({
+      Value<String> id,
+      Value<String> taskId,
+      Value<String> requirementId,
+      Value<String> localPath,
+      Value<String> mimeType,
+      Value<int> sizeBytes,
+      Value<DateTime> createdAt,
+      Value<String> uploadStatus,
+      Value<int> rowid,
+    });
+
+final class $$LocalEvidenceTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalEvidenceTable, EvidenceRow> {
+  $$LocalEvidenceTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalTasksTable _taskIdTable(_$AppDatabase db) =>
+      db.localTasks.createAlias('local_evidence__task_id__local_tasks__id');
+
+  $$LocalTasksTableProcessedTableManager get taskId {
+    final $_column = $_itemColumn<String>('task_id')!;
+
+    final manager = $$LocalTasksTableTableManager(
+      $_db,
+      $_db.localTasks,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_taskIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalRequirementsTable _requirementIdTable(_$AppDatabase db) => db
+      .localRequirements
+      .createAlias('local_evidence__requirement_id__local_requirements__id');
+
+  $$LocalRequirementsTableProcessedTableManager get requirementId {
+    final $_column = $_itemColumn<String>('requirement_id')!;
+
+    final manager = $$LocalRequirementsTableTableManager(
+      $_db,
+      $_db.localRequirements,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_requirementIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$LocalEvidenceTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalEvidenceTable> {
+  $$LocalEvidenceTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localPath => $composableBuilder(
+    column: $table.localPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uploadStatus => $composableBuilder(
+    column: $table.uploadStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LocalTasksTableFilterComposer get taskId {
+    final $$LocalTasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableFilterComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalRequirementsTableFilterComposer get requirementId {
+    final $$LocalRequirementsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requirementId,
+      referencedTable: $db.localRequirements,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalRequirementsTableFilterComposer(
+            $db: $db,
+            $table: $db.localRequirements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalEvidenceTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalEvidenceTable> {
+  $$LocalEvidenceTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localPath => $composableBuilder(
+    column: $table.localPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mimeType => $composableBuilder(
+    column: $table.mimeType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sizeBytes => $composableBuilder(
+    column: $table.sizeBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get uploadStatus => $composableBuilder(
+    column: $table.uploadStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LocalTasksTableOrderingComposer get taskId {
+    final $$LocalTasksTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableOrderingComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalRequirementsTableOrderingComposer get requirementId {
+    final $$LocalRequirementsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.requirementId,
+      referencedTable: $db.localRequirements,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalRequirementsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localRequirements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalEvidenceTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalEvidenceTable> {
+  $$LocalEvidenceTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get localPath =>
+      $composableBuilder(column: $table.localPath, builder: (column) => column);
+
+  GeneratedColumn<String> get mimeType =>
+      $composableBuilder(column: $table.mimeType, builder: (column) => column);
+
+  GeneratedColumn<int> get sizeBytes =>
+      $composableBuilder(column: $table.sizeBytes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get uploadStatus => $composableBuilder(
+    column: $table.uploadStatus,
+    builder: (column) => column,
+  );
+
+  $$LocalTasksTableAnnotationComposer get taskId {
+    final $$LocalTasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalRequirementsTableAnnotationComposer get requirementId {
+    final $$LocalRequirementsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.requirementId,
+          referencedTable: $db.localRequirements,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalRequirementsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localRequirements,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$LocalEvidenceTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalEvidenceTable,
+          EvidenceRow,
+          $$LocalEvidenceTableFilterComposer,
+          $$LocalEvidenceTableOrderingComposer,
+          $$LocalEvidenceTableAnnotationComposer,
+          $$LocalEvidenceTableCreateCompanionBuilder,
+          $$LocalEvidenceTableUpdateCompanionBuilder,
+          (EvidenceRow, $$LocalEvidenceTableReferences),
+          EvidenceRow,
+          PrefetchHooks Function({bool taskId, bool requirementId})
+        > {
+  $$LocalEvidenceTableTableManager(_$AppDatabase db, $LocalEvidenceTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalEvidenceTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalEvidenceTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalEvidenceTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> taskId = const Value.absent(),
+                Value<String> requirementId = const Value.absent(),
+                Value<String> localPath = const Value.absent(),
+                Value<String> mimeType = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<String> uploadStatus = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalEvidenceCompanion(
+                id: id,
+                taskId: taskId,
+                requirementId: requirementId,
+                localPath: localPath,
+                mimeType: mimeType,
+                sizeBytes: sizeBytes,
+                createdAt: createdAt,
+                uploadStatus: uploadStatus,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String taskId,
+                required String requirementId,
+                required String localPath,
+                required String mimeType,
+                required int sizeBytes,
+                required DateTime createdAt,
+                Value<String> uploadStatus = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalEvidenceCompanion.insert(
+                id: id,
+                taskId: taskId,
+                requirementId: requirementId,
+                localPath: localPath,
+                mimeType: mimeType,
+                sizeBytes: sizeBytes,
+                createdAt: createdAt,
+                uploadStatus: uploadStatus,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalEvidenceTable, EvidenceRow>(table),
+                  $$LocalEvidenceTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({taskId = false, requirementId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (taskId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.taskId,
+                        referencedTable: $$LocalEvidenceTableReferences
+                            ._taskIdTable(db),
+                        referencedColumn: $$LocalEvidenceTableReferences
+                            ._taskIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+                    if (requirementId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.requirementId,
+                        referencedTable: $$LocalEvidenceTableReferences
+                            ._requirementIdTable(db),
+                        referencedColumn: $$LocalEvidenceTableReferences
+                            ._requirementIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$LocalEvidenceTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalEvidenceTable,
+      EvidenceRow,
+      $$LocalEvidenceTableFilterComposer,
+      $$LocalEvidenceTableOrderingComposer,
+      $$LocalEvidenceTableAnnotationComposer,
+      $$LocalEvidenceTableCreateCompanionBuilder,
+      $$LocalEvidenceTableUpdateCompanionBuilder,
+      (EvidenceRow, $$LocalEvidenceTableReferences),
+      EvidenceRow,
+      PrefetchHooks Function({bool taskId, bool requirementId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4332,4 +5527,6 @@ class $AppDatabaseManager {
       );
   $$LocalResponsesTableTableManager get localResponses =>
       $$LocalResponsesTableTableManager(_db, _db.localResponses);
+  $$LocalEvidenceTableTableManager get localEvidence =>
+      $$LocalEvidenceTableTableManager(_db, _db.localEvidence);
 }

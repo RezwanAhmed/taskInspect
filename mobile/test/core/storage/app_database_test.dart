@@ -32,8 +32,8 @@ void main() {
     expect(count.read<int>('c'), 0);
   });
 
-  test('is at schema version 3', () {
-    expect(database.schemaVersion, 3);
+  test('is at schema version 4', () {
+    expect(database.schemaVersion, 4);
   });
 
   test('a version 1 database (no tables) is upgraded with all tables', () async {
@@ -45,9 +45,9 @@ void main() {
         .map((row) => row.read<String>('name'))
         .get();
 
-    expect(tables, ['local_requirement_options', 'local_requirements', 'local_responses', 'local_tasks']);
+    expect(tables, ['local_evidence', 'local_requirement_options', 'local_requirements', 'local_responses', 'local_tasks']);
     final version = await old.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 3);
+    expect(version.read<int>('user_version'), 4);
   });
 
   test('clearUserData removes every row', () async {
@@ -58,7 +58,7 @@ void main() {
 
     await database.clearUserData();
 
-    for (final table in ['local_tasks', 'local_requirements', 'local_responses']) {
+    for (final table in ['local_tasks', 'local_requirements', 'local_responses', 'local_evidence']) {
       final count = await database.customSelect('SELECT COUNT(*) AS c FROM $table').getSingle();
       expect(count.read<int>('c'), 0, reason: table);
     }

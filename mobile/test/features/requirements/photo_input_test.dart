@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -61,5 +62,31 @@ void main() {
     expect(picker.cameraUses, 1);
     expect(find.byKey(const Key('photo-0')), findsNothing);
     expect(find.textContaining('0 answered'), findsOneWidget);
+  });
+
+  testWidgets('a photo that cannot be saved shows a message', (tester) async {
+    final evidence = FakeEvidenceRepository()..addError = const FileSystemException('disk full');
+    final picker = FakeEvidencePicker()..next.add('/photos/fridge.jpg');
+    registerFakeTasks(
+      FakeTaskRepository([fakeTask('t1', status: TaskStatus.inProgress)])
+        ..requirements = {
+          't1': const [
+            Requirement(id: 'r1', taskId: 't1', title: 'Photo', type: RequirementType.photo, required: true,
+                position: 0),
+          ],
+        },
+      picker: picker,
+      evidence: evidence,
+    );
+    await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testWorker))));
+    await tester.pumpAndSettle();
+    unawaited(GoRouter.of(tester.element(find.byType(Scaffold).first)).push(AppRoutes.execute('t1')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('take-photo')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('The photo could not be saved. Please try again.'), findsOneWidget);
+    expect(find.byKey(const Key('photo-0')), findsNothing);
   });
 }

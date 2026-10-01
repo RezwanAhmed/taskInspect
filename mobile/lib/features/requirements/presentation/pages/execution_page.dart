@@ -18,7 +18,7 @@ class ExecutionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), taskId),
+      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), getIt(), taskId),
       child: const _ExecutionView(),
     );
   }
@@ -70,8 +70,12 @@ class _ExecutionViewState extends State<_ExecutionView> {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<ExecutionCubit, ExecutionState>(
-      listenWhen: (previous, current) => previous.index != current.index,
+      listenWhen: (previous, current) =>
+          previous.index != current.index || (current.photoError != null && previous.photoError != current.photoError),
       listener: (context, state) {
+        if (state.photoError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.photoError!)));
+        }
         if (_pages.hasClients && _pages.page?.round() != state.index) {
           _pages.animateToPage(state.index, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
         }
@@ -129,7 +133,7 @@ class _ExecutionViewState extends State<_ExecutionView> {
                           ),
                     input: requirement.type == RequirementType.photo
                         ? PhotoInput(
-                            photoPaths: state.photosFor(requirement),
+                            photoPaths: [for (final photo in state.photosFor(requirement)) photo.localPath],
                             onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
                             onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
                           )
