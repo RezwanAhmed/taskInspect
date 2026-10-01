@@ -109,6 +109,8 @@ stateDiagram-v2
     direction LR
     [*] --> DRAFT: create
     DRAFT --> ASSIGNED: assign
+    DRAFT --> OPEN: publish
+    OPEN --> ASSIGNED: take
     ASSIGNED --> IN_PROGRESS: start
     IN_PROGRESS --> SUBMITTED: submit
     SUBMITTED --> APPROVED: approve
@@ -119,6 +121,7 @@ stateDiagram-v2
     APPROVED --> [*]
 
     DRAFT --> CANCELLED: cancel
+    OPEN --> CANCELLED: cancel
     ASSIGNED --> CANCELLED: cancel
     IN_PROGRESS --> CANCELLED: cancel
     REJECTED --> CANCELLED: cancel
@@ -131,6 +134,7 @@ stateDiagram-v2
 | State | Meaning |
 |-------|---------|
 | `DRAFT` | Created by a manager; title, details and requirements are still being defined. Not visible to workers. |
+| `OPEN` | Published without an assignee, for a team (or every worker) to take (Phase 7A, see *Open Tasks*). |
 | `ASSIGNED` | Assigned to a worker, who has not started it yet (shown as *pending* in the app). |
 | `IN_PROGRESS` | The worker is completing the requirements and attaching evidence. |
 | `SUBMITTED` | The worker has submitted the task; it is waiting for review. |
@@ -145,6 +149,8 @@ stateDiagram-v2
 |------|----|--------|-----|------------|
 | — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. A reviewer is set (defaults to the creator). |
 | `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
+| `DRAFT` | `OPEN` | Publish (Phase 7A) | Manager | The task has at least one requirement; who may take it: team or everyone. |
+| `OPEN` | `ASSIGNED` | Take (Phase 7A) | A worker who may take it | The first one wins (`409 TASK_ALREADY_TAKEN` for the others). |
 | `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `IN_PROGRESS` | `SUBMITTED` | Submit (`POST /api/tasks/{id}/submit`) | Assigned worker | Every required requirement has a response. |
 | `SUBMITTED` | `APPROVED` | Approve | Task's reviewer | The reviewer is not the assignee (except solo accounts). |
@@ -152,7 +158,7 @@ stateDiagram-v2
 | `SUBMITTED` | `CORRECTION_REQUESTED` | Request correction | Task's reviewer | At least one requirement is marked, each with a comment; the reviewer is not the assignee (except solo accounts). |
 | `REJECTED` | `IN_PROGRESS` | Start again (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `CORRECTION_REQUESTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
-| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED`, `CORRECTION_REQUESTED` | `CANCELLED` | Cancel | Manager | — |
+| `DRAFT`, `OPEN`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED`, `CORRECTION_REQUESTED` | `CANCELLED` | Cancel | Manager | — |
 
 *Reject* and *request correction* are two different results:
 
@@ -213,6 +219,135 @@ without reshaping the data.
   start and submit a task offline; the app shows it as *submitted locally*
   and the state machine checks the action when it is synchronized (see
   the offline sync section).
+
+## Teams, Open Tasks and Sub-tasks
+
+Decided by Rezwan on 2026-10-01; built in Phase 7A. These rules extend
+the task lifecycle above; everything else stays as described there.
+
+### Teams
+
+- Every worker belongs to **one** manager's team. An administrator sets
+  a worker's team (and can move them to another team). A worker without
+  a team sees only the tasks assigned to them.
+- A manager leads one team. Managers and administrators keep seeing all
+  tasks of their organization, as before.
+
+### What a Worker Sees
+
+| Tasks | What the worker sees |
+|-------|----------------------|
+| Assigned to them | Everything (requirements, their answers and evidence) — as before |
+| Of their own team (assigned to a team member) | A **tile**: title, status, priority, due date and who it is assigned to — no requirements, answers or evidence |
+| Open tasks they may take (see below) | Everything, so they can decide to take it |
+| Of other teams | Only numbers per manager: how many tasks, how many team members |
+
+The server enforces this on every call, including the sync pull: a tile
+is sent without requirements, and other teams only as counts.
+
+### Open Tasks
+
+A manager can publish a task **without an assignee**, for a team to pick
+up. A worker takes it, and from then on it is their task.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    DRAFT --> OPEN: publish<br/>(team or everyone)
+    OPEN --> ASSIGNED: take<br/>(first worker wins)
+    OPEN --> CANCELLED: cancel
+    ASSIGNED --> IN_PROGRESS: start
+```
+
+- When publishing, the manager chooses who may take it: **their team
+  only** or **every worker** of the organization (per task).
+- The first worker who takes it gets it; a second one gets
+  `409 TASK_ALREADY_TAKEN`. Taking needs a connection (like assigning).
+- The task's reviewer stays the one the manager chose.
+
+### Tasks for Managers and Sub-tasks
+
+An administrator can create a task and assign it to a **manager** (the
+main task). The manager keeps the main task and:
+
+- for a one-person job, creates **one sub-task** for a worker of their
+  team (the work is passed on);
+- for a big job, splits it into **several sub-tasks**, each assigned to
+  a worker (or published as an open task).
+
+Sub-tasks are normal tasks with a link to their main task: the manager
+reviews them. The main task's progress shows how many sub-tasks are
+approved; when all of them are, the manager submits the main task and
+the administrator reviews it.
+
+This widens three rules of the lifecycle tables for main tasks only:
+an administrator may **create** a task, **assign** it to a manager, and
+the assigned manager **starts** and **submits** it (the worker-only
+rules stay for every other task). A main task has no answers of its
+own: it is complete when all its sub-tasks are approved.
+
+### Registering a Task Again
+
+Once work has started a task can no longer be edited. If the manager
+needs a change:
+
+- that the worker can fix in the same task — they **request a
+  correction** (review flow above);
+- that is a new piece of work — they **register a new task for the same
+  worker** from the existing one (its details and requirements are
+  copied and can be changed). Both tasks stay with the worker; the new
+  one links to the one it was made from.
+
+A correction can only be requested while the task is `SUBMITTED`. A task
+can be registered again once work has started (`IN_PROGRESS` or later,
+including `APPROVED`); the new one starts as `ASSIGNED` to the same
+worker, so the manager can still edit it before the worker starts.
+
+### The Worker's Tabs
+
+| Tab | Shows |
+|-----|-------|
+| **My tasks** — Pending | Assigned to me, not started |
+| **My tasks** — Rejected | Mine, rejected or with a correction request |
+| **My tasks** — Partially done | Mine, in progress |
+| **My tasks** — Done | Mine, submitted or approved (read-only) |
+| **All tasks** — Open | Open tasks I may take |
+| **All tasks** — Pending | My team's tasks that are not done yet (tiles) |
+| **All tasks** — Rejected | My team's rejected tasks (tiles) |
+
+Managers keep the dashboard and task list they have now (they see every
+task of their organization).
+
+### Data Changes
+
+| Table | New column | Meaning |
+|-------|------------|---------|
+| `users` | `team_manager_id` | The manager whose team the worker is in (null: no team) |
+| `tasks` | `open_scope` | `TEAM` or `EVERYONE` while the task is `OPEN`, otherwise null |
+| `tasks` | `parent_task_id` | The main task of a sub-task |
+| `tasks` | `reissued_from_id` | The task a re-registered task was made from |
+
+New state `OPEN`; new actions *publish* and *take* in the state machine.
+
+On the phone, every task stored locally gets a detail level: **full** or
+**tile** (tiles have no requirements, answers or evidence). The sync pull
+follows the new visibility: tasks the worker may no longer see (e.g. an
+open task someone else took) leave `taskIds` and are removed. A team
+change makes the next pull a full one (the server tells the app with a
+team version in the pull), because a change cursor can't show tasks that
+became visible without changing themselves. Publishing and taking need a
+connection (see *What Works Offline*). The API permissions table below
+changes with tasks 7A.3-7A.7.
+
+| Part | Tasks |
+|------|-------|
+| This design | 7A.1 |
+| Teams, visibility | 7A.3-7A.4 |
+| Open tasks | 7A.5 |
+| Tasks for managers, sub-tasks | 7A.6 |
+| Registering a task again | 7A.7 |
+| Sync pull with the new visibility | 7A.8 |
+| App: tabs, other teams' numbers, manager screens | 7A.9-7A.12 |
 
 ## Mobile Architecture
 
@@ -536,6 +671,7 @@ in the background.
 | Open tasks already downloaded to the device | Log in |
 | Create and edit draft tasks and their requirements (manager) | Assign tasks (manager) |
 | Start a task | Review: approve, reject, request correction |
+| | Publish an open task (manager), take an open task (worker) |
 | Answer requirements, add comments | Download tasks not yet on the device |
 | Take photos, attach PDF documents | |
 | Submit a task (shown as *submitted locally*) | |
