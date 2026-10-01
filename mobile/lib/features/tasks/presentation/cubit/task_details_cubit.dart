@@ -7,6 +7,7 @@ import 'package:taskinspect/core/error/failure_messages.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
@@ -14,6 +15,7 @@ class TaskDetailsState extends Equatable {
   const TaskDetailsState({
     this.task,
     this.requirements = const [],
+    this.review,
     this.isLoading = true,
     this.isStarting = false,
     this.message,
@@ -22,6 +24,9 @@ class TaskDetailsState extends Equatable {
   /// `null` once loaded means the task is not on this device.
   final Task? task;
   final List<Requirement> requirements;
+
+  /// The latest review, e.g. why the task came back.
+  final TaskReview? review;
   final bool isLoading;
   final bool isStarting;
 
@@ -31,6 +36,7 @@ class TaskDetailsState extends Equatable {
   TaskDetailsState copyWith({
     Task? Function()? task,
     List<Requirement>? requirements,
+    TaskReview? Function()? review,
     bool? isLoading,
     bool? isStarting,
     String? Function()? message,
@@ -38,6 +44,7 @@ class TaskDetailsState extends Equatable {
     return TaskDetailsState(
       task: task != null ? task() : this.task,
       requirements: requirements ?? this.requirements,
+      review: review != null ? review() : this.review,
       isLoading: isLoading ?? this.isLoading,
       isStarting: isStarting ?? this.isStarting,
       message: message != null ? message() : this.message,
@@ -45,7 +52,7 @@ class TaskDetailsState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [task, requirements, isLoading, isStarting, message];
+  List<Object?> get props => [task, requirements, review, isLoading, isStarting, message];
 }
 
 /// Follows one task and its requirements on the device.
@@ -55,9 +62,11 @@ class TaskDetailsCubit extends Cubit<TaskDetailsState> {
     _requirements = watch.requirements(taskId).listen((requirements) {
       emit(state.copyWith(requirements: requirements));
     });
+    _review = watch.review(taskId).listen((review) => emit(state.copyWith(review: () => review)));
   }
 
   final StartTask _startTask;
+  late final StreamSubscription<TaskReview?> _review;
   final String taskId;
 
   /// Starts the task; the screen updates from the device when it succeeds.
@@ -85,6 +94,7 @@ class TaskDetailsCubit extends Cubit<TaskDetailsState> {
 
   @override
   Future<void> close() async {
+    await _review.cancel();
     await _task.cancel();
     await _requirements.cancel();
     return super.close();

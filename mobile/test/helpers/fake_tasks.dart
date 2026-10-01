@@ -15,6 +15,7 @@ import 'package:taskinspect/features/requirements/domain/repositories/answer_rep
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
@@ -102,6 +103,12 @@ class FakeTaskRepository implements TaskRepository {
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
   }
+
+  /// Latest reviews by task ID (set by tests).
+  Map<String, TaskReview> reviews = {};
+
+  @override
+  Stream<TaskReview?> watchReview(String taskId) => Stream.value(reviews[taskId]);
 
   /// Task IDs submitted through [submit].
   final List<String> submitted = [];

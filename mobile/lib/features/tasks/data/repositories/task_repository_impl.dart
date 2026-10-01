@@ -5,6 +5,7 @@ import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.d
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 
 class TaskRepositoryImpl implements TaskRepository {
@@ -21,6 +22,9 @@ class TaskRepositoryImpl implements TaskRepository {
 
   @override
   Stream<List<Requirement>> watchRequirements(String taskId) => _local.watchRequirements(taskId);
+
+  @override
+  Stream<TaskReview?> watchReview(String taskId) => _local.watchReview(taskId);
 
   @override
   Future<Result<void>> refresh() async {

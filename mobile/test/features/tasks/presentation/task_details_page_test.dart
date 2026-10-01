@@ -8,6 +8,7 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
 import '../../../helpers/fake_auth.dart';
 import '../../../helpers/fake_tasks.dart';
@@ -72,5 +73,35 @@ void main() {
     await go(tester, AppRoutes.task('missing'));
 
     expect(find.text('This task is not on this device.'), findsOneWidget);
+  });
+
+  testWidgets('a task sent back for correction shows the reviewer, the reason and what to fix', (tester) async {
+    final tasks = await openApp(tester);
+    tasks
+      ..reviews = {
+        't1': TaskReview(
+          result: ReviewResult.correctionRequested,
+          reviewerName: 'Mia Manager',
+          createdAt: DateTime.utc(2026, 10, 1, 9),
+          reason: 'Almost there',
+          markedRequirements: const {'r2': 'Measure the fridge again'},
+        ),
+      }
+      ..emit([fakeTask('t1', title: 'Daily kitchen safety inspection', status: TaskStatus.correctionRequested)]);
+    await go(tester, AppRoutes.task('t1'));
+
+    expect(find.byKey(const Key('review-result')), findsOneWidget);
+    expect(find.text('Correction requested by Mia Manager'), findsOneWidget);
+    expect(find.text('Almost there'), findsOneWidget);
+    expect(find.text('Measure the fridge again'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('review-result')), matching: find.text('Record refrigerator temperature')),
+        findsOneWidget);
+  });
+
+  testWidgets('a task without a review shows no review result', (tester) async {
+    await openApp(tester);
+    await go(tester, AppRoutes.task('t1'));
+
+    expect(find.byKey(const Key('review-result')), findsNothing);
   });
 }

@@ -8,6 +8,7 @@ import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_details_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
@@ -107,6 +108,7 @@ class TaskDetailsPage extends StatelessWidget {
               (false, final Task task) => _Details(
                 task: task,
                 requirements: state.requirements,
+                review: state.review,
               ),
             },
           );
@@ -127,10 +129,15 @@ bool _canContinue(Task task, String userId) =>
     task.status == TaskStatus.inProgress && task.assignee?.id == userId;
 
 class _Details extends StatelessWidget {
-  const _Details({required this.task, required this.requirements});
+  const _Details({
+    required this.task,
+    required this.requirements,
+    this.review,
+  });
 
   final Task task;
   final List<Requirement> requirements;
+  final TaskReview? review;
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +162,10 @@ class _Details extends StatelessWidget {
               title: Text('Submitted locally — waiting for synchronization.'),
             ),
           ),
+        ],
+        if (review != null && _showsReview(task, review!)) ...[
+          const SizedBox(height: 12),
+          _ReviewResult(review: review!, requirements: requirements),
         ],
         if (task.description != null) ...[
           const SizedBox(height: 16),
@@ -201,6 +212,71 @@ class _Details extends StatelessWidget {
         if (requirements.isEmpty) const Text('No requirements yet.'),
         for (final requirement in requirements) _RequirementRow(requirement),
       ],
+    );
+  }
+}
+
+/// The review that sent the task back (or approved it); shown while it
+/// matters: rejected / correction requested, while the worker fixes it,
+/// and on an approved task.
+bool _showsReview(Task task, TaskReview review) => switch (task.status) {
+  TaskStatus.rejected ||
+  TaskStatus.correctionRequested ||
+  TaskStatus.approved => true,
+  TaskStatus.inProgress => review.result != ReviewResult.approved,
+  _ => false,
+};
+
+class _ReviewResult extends StatelessWidget {
+  const _ReviewResult({required this.review, required this.requirements});
+
+  final TaskReview review;
+  final List<Requirement> requirements;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final by = review.reviewerName.isEmpty ? '' : ' by ${review.reviewerName}';
+    final (title, color) = switch (review.result) {
+      ReviewResult.approved => (
+        'Approved$by',
+        theme.colorScheme.secondaryContainer,
+      ),
+      ReviewResult.rejected => (
+        'Rejected$by',
+        theme.colorScheme.errorContainer,
+      ),
+      ReviewResult.correctionRequested => (
+        'Correction requested$by',
+        theme.colorScheme.tertiaryContainer,
+      ),
+    };
+    String titleOf(String id) =>
+        requirements.where((r) => r.id == id).firstOrNull?.title ??
+        'A requirement';
+    return Card(
+      key: const Key('review-result'),
+      color: color,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: theme.textTheme.titleMedium),
+            if (review.reason != null) ...[
+              const SizedBox(height: 4),
+              Text(review.reason!),
+            ],
+            for (final MapEntry(key: id, value: comment)
+                in review.markedRequirements.entries) ...[
+              const SizedBox(height: 8),
+              Text(titleOf(id), style: theme.textTheme.labelLarge),
+              Text(comment),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

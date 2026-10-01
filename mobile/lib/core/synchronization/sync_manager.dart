@@ -111,7 +111,7 @@ class SyncManager {
         return Err(failure);
       case Ok(:final value):
         await _db.transaction(() async {
-          await _tasks.applyServerChanges(value.tasks, value.taskIds);
+          await _tasks.applyServerChanges(value.tasks, value.taskIds, reviews: value.reviews);
           await _db
               .into(_db.localSyncState)
               .insertOnConflictUpdate(LocalSyncStateCompanion.insert(key: pullCursorKey, value: value.cursor));

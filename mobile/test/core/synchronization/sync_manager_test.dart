@@ -20,6 +20,7 @@ import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
 import '../../helpers/fake_server.dart';
 import '../../helpers/fake_tasks.dart';
@@ -335,6 +336,61 @@ void main() {
       expect(await localTitles(), ['Kitchen (new)', 'Warehouse']);
       final requirements = await TaskLocalDataSource(db).watchRequirements('t3').first;
       expect(requirements.single.unit, '°C');
+    });
+
+    test("stores each changed task's latest review; no review removes the stored one", () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1'],
+        'tasks': [
+          {
+            ...pulled('t1', 'Kitchen'),
+            'task': taskJson('t1', 'Kitchen', status: 'CORRECTION_REQUESTED'),
+            'latestReview': {
+              'id': 'v1',
+              'result': 'CORRECTION_REQUESTED',
+              'reason': 'Almost',
+              'reviewer': {'id': 'm1', 'fullName': 'Mia Manager'},
+              'requirements': [
+                {'requirementId': 'r-t1-new', 'comment': 'Measure again'},
+              ],
+              'createdAt': '2026-10-01T09:30:00Z',
+            },
+          },
+        ],
+      });
+
+      await manager.pull();
+
+      final review = await TaskLocalDataSource(db).watchReview('t1').first;
+      expect(review!.result, ReviewResult.correctionRequested);
+      expect(review.reason, 'Almost');
+      expect(review.reviewerName, 'Mia Manager');
+      expect(review.markedRequirements, {'r-t1-new': 'Measure again'});
+
+      servePull({
+        'cursor': '2026-10-01T11:00:00Z',
+        'taskIds': ['t1'],
+        'tasks': [pulled('t1', 'Kitchen')],
+      });
+      await manager.pull();
+      expect(await TaskLocalDataSource(db).watchReview('t1').first, isNull);
+    });
+
+    test('a review result this app version does not know is skipped, not a broken pull', () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1'],
+        'tasks': [
+          {
+            ...pulled('t1', 'Kitchen'),
+            'latestReview': {'result': 'ESCALATED', 'reason': null, 'reviewer': null, 'createdAt': '2026-10-01T09:30:00Z'},
+          },
+        ],
+      });
+
+      expect(await manager.pull(), isA<Ok<void>>());
+      expect(await TaskLocalDataSource(db).watchReview('t1').first, isNull);
     });
 
     test('the first pull loads everything, the next one only changes since its cursor', () async {

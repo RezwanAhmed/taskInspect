@@ -6,6 +6,7 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
 /// What the server did with one pushed operation.
 enum SyncResultStatus {
@@ -38,7 +39,7 @@ class SyncResult {
 
 /// What changed on the server since the last pull.
 class PullResult {
-  const PullResult({required this.cursor, required this.taskIds, required this.tasks});
+  const PullResult({required this.cursor, required this.taskIds, required this.tasks, this.reviews = const {}});
 
   /// Sent as `since` in the next pull.
   final String cursor;
@@ -48,6 +49,9 @@ class PullResult {
 
   /// The tasks that changed, with their requirements.
   final List<(Task, List<Requirement>)> tasks;
+
+  /// The latest review of each changed task (`null`: none).
+  final Map<String, TaskReview?> reviews;
 }
 
 /// `POST /api/sync/push` sends queued operations, in order; `GET
@@ -97,7 +101,30 @@ class SyncRemoteDataSource {
             for (final pulled in (json['tasks']! as List<Object?>).cast<Map<String, Object?>>())
               _pulledTask(pulled),
           ],
+          reviews: {
+            for (final pulled in (json['tasks']! as List<Object?>).cast<Map<String, Object?>>())
+              (pulled['task']! as Map<String, Object?>)['id']! as String:
+                  _review(pulled['latestReview'] as Map<String, Object?>?),
+          },
         );
+      },
+    );
+  }
+
+  static TaskReview? _review(Map<String, Object?>? json) {
+    final result = json == null ? null : ReviewResult.tryFromApi(json['result']! as String);
+    if (json == null || result == null) {
+      // None, or one this app version doesn't know: nothing to show.
+      return null;
+    }
+    return TaskReview(
+      result: result,
+      reason: json['reason'] as String?,
+      reviewerName: ((json['reviewer'] as Map<String, Object?>?)?['fullName'] as String?) ?? '',
+      createdAt: DateTime.parse(json['createdAt']! as String).toUtc(),
+      markedRequirements: {
+        for (final item in (json['requirements'] as List<Object?>? ?? []).cast<Map<String, Object?>>())
+          item['requirementId']! as String: item['comment']! as String,
       },
     );
   }

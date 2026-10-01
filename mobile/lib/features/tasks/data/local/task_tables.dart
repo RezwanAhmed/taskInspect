@@ -47,3 +47,19 @@ class LocalRequirementOptions extends Table {
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
+
+/// The latest review of a task (task 7.8a), from the sync pull.
+@DataClassName('TaskReviewRow')
+class LocalTaskReviews extends Table {
+  TextColumn get taskId => text().references(LocalTasks, #id, onDelete: KeyAction.cascade)();
+  TextColumn get result => text()();
+  TextColumn get reason => text().nullable()();
+  TextColumn get reviewerName => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  /// Marked requirements as a JSON object: requirement ID -> comment.
+  TextColumn get markedRequirements => text().withDefault(const Constant('{}'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {taskId};
+}

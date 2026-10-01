@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
 /// Reads and writes tasks and requirements in the local database.
 class TaskLocalDataSource {
@@ -102,13 +105,24 @@ class TaskLocalDataSource {
   /// Stores the [changed] tasks and removes the tasks that are not in
   /// [visibleIds] any more, in one transaction. Tasks with unsent changes
   /// keep their local version, as in [replaceAll].
-  Future<void> applyServerChanges(List<(Task, List<Requirement>)> changed, Set<String> visibleIds) {
+  ///
+  /// [reviews] (from the sync pull) are the changed tasks' latest reviews;
+  /// they are stored for every task on the device, also one with unsent
+  /// changes (the review doesn't touch the worker's own changes).
+  Future<void> applyServerChanges(
+    List<(Task, List<Requirement>)> changed,
+    Set<String> visibleIds, {
+    Map<String, TaskReview?>? reviews,
+  }) {
     return _db.transaction(() async {
       final unsent = await _taskIdsWithUnsentChanges();
       for (final (task, requirements) in changed) {
         if (!unsent.contains(task.id)) {
           await saveTask(task, requirements);
         }
+      }
+      for (final MapEntry(key: taskId, value: review) in (reviews ?? const <String, TaskReview?>{}).entries) {
+        await _saveReview(taskId, review);
       }
       // A task with anything left in the queue stays on the device, even
       // when the server no longer shows it (e.g. reassigned after a refused
@@ -145,6 +159,40 @@ class TaskLocalDataSource {
       return _toTask(started);
     });
   }
+
+  /// The task's latest review, or `null` (none, or not on the device).
+  Stream<TaskReview?> watchReview(String taskId) {
+    return (_db.select(_db.localTaskReviews)..where((r) => r.taskId.equals(taskId)))
+        .watchSingleOrNull()
+        .map((row) => row == null ? null : _toReview(row));
+  }
+
+  Future<void> _saveReview(String taskId, TaskReview? review) async {
+    if (review == null) {
+      await (_db.delete(_db.localTaskReviews)..where((r) => r.taskId.equals(taskId))).go();
+      return;
+    }
+    final onDevice = await (_db.select(_db.localTasks)..where((t) => t.id.equals(taskId))).getSingleOrNull();
+    if (onDevice == null) {
+      return;
+    }
+    await _db.into(_db.localTaskReviews).insertOnConflictUpdate(LocalTaskReviewsCompanion.insert(
+          taskId: taskId,
+          result: review.result.apiName,
+          reason: Value(review.reason),
+          reviewerName: review.reviewerName,
+          createdAt: review.createdAt,
+          markedRequirements: Value(jsonEncode(review.markedRequirements)),
+        ));
+  }
+
+  static TaskReview _toReview(TaskReviewRow row) => TaskReview(
+        result: ReviewResult.fromApi(row.result),
+        reason: row.reason,
+        reviewerName: row.reviewerName,
+        createdAt: row.createdAt.toUtc(),
+        markedRequirements: (jsonDecode(row.markedRequirements) as Map<String, Object?>).cast<String, String>(),
+      );
 
   /// Submits a task on the device and queues the SUBMIT for the server, in
   /// one transaction, so it works offline ("Submitted locally - waiting for
