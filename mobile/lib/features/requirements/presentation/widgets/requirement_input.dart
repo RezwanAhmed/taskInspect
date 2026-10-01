@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/inputs/checkbox_input.dart';
+import 'package:taskinspect/features/requirements/presentation/widgets/inputs/number_input.dart';
+import 'package:taskinspect/features/requirements/presentation/widgets/inputs/text_answer_input.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/inputs/yes_no_input.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -20,6 +22,18 @@ Widget? requirementInput({
     RequirementType.yesNo => YesNoInput(
         value: answer.booleanValue,
         onChanged: (value) => onChanged(answer.copyWith(booleanValue: () => value)),
+      ),
+    RequirementType.text || RequirementType.comment => TextAnswerInput(
+        key: ValueKey('text-${requirement.id}'),
+        value: answer.textValue,
+        hint: requirement.type == RequirementType.comment ? 'Your comment' : 'Your answer',
+        onChanged: (value) => onChanged(answer.copyWith(textValue: () => value)),
+      ),
+    RequirementType.number => NumberInput(
+        key: ValueKey('number-${requirement.id}'),
+        value: answer.numberValue,
+        unit: requirement.unit,
+        onChanged: (value) => onChanged(answer.copyWith(numberValue: () => value)),
       ),
     _ => null,
   };
