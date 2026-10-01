@@ -484,10 +484,11 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them | `404` (hidden) |
 | `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
 | `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
-| `GET /api/tasks/{id}/requirements`, `…/responses` | Anyone who can see the task | `404` |
+| `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
 | `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
+| `POST /api/tasks/{id}/requirements/{rid}/evidence`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
 
 Without a valid access token every endpoint except login, refresh,
 logout, health checks and API docs answers `401`.
