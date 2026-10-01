@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:taskinspect/core/synchronization/sync_queue_table.dart';
 import 'package:taskinspect/features/evidence/data/local/evidence_tables.dart';
 import 'package:taskinspect/features/requirements/data/local/response_tables.dart';
 import 'package:taskinspect/features/tasks/data/local/task_tables.dart';
@@ -11,12 +12,12 @@ part 'app_database.g.dart';
 ///
 /// Every schema change raises [schemaVersion] and adds a step to
 /// [migration], because devices keep their database between app updates.
-@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence])
+@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -37,6 +38,9 @@ class AppDatabase extends _$AppDatabase {
           } else if (from < 5) {
             await migrator.addColumn(localEvidence, localEvidence.fileName);
           }
+          if (from < 6) {
+            await migrator.createTable(localSyncOperations);
+          }
         },
         beforeOpen: (details) async {
           // SQLite does not check foreign keys unless asked to.
@@ -44,8 +48,8 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
-  /// Deletes all user data (tasks, requirements, answers), e.g. at sign
-  /// out, so the next user of the device cannot see it.
+  /// Deletes all user data (tasks, requirements, answers, sync queue),
+  /// e.g. at sign out, so the next user of the device cannot see it.
   Future<void> clearUserData() {
     return transaction(() async {
       for (final table in allTables.toList().reversed) {

@@ -32,8 +32,8 @@ void main() {
     expect(count.read<int>('c'), 0);
   });
 
-  test('is at schema version 5', () {
-    expect(database.schemaVersion, 5);
+  test('is at schema version 6', () {
+    expect(database.schemaVersion, 6);
   });
 
   test('a version 1 database (no tables) is upgraded with all tables', () async {
@@ -45,9 +45,16 @@ void main() {
         .map((row) => row.read<String>('name'))
         .get();
 
-    expect(tables, ['local_evidence', 'local_requirement_options', 'local_requirements', 'local_responses', 'local_tasks']);
+    expect(tables, [
+      'local_evidence',
+      'local_requirement_options',
+      'local_requirements',
+      'local_responses',
+      'local_sync_operations',
+      'local_tasks',
+    ]);
     final version = await old.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 5);
+    expect(version.read<int>('user_version'), 6);
   });
 
   test('a version 4 database gets the evidence file_name column', () async {
@@ -72,15 +79,42 @@ void main() {
     expect(kept.read<String?>('file_name'), isNull);
   });
 
+  test('a version 5 database gets the sync queue and keeps its data', () async {
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) {
+      raw
+        ..execute('CREATE TABLE local_evidence (id TEXT NOT NULL PRIMARY KEY, task_id TEXT NOT NULL, '
+            'requirement_id TEXT NOT NULL, local_path TEXT NOT NULL, mime_type TEXT NOT NULL, '
+            'size_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL, file_name TEXT, '
+            "upload_status TEXT NOT NULL DEFAULT 'PENDING')")
+        ..execute("INSERT INTO local_evidence VALUES ('e1', 't1', 'r1', '/x.pdf', 'application/pdf', 5, 0, 'a.pdf', 'PENDING')")
+        ..execute('PRAGMA user_version = 5');
+    }));
+    addTearDown(old.close);
+
+    final queued = await old.select(old.localSyncOperations).get();
+    final kept = await old.customSelect('SELECT file_name FROM local_evidence').getSingle();
+
+    expect(queued, isEmpty);
+    expect(kept.read<String>('file_name'), 'a.pdf');
+  });
+
   test('clearUserData removes every row', () async {
     await database.customStatement(
         "INSERT INTO local_tasks VALUES ('t1', 'Kitchen', NULL, 'HIGH', 'ASSIGNED', 0, 'm', 'M', 'm', 'M', NULL, NULL, 1, 0)");
     await database.customStatement(
         "INSERT INTO local_requirements VALUES ('r1', 't1', 'Ok?', NULL, 'YES_NO', 1, 0, NULL)");
+    await database.into(database.localSyncOperations).insert(LocalSyncOperationsCompanion.insert(
+          id: 'op1',
+          entityType: 'TaskResponse',
+          entityId: 'r1',
+          taskId: 't1',
+          operation: 'UPDATE',
+          createdAt: DateTime.utc(2026, 10, 1),
+        ));
 
     await database.clearUserData();
 
-    for (final table in ['local_tasks', 'local_requirements', 'local_responses', 'local_evidence']) {
+    for (final table in ['local_tasks', 'local_requirements', 'local_responses', 'local_evidence', 'local_sync_operations']) {
       final count = await database.customSelect('SELECT COUNT(*) AS c FROM $table').getSingle();
       expect(count.read<int>('c'), 0, reason: table);
     }
