@@ -631,10 +631,28 @@ sync.**
 - When the app starts or returns to the foreground.
 - Shortly after a local change, grouped so that quick edits are sent
   together.
-- Periodically in the background (task 6.11). Android schedules this
-  with WorkManager; on iOS, background time is limited and decided by the
-  system, so the app also syncs every time it is opened. Both platforms
+- Periodically in the background (task 6.11): about every 15 minutes
+  while the device is online, also when the app is closed or the phone
+  was restarted. Android schedules this with WorkManager; on iOS,
+  background time is limited and decided by the system (set up in task
+  12.7), so the app also syncs every time it is opened. Both platforms
   use the same SyncManager.
+
+Only one of them syncs at a time:
+
+- While the app is open in the foreground it syncs itself, and a
+  background run that starts meanwhile skips.
+- When the app comes back to the foreground, it first waits until a
+  background run that is still busy has finished.
+- When the app goes to the background, it lets its own running sync
+  finish before the background sync may run.
+- Nothing syncs while nobody is signed in.
+
+Refreshing the login is locked across the app and the background sync:
+only one of them refreshes at a time, and the other then uses the new
+tokens, so a refresh token is never used twice (ADR-0003). When the app
+comes back to the foreground it reloads its screens from the local
+database, which may have been changed by the background sync.
 
 ### Retries and Errors
 

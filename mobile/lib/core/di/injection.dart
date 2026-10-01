@@ -3,13 +3,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:taskinspect/core/config/app_config.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/network/connectivity_monitor.dart';
+import 'package:taskinspect/core/security/refresh_lock.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/storage/local_data_owner.dart';
+import 'package:taskinspect/core/synchronization/background_sync.dart';
+import 'package:taskinspect/core/synchronization/background_sync_registration.dart';
+import 'package:taskinspect/core/synchronization/sync_lifecycle.dart';
 import 'package:taskinspect/core/synchronization/sync_manager.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
 import 'package:taskinspect/core/synchronization/sync_scheduler.dart';
+import 'package:taskinspect/core/synchronization/sync_turns.dart';
 import 'package:taskinspect/features/authentication/data/auth_interceptor.dart';
 import 'package:taskinspect/features/authentication/data/datasources/auth_remote_data_source.dart';
 import 'package:taskinspect/features/authentication/data/repositories/auth_repository_impl.dart';
@@ -77,9 +82,21 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
       () => SyncScheduler(getIt(), getIt()),
       dispose: (scheduler) => scheduler.stop(),
     )
+    ..registerLazySingleton<SyncTurns>(IsolateSyncTurns.new)
+    ..registerLazySingleton<BackgroundSyncRegistration>(WorkmanagerSyncRegistration.new)
+    ..registerLazySingleton(
+      () => SyncLifecycle(
+        getIt(),
+        getIt(),
+        getIt(),
+        // A background sync may have changed the database meanwhile.
+        refreshScreens: () async => getIt<AppDatabase>().markTablesUpdated(getIt<AppDatabase>().allTables),
+      ),
+    )
+    ..registerFactory(() => BackgroundSync(getIt(), getIt(), getIt(), getIt()))
     // Authentication
     ..registerLazySingleton(() => AuthRemoteDataSource(getIt<ApiClient>()))
-    ..registerLazySingleton(() => TokenRefresher(getIt(), getIt()))
+    ..registerLazySingleton(() => TokenRefresher(getIt(), getIt(), lock: IsolateRefreshLock()))
     ..registerLazySingleton<AuthRepository>(
       () => AuthRepositoryImpl(
         getIt(),

@@ -49,6 +49,11 @@ class AppDatabase extends _$AppDatabase {
         beforeOpen: (details) async {
           // SQLite does not check foreign keys unless asked to.
           await customStatement('PRAGMA foreign_keys = ON');
+          // The background sync (task 6.11) opens its own connection: wait
+          // for its writes instead of failing with "database is locked",
+          // and let reads go on while it writes.
+          await customStatement('PRAGMA busy_timeout = 5000');
+          await customStatement('PRAGMA journal_mode = WAL');
         },
       );
 

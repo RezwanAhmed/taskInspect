@@ -173,4 +173,20 @@ void main() {
     ]);
     expect(defaults.retryDelay(1000), const Duration(minutes: 5));
   });
+
+  test('stop completes only after a running sync has finished', () async {
+    final running = Completer<Result<void>>();
+    when(manager.sync).thenAnswer((_) => running.future);
+    await scheduler.start();
+    await settle();
+
+    var stopped = false;
+    final stopping = scheduler.stop().then((_) => stopped = true);
+    await settle();
+    expect(stopped, isFalse);
+
+    running.complete(const Ok(null));
+    await stopping;
+    expect(stopped, isTrue);
+  });
 }

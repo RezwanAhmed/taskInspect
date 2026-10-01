@@ -9,7 +9,8 @@ import 'package:taskinspect/core/synchronization/sync_manager.dart';
 /// device is online (docs/architecture.md, "When Sync Runs"). That is at
 /// sign in and app start, as soon as the connection comes back, and shortly
 /// after a local change, so quick edits are sent together. Runs while
-/// someone is signed in. Background sync follows in task 6.11.
+/// someone is signed in and the app is in the foreground; otherwise the
+/// background sync takes over (see SyncLifecycle).
 ///
 /// When a sync fails for a temporary reason (no connection, server error),
 /// it is retried while the device is online with a growing delay (30 s,
@@ -39,6 +40,9 @@ class SyncScheduler {
   Timer? _timer;
   Timer? _retryTimer;
 
+  /// The sync that is running, if any.
+  Future<void>? _inFlight;
+
   /// Temporary failures in a row; decides the next retry delay.
   int _failures = 0;
 
@@ -63,6 +67,7 @@ class SyncScheduler {
     _syncNow();
   }
 
+  /// Stops syncing; completes once a sync that is running has finished.
   Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
@@ -73,6 +78,7 @@ class SyncScheduler {
     await _changes?.cancel();
     _online = null;
     _changes = null;
+    await _inFlight;
   }
 
   void _syncSoon() {
@@ -82,22 +88,33 @@ class SyncScheduler {
 
   void _syncNow() {
     _timer?.cancel();
-    unawaited(() async {
-      if (!await _connectivity.isOnline()) {
-        return;
+    final run = _sync(after: _inFlight);
+    _inFlight = run;
+    unawaited(run.whenComplete(() {
+      if (identical(_inFlight, run)) {
+        _inFlight = null;
       }
-      final result = await _manager.sync();
-      if (!isRunning) {
-        return;
-      }
-      if (result case Err(:final failure) when SyncManager.isTemporary(failure)) {
-        _failures++;
-        _retryTimer?.cancel();
-        _retryTimer = Timer(retryDelay(_failures), _retryNow);
-      } else {
-        _failures = 0;
-      }
-    }());
+    }));
+  }
+
+  Future<void> _sync({Future<void>? after}) async {
+    // SyncManager runs one sync at a time anyway; waiting here keeps
+    // [_inFlight] set until the last sync has finished.
+    await after;
+    if (!isRunning || !await _connectivity.isOnline()) {
+      return;
+    }
+    final result = await _manager.sync();
+    if (!isRunning) {
+      return;
+    }
+    if (result case Err(:final failure) when SyncManager.isTemporary(failure)) {
+      _failures++;
+      _retryTimer?.cancel();
+      _retryTimer = Timer(retryDelay(_failures), _retryNow);
+    } else {
+      _failures = 0;
+    }
   }
 
   /// Puts temporarily failed operations back in line and syncs.
