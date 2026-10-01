@@ -1,7 +1,10 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taskinspect/core/config/app_config.dart';
+import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
+import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
@@ -28,7 +31,8 @@ void main() {
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     local = TaskLocalDataSource(db);
-    repository = TaskRepositoryImpl(local);
+    repository = TaskRepositoryImpl(local, TaskRemoteDataSource(
+        ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://unused.test'))));
   });
 
   tearDown(() => db.close());

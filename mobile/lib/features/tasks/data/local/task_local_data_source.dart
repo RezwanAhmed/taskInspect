@@ -81,6 +81,16 @@ class TaskLocalDataSource {
     });
   }
 
+  /// Stores the server's tasks and removes all others, in one transaction.
+  Future<void> replaceAll(List<(Task, List<Requirement>)> tasks) {
+    return _db.transaction(() async {
+      for (final (task, requirements) in tasks) {
+        await saveTask(task, requirements);
+      }
+      await deleteTasksExcept({for (final (task, _) in tasks) task.id});
+    });
+  }
+
   /// Removes tasks that are no longer on the server (with their requirements).
   Future<void> deleteTasksExcept(Set<String> keepIds) {
     return (_db.delete(_db.localTasks)..where((t) => t.id.isNotIn(keepIds))).go();
