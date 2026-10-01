@@ -31,3 +31,20 @@ Run from this `mobile/` folder:
 | `flutter test` | Run the unit and widget tests |
 | `flutter run` | Run the app on a connected device or emulator |
 | `flutter build apk --debug` | Build a debug APK for Android |
+
+## Environments
+
+The backend URL and environment are set when the app is built, from the
+files in [`config/`](config/):
+
+| Command | Backend |
+|---------|---------|
+| `flutter run` (no file) or `--dart-define-from-file=config/dev.json` | `http://10.0.2.2:8080` — the backend on your computer, seen from the Android emulator |
+| `--dart-define-from-file=config/staging.json` | Staging (https) |
+| `--dart-define-from-file=config/prod.json` | Production (https) |
+
+On a real phone in development, use your computer's network address,
+e.g. `--dart-define=API_BASE_URL=http://192.168.1.20:8080`. Plain http is
+allowed only in debug builds (Android) and for local addresses (iOS);
+staging and production must use https. The staging and production
+domains are placeholders until deployment (Phase 8).
