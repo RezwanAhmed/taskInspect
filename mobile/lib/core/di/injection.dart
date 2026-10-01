@@ -9,6 +9,7 @@ import 'package:taskinspect/features/authentication/domain/repositories/auth_rep
 import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
+import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 
 /// The app's service locator. Every dependency is registered in
 /// [configureDependencies]; widgets and BLoCs never create their own
@@ -30,5 +31,9 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(getIt(), getIt()))
     ..registerFactory(() => Login(getIt()))
     ..registerFactory(() => RestoreSession(getIt()))
-    ..registerFactory(() => Logout(getIt()));
+    ..registerFactory(() => Logout(getIt()))
+    ..registerLazySingleton(
+      () => AuthBloc(login: getIt(), restoreSession: getIt(), logout: getIt()),
+      dispose: (bloc) => bloc.close(),
+    );
 }
