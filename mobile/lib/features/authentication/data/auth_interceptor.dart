@@ -15,15 +15,12 @@ import 'package:taskinspect/features/authentication/data/token_refresher.dart';
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({
     required this.dio,
-    required TokenStorage storage,
-    required TokenRefresher refresher,
-    required void Function() onSessionExpired,
+    required this._storage,
+    required this._refresher,
+    required this._onSessionExpired,
     DateTime Function()? now,
     this.refreshMargin = const Duration(seconds: 30),
-  })  : _storage = storage,
-        _refresher = refresher,
-        _onSessionExpired = onSessionExpired,
-        _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   /// The client this interceptor belongs to; used to send a request again.
   final Dio dio;
