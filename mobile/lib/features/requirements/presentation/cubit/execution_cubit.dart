@@ -77,9 +77,11 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     }
   }
 
-  /// Records the answer to a requirement (saved on the device in task 5.13).
-  void answer(Requirement requirement, Answer answer) {
-    emit(state.copyWith(answers: {...state.answers, requirement.id: answer}));
+  /// Changes the answer to a requirement, starting from its latest value
+  /// (saved on the device in task 5.13).
+  void answer(Requirement requirement, Answer Function(Answer current) update) {
+    final current = state.answerFor(requirement);
+    emit(state.copyWith(answers: {...state.answers, requirement.id: update(current)}));
   }
 
   void next() => goTo(state.index + 1);

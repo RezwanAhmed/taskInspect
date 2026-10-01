@@ -118,7 +118,7 @@ class _ExecutionViewState extends State<_ExecutionView> {
                     input: requirementInput(
                       requirement: requirement,
                       answer: state.answerFor(requirement),
-                      onChanged: (answer) => cubit.answer(requirement, answer),
+                      onChanged: (update) => cubit.answer(requirement, update),
                     ),
                   );
                 },
