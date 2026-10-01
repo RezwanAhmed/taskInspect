@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/core/error/failure_messages.dart';
+import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
@@ -10,6 +12,7 @@ import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 class ExecutionState extends Equatable {
@@ -21,6 +24,9 @@ class ExecutionState extends Equatable {
     this.evidenceError,
     this.index = 0,
     this.isLoading = true,
+    this.isSubmitting = false,
+    this.isSubmitted = false,
+    this.message,
   });
 
   final Task? task;
@@ -38,6 +44,13 @@ class ExecutionState extends Equatable {
   /// The requirement on screen.
   final int index;
   final bool isLoading;
+  final bool isSubmitting;
+
+  /// The task was submitted (on the device; the sync sends it).
+  final bool isSubmitted;
+
+  /// Shown once, e.g. which required requirement is still missing.
+  final String? message;
 
   Requirement? get current => requirements.isEmpty ? null : requirements[index];
 
@@ -63,6 +76,9 @@ class ExecutionState extends Equatable {
     String? Function()? evidenceError,
     int? index,
     bool? isLoading,
+    bool? isSubmitting,
+    bool? isSubmitted,
+    String? Function()? message,
   }) {
     return ExecutionState(
       task: task ?? this.task,
@@ -72,18 +88,29 @@ class ExecutionState extends Equatable {
       evidenceError: evidenceError != null ? evidenceError() : this.evidenceError,
       index: index ?? this.index,
       isLoading: isLoading ?? this.isLoading,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
+      isSubmitted: isSubmitted ?? this.isSubmitted,
+      message: message != null ? message() : this.message,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, answers, evidence, evidenceError, index, isLoading];
+  List<Object?> get props =>
+      [task, requirements, answers, evidence, evidenceError, index, isLoading, isSubmitting, isSubmitted, message];
 }
 
 /// Walks the worker through a task's requirements one at a time. Answers
 /// are saved on the device as they change.
 class ExecutionCubit extends Cubit<ExecutionState> {
-  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this._evidence, this._opener, this.taskId)
-      : super(const ExecutionState()) {
+  ExecutionCubit(
+    WatchTaskDetails watch,
+    this._answers,
+    this._picker,
+    this._evidence,
+    this._opener,
+    this._submit,
+    this.taskId,
+  ) : super(const ExecutionState()) {
     _evidenceSubscription =
         _evidence.watchEvidence(taskId).listen((evidence) => emit(state.copyWith(evidence: evidence)));
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: task)));
@@ -104,6 +131,7 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   final EvidencePicker _picker;
   final EvidenceRepository _evidence;
   final DocumentOpener _opener;
+  final SubmitTask _submit;
   late final StreamSubscription<Map<String, List<EvidenceItem>>> _evidenceSubscription;
   final String taskId;
   Future<void> _saving = Future.value();
@@ -178,6 +206,48 @@ class ExecutionCubit extends Cubit<ExecutionState> {
       emit(state.copyWith(evidenceError: () => message));
     }
   }
+
+  /// Submits the task for review once every required requirement is
+  /// complete (after the answers typed so far are saved); otherwise shows
+  /// the first one that is missing.
+  Future<void> submit() async {
+    if (state.isSubmitting) {
+      return;
+    }
+    emit(state.copyWith(isSubmitting: true, message: () => null));
+    await _saving;
+    if (isClosed) {
+      return;
+    }
+    final missing = SubmitTask.missing(state.requirements, state.isComplete);
+    final lost = [
+      for (final requirement in state.requirements)
+        if (state.evidenceFor(requirement).any((item) => item.fileMissing)) requirement,
+    ];
+    if (missing.isNotEmpty || lost.isNotEmpty) {
+      final first = missing.isNotEmpty ? missing.first : lost.first;
+      goTo(state.requirements.indexOf(first));
+      emit(state.copyWith(
+        isSubmitting: false,
+        message: () => missing.isEmpty
+            ? 'A file of "${first.title}" is missing on this device. Remove it and add it again.'
+            : missing.length == 1
+                ? '"${first.title}" still needs an answer.'
+                : '${missing.length} required requirements still need an answer.',
+      ));
+      return;
+    }
+    final result = await _submit(taskId);
+    if (isClosed) {
+      return;
+    }
+    emit(switch (result) {
+      Ok() => state.copyWith(isSubmitting: false, isSubmitted: true),
+      Err(:final failure) => state.copyWith(isSubmitting: false, message: () => userMessage(failure)),
+    });
+  }
+
+  void clearMessage() => emit(state.copyWith(message: () => null));
 
   /// Completes when every answer so far is saved.
   Future<void> get saved => _saving;

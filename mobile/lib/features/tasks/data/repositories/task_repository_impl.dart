@@ -51,4 +51,12 @@ class TaskRepositoryImpl implements TaskRepository {
     final started = await _local.start(taskId);
     return started == null ? Err(UnexpectedFailure(StateError('Task $taskId is not on the device'))) : Ok(started);
   }
+
+  @override
+  Future<Result<Task>> submit(String taskId) async {
+    final submitted = await _local.submit(taskId);
+    return submitted == null
+        ? Err(UnexpectedFailure(StateError('Task $taskId is not on the device or not in progress')))
+        : Ok(submitted);
+  }
 }

@@ -47,6 +47,7 @@ import 'package:taskinspect/features/tasks/data/repositories/task_repository_imp
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 
@@ -153,6 +154,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     ..registerFactory(() => WatchTasks(getIt()))
     ..registerFactory(() => WatchTaskDetails(getIt()))
     ..registerFactory(() => StartTask(getIt()))
+    ..registerFactory(() => SubmitTask(getIt()))
     // Answers and evidence
     ..registerLazySingleton<EvidencePicker>(DeviceEvidencePicker.new)
     ..registerLazySingleton<DocumentOpener>(() => const OpenFilexDocumentOpener())

@@ -146,6 +146,38 @@ class TaskLocalDataSource {
     });
   }
 
+  /// Submits a task on the device and queues the SUBMIT for the server, in
+  /// one transaction, so it works offline ("Submitted locally - waiting for
+  /// synchronization"). The sync sends it once the task's files are
+  /// uploaded; it replaces an earlier submit the server refused. Returns
+  /// the submitted task, or `null` if it is not on the device or not
+  /// IN_PROGRESS (e.g. submitted already).
+  Future<Task?> submit(String taskId) {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.localTasks)..where((t) => t.id.equals(taskId))).getSingleOrNull();
+      if (row == null || row.status != TaskStatus.inProgress.apiName) {
+        return null;
+      }
+      await (_db.delete(_db.localSyncOperations)
+            ..where((o) =>
+                o.taskId.equals(taskId) &
+                o.operation.equals(SyncOperation.submit.apiName) &
+                o.status.equals('FAILED') &
+                o.lastError.isNotIn(SyncErrors.temporary)))
+          .go();
+      final submitted = row.copyWith(status: TaskStatus.submitted.apiName);
+      await _db.update(_db.localTasks).replace(submitted);
+      await _queue.add(
+        entity: SyncEntity.task,
+        entityId: taskId,
+        taskId: taskId,
+        operation: SyncOperation.submit,
+        payload: {'version': row.version},
+      );
+      return _toTask(submitted);
+    });
+  }
+
   /// Tasks with changes that are still on their way: waiting, being sent,
   /// or failed for a temporary reason. A task with a change the server
   /// refused doesn't count, even if later changes wait behind it: then the

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
@@ -121,6 +122,20 @@ class _Details extends StatelessWidget {
         Text(task.title, style: theme.textTheme.headlineSmall),
         const SizedBox(height: 8),
         Align(alignment: Alignment.centerLeft, child: StatusChip(task.status)),
+        if (task.status == TaskStatus.submitted &&
+            context.select(
+              (SyncStatusCubit cubit) => cubit.state.unsentTaskIds.contains(task.id),
+            )) ...[
+          const SizedBox(height: 12),
+          const Card(
+            key: Key('submitted-locally'),
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: Icon(Icons.cloud_upload_outlined),
+              title: Text('Submitted locally — waiting for synchronization.'),
+            ),
+          ),
+        ],
         if (task.description != null) ...[
           const SizedBox(height: 16),
           Text(task.description!, style: theme.textTheme.bodyLarge),

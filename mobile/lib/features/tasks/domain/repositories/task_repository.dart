@@ -27,4 +27,9 @@ abstract interface class TaskRepository {
   /// or correction request). Works offline: the task is started on the
   /// device and the start is sent to the server by the sync queue.
   Future<Result<Task>> start(String taskId);
+
+  /// The assigned worker submits the task for review. Works offline: the
+  /// task is submitted on the device and the submit is sent to the server
+  /// by the sync queue, after the task's files are uploaded.
+  Future<Result<Task>> submit(String taskId);
 }

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
+import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
 import 'package:taskinspect/features/evidence/data/image_compressor.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
@@ -188,5 +189,6 @@ class EvidenceLocalDataSource implements EvidenceRepository {
         createdAt: row.createdAt.toUtc(),
         fileName: row.fileName,
         uploaded: row.uploadStatus == 'UPLOADED',
+        fileMissing: row.uploadStatus == 'FAILED' && row.uploadError == EvidenceUploader.fileMissing,
       );
 }

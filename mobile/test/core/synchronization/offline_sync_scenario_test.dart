@@ -108,6 +108,91 @@ void main() {
     expect(await db.select(db.localEvidence).get(), hasLength(1), reason: 'and the photo');
   });
 
+  test('submitted offline with a photo: the submit reaches the server only after the photo', () async {
+    await workOffline();
+    await tasks.submit('t1');
+    expect((await tasks.watchTask('t1').first)!.status, TaskStatus.submitted, reason: 'submitted locally');
+
+    expect(await manager.sync(), isA<Ok<void>>());
+
+    expect(backend.applied, ['Task START', 'TaskResponse UPDATE', 'Evidence CREATE', 'Task SUBMIT']);
+    expect(backend.timeline.indexOf('complete'), lessThan(backend.timeline.indexOf('Task SUBMIT')));
+    expect(backend.taskStatus, 'SUBMITTED');
+    expect(await queued(), isEmpty);
+    expect((await tasks.watchTask('t1').first)!.status, TaskStatus.submitted);
+  });
+
+  test('while the photo cannot be uploaded the submit waits on the device', () async {
+    await workOffline();
+    await tasks.submit('t1');
+    backend.filesOnline = false;
+
+    await manager.sync();
+
+    expect(backend.applied, isNot(contains('Task SUBMIT')));
+    final submit = (await queued()).singleWhere((o) => o.operation == 'SUBMIT');
+    expect(submit.status, 'PENDING');
+    expect((await tasks.watchTask('t1').first)!.status, TaskStatus.submitted, reason: 'kept until it is sent');
+  });
+
+  test('a refused submit sends the task back to the worker, who fixes it and submits again', () async {
+    await workOffline();
+    await tasks.submit('t1');
+    backend.refuseSubmit = 'REQUIREMENTS_MISSING';
+
+    await manager.sync();
+
+    final refused = (await queued()).singleWhere((o) => o.operation == 'SUBMIT');
+    expect((refused.status, refused.lastError), ('FAILED', 'REQUIREMENTS_MISSING'));
+    expect((await tasks.watchTask('t1').first)!.status, TaskStatus.inProgress, reason: 'back with the worker');
+
+    // The worker changes an answer: it is not held back by the refused submit.
+    await answers.saveAnswer(taskId: 't1', requirementId: 'r1', answer: const Answer(booleanValue: false));
+    await manager.sync();
+    expect(backend.answers['r1'], {'booleanValue': false});
+
+    backend.refuseSubmit = null;
+    await tasks.submit('t1');
+    expect((await queued()).where((o) => o.operation == 'SUBMIT'), hasLength(1), reason: 'the new one replaces it');
+    await manager.sync();
+    expect(backend.taskStatus, 'SUBMITTED');
+    expect(await queued(), isEmpty);
+  });
+
+  test('Retry does not send a refused submit again as it was', () async {
+    await workOffline();
+    await tasks.submit('t1');
+    backend.refuseSubmit = 'REQUIREMENTS_MISSING';
+    await manager.sync();
+
+    await manager.retryFailed();
+
+    expect((await queued()).where((o) => o.operation == 'SUBMIT'), isEmpty);
+    expect(await tasks.submit('t1'), isNotNull, reason: 'the worker can submit again');
+  });
+
+  test('a submit that failed only because of the network is sent again by Retry', () async {
+    await workOffline();
+    await tasks.submit('t1');
+    backend.online = false;
+    await manager.sync();
+    backend.online = true;
+
+    await manager.retryFailed();
+    await manager.sync();
+
+    expect(backend.taskStatus, 'SUBMITTED');
+    expect(await queued(), isEmpty);
+  });
+
+  test('a task can only be submitted while in progress (no double submit)', () async {
+    await workOffline();
+
+    expect(await tasks.submit('t1'), isNotNull);
+    expect(await tasks.submit('t1'), isNull);
+    expect((await queued()).where((o) => o.operation == 'SUBMIT'), hasLength(1));
+  });
+
   test('an answer lost on the way back is sent again, but the server applies nothing twice', () async {
     await workOffline();
     backend.loseNextPushAnswer = true;
@@ -202,6 +287,15 @@ class _FakeCompressor implements ImageCompressor {
 class _Backend {
   bool online = true;
 
+  /// When set, every SUBMIT is refused with this code.
+  String? refuseSubmit;
+
+  /// Whether the file storage can be reached (the API still can).
+  bool filesOnline = true;
+
+  /// Operations and file confirmations in the order the server got them.
+  final List<String> timeline = [];
+
   /// The next push is applied, but its answer never reaches the app.
   bool loseNextPushAnswer = false;
 
@@ -268,13 +362,14 @@ class _Backend {
         return (409, {'code': 'UPLOAD_INCOMPLETE'});
       }
       completed.add(evidenceId);
+      timeline.add('complete');
       return (200, {'id': evidenceId, 'status': 'UPLOADED'});
     }
     return (404, {'code': 'NOT_FOUND'});
   }
 
   Future<(int, Object?)> handleFile(RequestOptions request) async {
-    if (!online) {
+    if (!online || !filesOnline) {
       return (0, null);
     }
     uploadedFiles.add(request.uri.pathSegments.last.split('.').first);
@@ -319,9 +414,20 @@ class _Backend {
         };
       case 'Evidence CREATE':
         registered.add(operation['entityId']! as String);
+      case 'Task SUBMIT':
+        if (refuseSubmit != null) {
+          rejectedTasks.add(taskId);
+          return {'id': id, 'status': 'REJECTED', 'code': refuseSubmit};
+        }
+        if (registered.any((id) => !completed.contains(id))) {
+          rejectedTasks.add(taskId);
+          return {'id': id, 'status': 'REJECTED', 'code': 'EVIDENCE_NOT_UPLOADED'};
+        }
+        taskStatus = 'SUBMITTED';
     }
     appliedIds.add(id);
     applied.add(kind);
+    timeline.add(kind);
     return {'id': id, 'status': 'APPLIED'};
   }
 }

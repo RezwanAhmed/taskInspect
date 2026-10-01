@@ -10,6 +10,7 @@ import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
 import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
 import 'package:taskinspect/features/evidence/data/remote/evidence_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 
 /// Sends the sync queue to the server (docs/architecture.md, "Sync Cycle").
 ///
@@ -87,6 +88,13 @@ class SyncManager {
     if (uploaded case Err(failure: UnauthorizedFailure())) {
       return uploaded;
     }
+    if (uploaded is Ok<void>) {
+      // Submits that waited for these files can go now.
+      final submitted = await push();
+      if (submitted is Err<void>) {
+        return submitted;
+      }
+    }
     final pulled = await pull();
     return pulled is Err<void> ? pulled : uploaded;
   }
@@ -139,6 +147,15 @@ class SyncManager {
               .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode({'version': task.version}))));
         }
       }
+      // A submit the server refused is not sent again as it was: the task
+      // is back with the worker, who submits it again when it is complete.
+      // (One that failed for a temporary reason is sent again like others.)
+      await (_db.delete(_db.localSyncOperations)
+            ..where((o) =>
+                o.status.equals('FAILED') &
+                o.operation.equals(SyncOperation.submit.apiName) &
+                o.lastError.isNotIn(SyncErrors.temporary)))
+          .go();
       await (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('FAILED')))
           .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
     });
@@ -186,14 +203,25 @@ class SyncManager {
     }
   }
 
-  /// The oldest PENDING operations, except those of tasks with a FAILED one.
+  /// The oldest PENDING operations, except those of tasks with a FAILED
+  /// one, and except a SUBMIT while files of its task are not uploaded yet
+  /// (docs/architecture.md "Sync Cycle": a task is never submitted with
+  /// evidence the server cannot find).
   Future<List<SyncOperationRow>> _nextBatch() {
     final queue = _db.localSyncOperations;
+    // A refused submit doesn't block: the worker fixes the task and submits again.
     final blockedTasks = _db.selectOnly(queue)
       ..addColumns([queue.taskId])
-      ..where(queue.status.equals('FAILED'));
+      ..where(queue.status.equals('FAILED') & queue.operation.equals(SyncOperation.submit.apiName).not());
+    final evidence = _db.localEvidence;
+    final tasksWithFilesToUpload = _db.selectOnly(evidence)
+      ..addColumns([evidence.taskId])
+      ..where(evidence.uploadStatus.equals('UPLOADED').not());
     final query = _db.select(queue)
-      ..where((o) => o.status.equals('PENDING') & o.taskId.isNotInQuery(blockedTasks))
+      ..where((o) =>
+          o.status.equals('PENDING') &
+          o.taskId.isNotInQuery(blockedTasks) &
+          (o.operation.equals(SyncOperation.submit.apiName).not() | o.taskId.isNotInQuery(tasksWithFilesToUpload)))
       ..orderBy([(o) => OrderingTerm(expression: o.createdAt)])
       ..limit(batchSize);
     return query.get();
@@ -221,6 +249,9 @@ class SyncManager {
                 lastError: Value(result!.code ?? 'REJECTED'),
               ),
             );
+            if (operation.operation == SyncOperation.submit.apiName) {
+              await _reopenRefusedSubmit(operation);
+            }
           case SyncResultStatus.skipped || null:
             // Waits for the operation of its task that failed.
             await _setStatus([operation.id], 'PENDING');
@@ -228,6 +259,17 @@ class SyncManager {
       }
       return progressed;
     });
+  }
+
+  /// The server refused a submit (e.g. a required requirement is missing):
+  /// the task is back IN_PROGRESS on the device, so the worker can fix it
+  /// and submit again. The refused SUBMIT stays FAILED to show the reason,
+  /// but it doesn't hold back the task's other changes, and the next
+  /// submit replaces it.
+  Future<void> _reopenRefusedSubmit(SyncOperationRow operation) {
+    return (_db.update(_db.localTasks)
+          ..where((t) => t.id.equals(operation.taskId) & t.status.equals(TaskStatus.submitted.apiName)))
+        .write(LocalTasksCompanion(status: Value(TaskStatus.inProgress.apiName)));
   }
 
   /// An answer counts as synced once no change of it is left in the queue.

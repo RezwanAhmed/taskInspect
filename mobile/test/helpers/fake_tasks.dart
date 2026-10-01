@@ -18,6 +18,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 
@@ -100,6 +101,30 @@ class FakeTaskRepository implements TaskRepository {
     );
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
+  }
+
+  /// Task IDs submitted through [submit].
+  final List<String> submitted = [];
+
+  @override
+  Future<Result<Task>> submit(String taskId) async {
+    submitted.add(taskId);
+    final task = current.firstWhere((t) => t.id == taskId);
+    final done = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: TaskStatus.submitted,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: task.assignee,
+      version: task.version,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? done : t]);
+    return Ok(done);
   }
 
   @override
@@ -293,6 +318,7 @@ void registerFakeTasks(
   for (final unregister in [
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
+    () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
     () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
     () => getIt.isRegistered<EvidenceRepository>() ? getIt.unregister<EvidenceRepository>() : null,
@@ -306,6 +332,7 @@ void registerFakeTasks(
     ..registerFactory(() => WatchTasks(repository))
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
+    ..registerFactory(() => SubmitTask(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())
     ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker())
     ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository())

@@ -16,6 +16,9 @@ class SyncStatusBanner extends StatelessWidget {
           'The task was changed on the server, for example cancelled by the manager.',
         'VERSION_CONFLICT' => 'The task was changed on the server meanwhile.',
         'FILE_MISSING' => 'A photo or document is missing on this device.',
+        'REQUIREMENTS_MISSING' =>
+          'The task was not submitted: a required requirement is missing. Complete it and submit again.',
+        'EVIDENCE_NOT_UPLOADED' => 'The task was not submitted: a photo or document is not uploaded yet.',
         _ => 'The server refused a change ($code).',
       };
 
