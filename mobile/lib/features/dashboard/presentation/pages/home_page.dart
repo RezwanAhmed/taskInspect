@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/core/theme/status_colors.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
 import 'package:taskinspect/features/dashboard/presentation/widgets/count_tile.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
 
 /// The dashboard: how many tasks are in each status, and which are overdue.
 class HomePage extends StatelessWidget {
@@ -50,6 +53,11 @@ class _DashboardView extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
+          IconButton(
+            tooltip: 'All tasks',
+            icon: const Icon(Icons.list_alt),
+            onPressed: () => context.push(AppRoutes.tasks),
+          ),
           IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: () => _confirmSignOut(context)),
         ],
       ),
@@ -58,19 +66,46 @@ class _DashboardView extends StatelessWidget {
           if (state.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
+          void open(TaskTab tab) => context.push(AppRoutes.tasksOn(tab));
           final tiles = <Widget>[
             if (user?.isManager ?? false)
               CountTile(label: 'Draft', count: state.count(TaskStatus.draft), color: colors.draft),
-            CountTile(label: 'Pending', count: state.count(TaskStatus.assigned), color: colors.assigned),
-            CountTile(label: 'In progress', count: state.count(TaskStatus.inProgress), color: colors.inProgress),
-            CountTile(label: 'Submitted', count: state.count(TaskStatus.submitted), color: colors.submitted),
-            CountTile(label: 'Rejected', count: state.count(TaskStatus.rejected), color: colors.rejected),
+            CountTile(
+              label: 'Pending',
+              count: state.count(TaskStatus.assigned),
+              color: colors.assigned,
+              onTap: () => open(TaskTab.pending),
+            ),
+            CountTile(
+              label: 'In progress',
+              count: state.count(TaskStatus.inProgress),
+              color: colors.inProgress,
+              onTap: () => open(TaskTab.inProgress),
+            ),
+            CountTile(
+              label: 'Submitted',
+              count: state.count(TaskStatus.submitted),
+              color: colors.submitted,
+              onTap: () => open(TaskTab.submitted),
+            ),
+            CountTile(
+              label: 'Rejected',
+              count: state.count(TaskStatus.rejected),
+              color: colors.rejected,
+              onTap: () => open(TaskTab.rejected),
+            ),
             CountTile(
               label: 'Correction requested',
               count: state.count(TaskStatus.correctionRequested),
               color: colors.correctionRequested,
+              onTap: () => open(TaskTab.rejected),
             ),
-            CountTile(label: 'Approved', count: state.count(TaskStatus.approved), color: colors.approved),
+            CountTile(
+              label: 'Approved',
+              count: state.count(TaskStatus.approved),
+              color: colors.approved,
+              onTap: () => open(TaskTab.approved),
+            ),
             CountTile(label: 'Overdue', count: state.overdue, color: errorColor, icon: Icons.schedule),
           ];
           return RefreshIndicator(

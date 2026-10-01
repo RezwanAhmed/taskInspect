@@ -9,6 +9,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 
 Task fakeTask(String id, {TaskStatus status = TaskStatus.assigned, DateTime? due, String? title}) => Task(
       id: id,
@@ -78,5 +79,10 @@ void registerFakeTasks(FakeTaskRepository repository) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
   }
-  getIt.registerFactory(() => DashboardCubit(repository, RefreshTasks(repository)));
+  if (getIt.isRegistered<WatchTasks>()) {
+    getIt.unregister<WatchTasks>();
+  }
+  getIt
+    ..registerFactory(() => DashboardCubit(repository, RefreshTasks(repository)))
+    ..registerFactory(() => WatchTasks(repository));
 }
