@@ -169,10 +169,28 @@ class _ExecutionViewState extends State<_ExecutionView> {
                 itemBuilder: (context, index) {
                   final requirement = state.requirements[index];
                   final answer = state.answerFor(requirement);
+                  final locked = state.isLocked(requirement);
+                  final toFix = state.whatToFix(requirement);
                   return RequirementCard(
                     requirement: requirement,
+                    // Photos and documents stay viewable; their inputs lock themselves.
+                    locked: locked && !requirement.type.isEvidence,
+                    notice: locked
+                        ? const _Notice(
+                            key: Key('locked-notice'),
+                            icon: Icons.lock_outline,
+                            text: 'Not marked for correction - stays as submitted.',
+                          )
+                        : toFix == null
+                            ? null
+                            : _Notice(
+                                key: const Key('to-fix-notice'),
+                                icon: Icons.build_circle_outlined,
+                                text: 'To fix: $toFix',
+                                highlighted: true,
+                              ),
                     // A COMMENT requirement's answer already is a comment.
-                    comment: requirement.type == RequirementType.comment
+                    comment: locked || requirement.type == RequirementType.comment
                         ? null
                         : CommentField(
                             key: ValueKey('comment-${requirement.id}'),
@@ -181,17 +199,19 @@ class _ExecutionViewState extends State<_ExecutionView> {
                           ),
                     input: switch (requirement.type) {
                       RequirementType.photo => PhotoInput(
+                          readOnly: locked,
                           photoPaths: [for (final photo in state.evidenceFor(requirement)) photo.localPath],
                           onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
                           onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
                           onOpenPhoto: (photoIndex) async {
                             final photo = state.evidenceFor(requirement)[photoIndex];
-                            if (await EvidencePreviewPage.show(context, photo)) {
+                            if (await EvidencePreviewPage.show(context, photo, canRemove: !locked)) {
                               await cubit.removeEvidence(photo);
                             }
                           },
                         ),
                       RequirementType.document => DocumentInput(
+                          readOnly: locked,
                           documents: state.evidenceFor(requirement),
                           onChoose: () => cubit.addDocument(requirement),
                           onOpen: cubit.openDocument,
@@ -251,6 +271,25 @@ class _ExecutionViewState extends State<_ExecutionView> {
                 ),
         );
       },
+    );
+  }
+}
+
+/// A short message on a requirement while correcting.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.icon, required this.text, this.highlighted = false, super.key});
+
+  final IconData icon;
+  final String text;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      color: highlighted ? colors.tertiaryContainer : colors.surfaceContainerHighest,
+      child: ListTile(leading: Icon(icon), title: Text(text)),
     );
   }
 }

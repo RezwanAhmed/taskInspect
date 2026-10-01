@@ -10,6 +10,7 @@ class PhotoInput extends StatelessWidget {
     required this.onTakePhoto,
     required this.onChoosePhoto,
     this.onOpenPhoto,
+    this.readOnly = false,
     super.key,
   });
 
@@ -19,6 +20,9 @@ class PhotoInput extends StatelessWidget {
 
   /// Opens the photo at this index full screen (preview / remove).
   final ValueChanged<int>? onOpenPhoto;
+
+  /// Photos can be viewed but not added (e.g. not marked for correction).
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +61,8 @@ class PhotoInput extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        Row(
+        if (!readOnly)
+          Row(
           children: [
             Expanded(
               child: FilledButton.icon(
