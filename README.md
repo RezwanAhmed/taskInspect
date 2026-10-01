@@ -9,10 +9,12 @@ network connection, then submits it for review. A reviewer approves the task,
 rejects it, or requests a correction, and every step is recorded in the task's
 history.
 
-> **Status:** in development — the backend foundation (Spring Boot,
-> PostgreSQL, Flyway, JWT login, users and roles) and task management
-> (tasks, requirements, assignment, answers, state machine, history and
-> audit log) are in place; the mobile app is next.
+> **Status:** in development — the backend (Spring Boot, PostgreSQL,
+> Flyway, JWT login, users and roles, task management with requirements,
+> assignment, answers, state machine, history and audit log) and the
+> Flutter app foundation (architecture, theme, routing, API client,
+> secure storage, local database, login with token refresh) are in place;
+> task execution on mobile is next.
 
 ## Project Overview
 
@@ -171,7 +173,7 @@ The project is built in small steps, one phase at a time.
 | 1  | Repository and architecture — structure, README, architecture docs, ADRs | Done |
 | 2  | Backend foundation — Spring Boot, PostgreSQL, Flyway, JWT authentication, users and roles | Done |
 | 3  | Task management (backend) — tasks, requirements, assignment, state machine, audit log | Done |
-| 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Planned |
+| 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Done |
 | 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo and PDF evidence | Planned |
 | 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Planned |
 | 7  | Review workflow — submit, approve / reject / request correction, resubmit, history | Planned |
