@@ -12,6 +12,7 @@ import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
+import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
@@ -57,5 +58,7 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerLazySingleton(() => TaskLocalDataSource(getIt()))
     ..registerLazySingleton(() => TaskRemoteDataSource(getIt()))
     ..registerLazySingleton<TaskRepository>(() => TaskRepositoryImpl(getIt(), getIt()))
-    ..registerFactory(() => RefreshTasks(getIt()));
+    ..registerFactory(() => RefreshTasks(getIt()))
+    // Dashboard
+    ..registerFactory(() => DashboardCubit(getIt(), getIt()));
 }

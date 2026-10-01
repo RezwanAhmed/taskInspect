@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/app.dart';
 
 import '../../../helpers/fake_auth.dart';
+import '../../../helpers/fake_tasks.dart';
 
 void main() {
+  setUp(() => registerFakeTasks(FakeTaskRepository()));
   Future<FakeAuthRepository> openSignedIn(WidgetTester tester) async {
     final repository = FakeAuthRepository(savedUser: testWorker);
     await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(repository)));
@@ -35,7 +37,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Signed in as Wendy Worker'), findsOneWidget);
+    expect(find.text('Hello, Wendy Worker'), findsOneWidget);
     expect(repository.logouts, 0);
   });
 }

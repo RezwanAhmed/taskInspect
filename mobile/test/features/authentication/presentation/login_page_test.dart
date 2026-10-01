@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/app.dart';
 
 import '../../../helpers/fake_auth.dart';
+import '../../../helpers/fake_tasks.dart';
 
 void main() {
+  setUp(() => registerFakeTasks(FakeTaskRepository()));
   Future<void> openLogin(WidgetTester tester) async {
     await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository())));
     await tester.pumpAndSettle();
@@ -22,7 +24,7 @@ void main() {
 
     await signIn(tester, ' worker@example.com ', 'secret');
 
-    expect(find.text('Signed in as Wendy Worker'), findsOneWidget);
+    expect(find.text('Hello, Wendy Worker'), findsOneWidget);
   });
 
   testWidgets('wrong password shows the error and stays on sign in', (tester) async {

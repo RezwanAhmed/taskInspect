@@ -5,8 +5,10 @@ import 'package:taskinspect/core/theme/app_theme.dart';
 import 'package:taskinspect/core/theme/status_colors.dart';
 
 import '../../helpers/fake_auth.dart';
+import '../../helpers/fake_tasks.dart';
 
 void main() {
+  setUp(() => registerFakeTasks(FakeTaskRepository()));
   test('light and dark themes use Material 3 and the right brightness', () {
     expect(AppTheme.light.useMaterial3, isTrue);
     expect(AppTheme.light.colorScheme.brightness, Brightness.light);

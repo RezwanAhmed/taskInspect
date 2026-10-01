@@ -5,8 +5,10 @@ import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/router/app_router.dart';
 
 import '../../helpers/fake_auth.dart';
+import '../../helpers/fake_tasks.dart';
 
 void main() {
+  setUp(() => registerFakeTasks(FakeTaskRepository()));
   testWidgets('logged-out users cannot open the tasks screen', (tester) async {
     await tester.pumpWidget(TaskInspectApp(
       authBloc: authBlocWith(FakeAuthRepository()),
@@ -29,6 +31,6 @@ void main() {
     await tester.tap(find.byType(TextButton));
     await tester.pumpAndSettle();
 
-    expect(find.text('Signed in as Wendy Worker'), findsOneWidget);
+    expect(find.text('Hello, Wendy Worker'), findsOneWidget);
   });
 }

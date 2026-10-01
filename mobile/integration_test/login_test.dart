@@ -34,8 +34,8 @@ void main() {
       await tester.enterText(find.byKey(const Key('login-email')), email);
       await tester.enterText(find.byKey(const Key('login-password')), password);
       await tester.tap(find.byKey(const Key('login-submit')));
-      await _pumpUntil(tester, find.textContaining('Signed in as'));
-      expect(find.textContaining('Signed in as'), findsOneWidget);
+      await _pumpUntil(tester, find.textContaining('Hello, '));
+      expect(find.textContaining('Hello, '), findsOneWidget);
     },
     skip: email.isEmpty || password.isEmpty,
   );
