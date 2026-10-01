@@ -47,7 +47,20 @@ class TaskDetailsPage extends StatelessWidget {
           final userId = auth is Authenticated ? auth.user.id : '';
           return Scaffold(
             appBar: AppBar(title: const Text('Task')),
-            bottomNavigationBar: task != null && _canContinue(task, userId)
+            bottomNavigationBar: task != null && _canReview(task, userId)
+                ? SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FilledButton.icon(
+                        key: const Key('review-task'),
+                        onPressed: () =>
+                            context.push(AppRoutes.review(taskId)),
+                        icon: const Icon(Icons.fact_check_outlined),
+                        label: const Text('Review'),
+                      ),
+                    ),
+                  )
+                : task != null && _canContinue(task, userId)
                 ? SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -102,6 +115,13 @@ class TaskDetailsPage extends StatelessWidget {
     );
   }
 }
+
+/// The task's reviewer reviews a submitted task - never its own worker,
+/// except a manager's own personal task (the server's rule).
+bool _canReview(Task task, String userId) =>
+    task.status == TaskStatus.submitted &&
+    task.reviewer.id == userId &&
+    (task.assignee?.id != userId || task.createdBy.id == userId);
 
 bool _canContinue(Task task, String userId) =>
     task.status == TaskStatus.inProgress && task.assignee?.id == userId;
