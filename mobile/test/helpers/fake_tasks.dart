@@ -4,6 +4,7 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
@@ -237,6 +238,20 @@ class FakeEvidenceRepository implements EvidenceRepository {
   }
 }
 
+/// [DocumentOpener] for widget tests: records what was opened.
+class FakeDocumentOpener implements DocumentOpener {
+  final List<String> opened = [];
+
+  /// Whether an app is available to open documents.
+  bool canOpen = true;
+
+  @override
+  Future<bool> open(String path, {required String mimeType}) async {
+    opened.add(path);
+    return canOpen;
+  }
+}
+
 /// Registers the task screens' dependencies with [repository] in the
 /// service locator, as the app does.
 void registerFakeTasks(
@@ -244,6 +259,7 @@ void registerFakeTasks(
   FakeAnswerRepository? answers,
   FakeEvidencePicker? picker,
   FakeEvidenceRepository? evidence,
+  FakeDocumentOpener? opener,
 }) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
@@ -257,6 +273,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
     () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
     () => getIt.isRegistered<EvidenceRepository>() ? getIt.unregister<EvidenceRepository>() : null,
+    () => getIt.isRegistered<DocumentOpener>() ? getIt.unregister<DocumentOpener>() : null,
   ]) {
     unregister();
   }
@@ -267,5 +284,6 @@ void registerFakeTasks(
     ..registerFactory(() => StartTask(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())
     ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker())
-    ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository());
+    ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository())
+    ..registerSingleton<DocumentOpener>(opener ?? FakeDocumentOpener());
 }

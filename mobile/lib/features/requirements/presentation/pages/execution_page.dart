@@ -4,6 +4,7 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/features/evidence/presentation/pages/evidence_preview_page.dart';
 import 'package:taskinspect/features/requirements/presentation/cubit/execution_cubit.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/comment_field.dart';
+import 'package:taskinspect/features/requirements/presentation/widgets/inputs/document_input.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/inputs/photo_input.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_card.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_input.dart';
@@ -19,7 +20,7 @@ class ExecutionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), getIt(), taskId),
+      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), getIt(), getIt(), taskId),
       child: const _ExecutionView(),
     );
   }
@@ -39,6 +40,21 @@ class _ExecutionViewState extends State<_ExecutionView> {
   void dispose() {
     _pages.dispose();
     super.dispose();
+  }
+
+  Future<bool> _confirmRemoveDocument(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove this document?'),
+        content: const Text('It will be deleted from this device.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   Future<void> _showChecklist(BuildContext context, ExecutionState state) async {
@@ -72,10 +88,11 @@ class _ExecutionViewState extends State<_ExecutionView> {
   Widget build(BuildContext context) {
     return BlocConsumer<ExecutionCubit, ExecutionState>(
       listenWhen: (previous, current) =>
-          previous.index != current.index || (current.photoError != null && previous.photoError != current.photoError),
+          previous.index != current.index ||
+          (current.evidenceError != null && previous.evidenceError != current.evidenceError),
       listener: (context, state) {
-        if (state.photoError != null) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.photoError!)));
+        if (state.evidenceError != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.evidenceError!)));
         }
         if (_pages.hasClients && _pages.page?.round() != state.index) {
           _pages.animateToPage(state.index, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
@@ -132,23 +149,34 @@ class _ExecutionViewState extends State<_ExecutionView> {
                             value: answer.comment,
                             onChanged: (text) => cubit.answer(requirement, (a) => a.copyWith(comment: () => text)),
                           ),
-                    input: requirement.type == RequirementType.photo
-                        ? PhotoInput(
-                            photoPaths: [for (final photo in state.photosFor(requirement)) photo.localPath],
-                            onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
-                            onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
-                            onOpenPhoto: (photoIndex) async {
-                              final photo = state.photosFor(requirement)[photoIndex];
-                              if (await EvidencePreviewPage.show(context, photo)) {
-                                await cubit.removePhoto(photo);
-                              }
-                            },
-                          )
-                        : requirementInput(
-                      requirement: requirement,
-                      answer: answer,
-                      onChanged: (update) => cubit.answer(requirement, update),
-                    ),
+                    input: switch (requirement.type) {
+                      RequirementType.photo => PhotoInput(
+                          photoPaths: [for (final photo in state.evidenceFor(requirement)) photo.localPath],
+                          onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
+                          onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
+                          onOpenPhoto: (photoIndex) async {
+                            final photo = state.evidenceFor(requirement)[photoIndex];
+                            if (await EvidencePreviewPage.show(context, photo)) {
+                              await cubit.removeEvidence(photo);
+                            }
+                          },
+                        ),
+                      RequirementType.document => DocumentInput(
+                          documents: state.evidenceFor(requirement),
+                          onChoose: () => cubit.addDocument(requirement),
+                          onOpen: cubit.openDocument,
+                          onRemove: (document) async {
+                            if (await _confirmRemoveDocument(context)) {
+                              await cubit.removeEvidence(document);
+                            }
+                          },
+                        ),
+                      _ => requirementInput(
+                          requirement: requirement,
+                          answer: answer,
+                          onChanged: (update) => cubit.answer(requirement, update),
+                        ),
+                    },
                   );
                 },
               ),

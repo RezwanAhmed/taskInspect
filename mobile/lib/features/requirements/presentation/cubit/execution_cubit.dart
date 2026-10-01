@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
@@ -9,7 +10,6 @@ import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
-import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 class ExecutionState extends Equatable {
@@ -17,8 +17,8 @@ class ExecutionState extends Equatable {
     this.task,
     this.requirements = const [],
     this.answers = const {},
-    this.photos = const {},
-    this.photoError,
+    this.evidence = const {},
+    this.evidenceError,
     this.index = 0,
     this.isLoading = true,
   });
@@ -29,11 +29,11 @@ class ExecutionState extends Equatable {
   /// Answers by requirement ID.
   final Map<String, Answer> answers;
 
-  /// Evidence stored on the device, by requirement ID.
-  final Map<String, List<EvidenceItem>> photos;
+  /// Evidence (photos and documents) stored on the device, by requirement ID.
+  final Map<String, List<EvidenceItem>> evidence;
 
-  /// Set when a photo could not be stored.
-  final String? photoError;
+  /// Set when a photo or document could not be stored or opened.
+  final String? evidenceError;
 
   /// The requirement on screen.
   final int index;
@@ -47,10 +47,10 @@ class ExecutionState extends Equatable {
 
   Answer answerFor(Requirement requirement) => answers[requirement.id] ?? const Answer();
 
-  List<EvidenceItem> photosFor(Requirement requirement) => photos[requirement.id] ?? const [];
+  List<EvidenceItem> evidenceFor(Requirement requirement) => evidence[requirement.id] ?? const [];
 
-  bool isComplete(Requirement requirement) => requirement.type == RequirementType.photo
-      ? photosFor(requirement).isNotEmpty
+  bool isComplete(Requirement requirement) => requirement.type.isEvidence
+      ? evidenceFor(requirement).isNotEmpty
       : answerFor(requirement).completes(requirement);
 
   int get completedCount => requirements.where(isComplete).length;
@@ -59,8 +59,8 @@ class ExecutionState extends Equatable {
     Task? task,
     List<Requirement>? requirements,
     Map<String, Answer>? answers,
-    Map<String, List<EvidenceItem>>? photos,
-    String? Function()? photoError,
+    Map<String, List<EvidenceItem>>? evidence,
+    String? Function()? evidenceError,
     int? index,
     bool? isLoading,
   }) {
@@ -68,23 +68,24 @@ class ExecutionState extends Equatable {
       task: task ?? this.task,
       requirements: requirements ?? this.requirements,
       answers: answers ?? this.answers,
-      photos: photos ?? this.photos,
-      photoError: photoError != null ? photoError() : this.photoError,
+      evidence: evidence ?? this.evidence,
+      evidenceError: evidenceError != null ? evidenceError() : this.evidenceError,
       index: index ?? this.index,
       isLoading: isLoading ?? this.isLoading,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, answers, photos, photoError, index, isLoading];
+  List<Object?> get props => [task, requirements, answers, evidence, evidenceError, index, isLoading];
 }
 
 /// Walks the worker through a task's requirements one at a time. Answers
 /// are saved on the device as they change.
 class ExecutionCubit extends Cubit<ExecutionState> {
-  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this._evidence, this.taskId)
+  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this._evidence, this._opener, this.taskId)
       : super(const ExecutionState()) {
-    _evidenceSubscription = _evidence.watchEvidence(taskId).listen((photos) => emit(state.copyWith(photos: photos)));
+    _evidenceSubscription =
+        _evidence.watchEvidence(taskId).listen((evidence) => emit(state.copyWith(evidence: evidence)));
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: task)));
     // Saved answers are read once; after that this screen is the only one
     // changing them, so a slower write can never undo newer typing.
@@ -102,6 +103,7 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   final AnswerRepository _answers;
   final EvidencePicker _picker;
   final EvidenceRepository _evidence;
+  final DocumentOpener _opener;
   late final StreamSubscription<Map<String, List<EvidenceItem>>> _evidenceSubscription;
   final String taskId;
   Future<void> _saving = Future.value();
@@ -134,18 +136,48 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     try {
       // Stored and compressed on the device; the screen updates from the database.
       await _evidence.addPhoto(taskId: taskId, requirementId: requirement.id, sourcePath: path);
-      if (!isClosed) {
-        emit(state.copyWith(photoError: () => null));
-      }
+      _setError(null);
     } on Object {
-      if (!isClosed) {
-        emit(state.copyWith(photoError: () => 'The photo could not be saved. Please try again.'));
-      }
+      _setError('The photo could not be saved. Please try again.');
     }
   }
 
-  /// Removes a photo from the device.
-  Future<void> removePhoto(EvidenceItem item) => _evidence.remove(item);
+  /// Chooses a PDF document from the device's files for a DOCUMENT
+  /// requirement and stores a copy. Nothing changes when the worker cancels.
+  Future<void> addDocument(Requirement requirement) async {
+    final picked = await _picker.chooseDocument();
+    if (picked == null || isClosed) {
+      return;
+    }
+    try {
+      await _evidence.addDocument(
+        taskId: taskId,
+        requirementId: requirement.id,
+        sourcePath: picked.path,
+        fileName: picked.name,
+      );
+      _setError(null);
+    } on EvidenceRejected catch (e) {
+      _setError(e.message);
+    } on Object {
+      _setError('The document could not be saved. Please try again.');
+    }
+  }
+
+  /// Shows a stored document in the device's PDF viewer.
+  Future<void> openDocument(EvidenceItem item) async {
+    final opened = await _opener.open(item.localPath, mimeType: item.mimeType);
+    _setError(opened ? null : 'No app on this device can open PDF documents.');
+  }
+
+  /// Removes a photo or document from the device.
+  Future<void> removeEvidence(EvidenceItem item) => _evidence.remove(item);
+
+  void _setError(String? message) {
+    if (!isClosed) {
+      emit(state.copyWith(evidenceError: () => message));
+    }
+  }
 
   /// Completes when every answer so far is saved.
   Future<void> get saved => _saving;

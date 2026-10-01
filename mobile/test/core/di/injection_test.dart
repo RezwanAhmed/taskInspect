@@ -7,6 +7,7 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
+import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
@@ -49,6 +50,7 @@ void main() {
     expect(getIt<StartTask>(), isNotNull);
     expect(getIt<AnswerRepository>(), isNotNull);
     expect(getIt<EvidencePicker>(), isNotNull);
+    expect(getIt<DocumentOpener>(), isNotNull);
     expect(getIt<EvidenceRepository>(), isNotNull);
     expect(getIt<DashboardCubit>(), isNotNull);
   });
