@@ -12,6 +12,9 @@ import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
+import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
+import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
+import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 
 /// The app's service locator. Every dependency is registered in
 /// [configureDependencies]; widgets and BLoCs never create their own
@@ -47,5 +50,8 @@ Future<void> configureDependencies({AppConfig? config}) async {
     ..registerLazySingleton(
       () => AuthBloc(login: getIt(), restoreSession: getIt(), logout: getIt()),
       dispose: (bloc) => bloc.close(),
-    );
+    )
+    // Tasks
+    ..registerLazySingleton(() => TaskLocalDataSource(getIt()))
+    ..registerLazySingleton<TaskRepository>(() => TaskRepositoryImpl(getIt()));
 }
