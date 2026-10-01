@@ -93,6 +93,10 @@ class AuthorizationMatrixTests {
     private static final Endpoint ANSWER = new Endpoint("PUT .../response", TaskStatus.IN_PROGRESS,
             (f, a) -> put("/api/tasks/{t}/requirements/{r}/response", f.task().getId(), f.requirement().getId())
                     .contentType(MediaType.APPLICATION_JSON).content("{\"booleanValue\": true}"));
+    // The fixture's required requirement is unanswered: the assigned worker gets 409 REQUIREMENTS_MISSING,
+    // which shows the call was allowed.
+    private static final Endpoint SUBMIT = new Endpoint("POST /api/tasks/{id}/submit", TaskStatus.IN_PROGRESS,
+            (f, a) -> post("/api/tasks/{id}/submit", f.task().getId()));
     private static final Endpoint LIST_RESPONSES = new Endpoint("GET /api/tasks/{id}/responses",
             TaskStatus.IN_PROGRESS, (f, a) -> get("/api/tasks/{id}/responses", f.task().getId()));
 
@@ -108,6 +112,7 @@ class AuthorizationMatrixTests {
                 row(ASSIGN, 401, 403, 200, 403, 403, 403),
                 row(START, 401, 403, 403, 403, 200, 404),
                 row(ANSWER, 401, 403, 403, 403, 200, 404),
+                row(SUBMIT, 401, 403, 403, 403, 409, 404),
                 row(LIST_RESPONSES, 401, 200, 200, 200, 200, 404))
                 .flatMap(Function.identity());
     }

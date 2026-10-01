@@ -90,7 +90,7 @@ public class EvidenceService {
     @Transactional
     public Registration register(CurrentUser caller, UUID taskId, UUID requirementId,
             RegisterEvidenceRequest request) {
-        Task task = requireWritable(caller, taskId);
+        Task task = requireLockedWritable(caller, taskId);
         Requirement requirement = requirementService.getForTask(task.getId(), requirementId);
 
         Optional<Evidence> existing = evidenceRepository.findById(request.id());
@@ -143,7 +143,7 @@ public class EvidenceService {
      */
     @Transactional
     public Evidence complete(CurrentUser caller, UUID taskId, UUID evidenceId) {
-        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        Evidence evidence = find(requireLockedWritable(caller, taskId), evidenceId);
         if (evidence.getStatus() == EvidenceStatus.UPLOADED) {
             return evidence;
         }
@@ -170,7 +170,7 @@ public class EvidenceService {
     /** Removes evidence from the task; the stored file is deleted once the change is committed. */
     @Transactional
     public void delete(CurrentUser caller, UUID taskId, UUID evidenceId) {
-        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        Evidence evidence = find(requireLockedWritable(caller, taskId), evidenceId);
         evidenceRepository.delete(evidence);
         String key = evidence.getStorageKey();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -185,6 +185,16 @@ public class EvidenceService {
         return evidenceRepository.findById(evidenceId)
                 .filter(e -> e.getTask().getId().equals(task.getId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, EVIDENCE_NOT_FOUND, "Evidence not found"));
+    }
+
+    /**
+     * Like {@link #requireWritable}, for changes: waits for a submit of the
+     * task running at the same time (then the evidence is locked). Not for
+     * read-only transactions (a row lock needs a writable one).
+     */
+    private Task requireLockedWritable(CurrentUser caller, UUID taskId) {
+        taskService.lockForUpdate(taskId);
+        return requireWritable(caller, taskId);
     }
 
     private Task requireWritable(CurrentUser caller, UUID taskId) {

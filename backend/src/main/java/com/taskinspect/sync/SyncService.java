@@ -6,6 +6,7 @@ import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.evidence.EvidenceService;
 import com.taskinspect.evidence.dto.RegisterEvidenceRequest;
 import com.taskinspect.responses.ResponseService;
+import com.taskinspect.reviews.SubmissionService;
 import com.taskinspect.responses.dto.SaveResponseRequest;
 import com.taskinspect.sync.dto.SyncOperationRequest;
 import com.taskinspect.sync.dto.SyncOperationResult;
@@ -52,17 +53,19 @@ public class SyncService {
     private final TaskService taskService;
     private final ResponseService responseService;
     private final EvidenceService evidenceService;
+    private final SubmissionService submissionService;
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final TransactionTemplate transactions;
 
     public SyncService(SyncRecordRepository syncRecordRepository, TaskService taskService,
-            ResponseService responseService, EvidenceService evidenceService, ObjectMapper objectMapper,
-            Validator validator, PlatformTransactionManager transactionManager) {
+            ResponseService responseService, EvidenceService evidenceService, SubmissionService submissionService,
+            ObjectMapper objectMapper, Validator validator, PlatformTransactionManager transactionManager) {
         this.syncRecordRepository = syncRecordRepository;
         this.taskService = taskService;
         this.responseService = responseService;
         this.evidenceService = evidenceService;
+        this.submissionService = submissionService;
         this.objectMapper = objectMapper;
         this.validator = validator;
         this.transactions = new TransactionTemplate(transactionManager);
@@ -135,6 +138,7 @@ public class SyncService {
             }
             case "Evidence DELETE" -> evidenceService.delete(caller, taskId, operation.entityId());
             case "Task START" -> start(caller, operation);
+            case "Task SUBMIT" -> submit(caller, operation);
             default -> throw new ApiException(HttpStatus.BAD_REQUEST, UNSUPPORTED_OPERATION,
                     operation.operation() + " of " + operation.entityType() + " can't be synchronized");
         }
@@ -155,6 +159,17 @@ public class SyncService {
                     "The task was changed on the server. Reload it and try again.");
         }
         taskService.start(caller, operation.taskId());
+    }
+
+    /**
+     * No version check: the device's version is older after its own START
+     * was applied; the state machine and the requirement checks decide.
+     */
+    private void submit(CurrentUser caller, SyncOperationRequest operation) {
+        if (!operation.entityId().equals(operation.taskId())) {
+            throw invalidPayload("entityId must be the task ID");
+        }
+        submissionService.submit(caller, operation.taskId());
     }
 
     private <T> T payload(SyncOperationRequest operation, Class<T> type) {

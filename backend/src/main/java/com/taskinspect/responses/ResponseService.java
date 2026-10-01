@@ -52,6 +52,8 @@ public class ResponseService {
     /** Saves (or replaces) the answer to one requirement. Sending the same answer again is harmless. */
     @Transactional
     public Response save(CurrentUser caller, UUID taskId, UUID requirementId, SaveResponseRequest request) {
+        // Waits for a submit of the task running at the same time (then the answers are locked).
+        taskService.lockForUpdate(taskId);
         Task task = taskService.requireAssignee(caller, taskId);
         if (task.getStatus() != TaskStatus.IN_PROGRESS) {
             throw new ApiException(HttpStatus.CONFLICT, RESPONSES_LOCKED,

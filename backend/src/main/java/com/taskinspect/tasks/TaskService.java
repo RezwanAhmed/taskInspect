@@ -96,6 +96,18 @@ public class TaskService {
         taskRepository.markChanged(id, Instant.now());
     }
 
+    /**
+     * Locks the task's row for the rest of the transaction, so a submit and
+     * a change of its answers or evidence never run at the same time (one
+     * waits for the other and then sees its result). Call it first in the
+     * transaction, before the task is loaded, so the checks see the latest
+     * state. Unknown IDs are ignored (the checks that follow answer 404).
+     */
+    @Transactional
+    public void lockForUpdate(UUID id) {
+        taskRepository.findForUpdate(id);
+    }
+
     /** A task the caller works on: only its assigned worker gets it. */
     @Transactional(readOnly = true)
     public Task requireAssignee(CurrentUser caller, UUID id) {
