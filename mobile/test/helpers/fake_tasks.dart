@@ -72,6 +72,9 @@ class FakeTaskRepository implements TaskRepository {
   /// When set, starting a task fails with this.
   Failure? startFailure;
 
+  /// When set, starting a task waits for it (e.g. until the page is closed).
+  Completer<void>? startGate;
+
   /// The team members' tasks (tiles) on the "device".
   List<TeamTask> teamTasks = [];
 
@@ -122,6 +125,7 @@ class FakeTaskRepository implements TaskRepository {
 
   @override
   Future<Result<Task>> start(String taskId) async {
+    await startGate?.future;
     if (startFailure != null) {
       return Err(startFailure!);
     }
@@ -362,8 +366,14 @@ class FakeTaskRepository implements TaskRepository {
   /// Task IDs submitted through [submit].
   final List<String> submitted = [];
 
+  /// When set, submitting fails with this.
+  Failure? submitFailure;
+
   @override
   Future<Result<Task>> submit(String taskId) async {
+    if (submitFailure case final failure?) {
+      return Err(failure);
+    }
     submitted.add(taskId);
     final task = current.firstWhere((t) => t.id == taskId);
     final done = Task(
