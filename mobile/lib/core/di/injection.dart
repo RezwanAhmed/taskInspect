@@ -50,6 +50,7 @@ import 'package:taskinspect/features/tasks/domain/repositories/task_repository.d
 import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/save_draft_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
@@ -166,6 +167,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     ..registerFactory(() => StartTask(getIt()))
     ..registerFactory(() => TakeTask(getIt()))
     ..registerFactory(() => LoadSubTasks(getIt()))
+    ..registerFactory(() => SaveDraftTask(getIt()))
     ..registerFactory(() => SubmitTask(getIt()))
     ..registerFactory(() => LoadTaskHistory(getIt()))
     // Teams

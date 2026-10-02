@@ -15,6 +15,7 @@ import 'package:taskinspect/features/requirements/domain/repositories/answer_rep
 import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
@@ -22,6 +23,7 @@ import 'package:taskinspect/features/tasks/domain/repositories/task_repository.d
 import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/save_draft_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
@@ -114,6 +116,47 @@ class FakeTaskRepository implements TaskRepository {
     );
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
+  }
+
+  /// Drafts made with [createDraft] get the IDs d1, d2, ...
+  int _drafts = 0;
+
+  @override
+  Future<Result<Task>> createDraft(TaskDraft draft, {required PersonRef creator}) async {
+    final task = Task(
+      id: 'd${++_drafts}',
+      title: draft.title,
+      description: draft.description,
+      priority: draft.priority,
+      status: TaskStatus.draft,
+      dueDate: draft.dueDate,
+      createdBy: creator,
+      reviewer: draft.reviewer ?? creator,
+      version: 0,
+      updatedAt: DateTime.utc(2026, 10, 2),
+    );
+    emit([...current, task]);
+    return Ok(task);
+  }
+
+  @override
+  Future<Result<Task>> updateDraft(String taskId, TaskDraft draft) async {
+    final task = current.firstWhere((t) => t.id == taskId);
+    final updated = Task(
+      id: task.id,
+      title: draft.title,
+      description: draft.description,
+      priority: draft.priority,
+      status: task.status,
+      dueDate: draft.dueDate,
+      createdBy: task.createdBy,
+      reviewer: draft.reviewer ?? task.createdBy,
+      assignee: task.assignee,
+      version: task.version,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? updated : t]);
+    return Ok(updated);
   }
 
   /// Sub-tasks per main task ID for [loadSubTasks], or [subTasksFailure].
@@ -389,6 +432,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
     () => getIt.isRegistered<TakeTask>() ? getIt.unregister<TakeTask>() : null,
     () => getIt.isRegistered<LoadSubTasks>() ? getIt.unregister<LoadSubTasks>() : null,
+    () => getIt.isRegistered<SaveDraftTask>() ? getIt.unregister<SaveDraftTask>() : null,
     () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
     () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
@@ -407,6 +451,7 @@ void registerFakeTasks(
     ..registerFactory(() => StartTask(repository))
     ..registerFactory(() => TakeTask(repository))
     ..registerFactory(() => LoadSubTasks(repository))
+    ..registerFactory(() => SaveDraftTask(repository))
     ..registerFactory(() => SubmitTask(repository))
     ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())

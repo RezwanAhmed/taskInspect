@@ -2,6 +2,7 @@ import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
@@ -34,6 +35,14 @@ abstract interface class TaskRepository {
   /// Tasks with unsent local changes are kept as they are. On failure the
   /// local data stays as it was.
   Future<Result<void>> refresh();
+
+  /// A manager creates a draft task (works offline: stored on the device and
+  /// sent to the server at the next sync).
+  Future<Result<Task>> createDraft(TaskDraft draft, {required PersonRef creator});
+
+  /// The creator changes a task's details while it is DRAFT, OPEN or
+  /// ASSIGNED (works offline, like [createDraft]).
+  Future<Result<Task>> updateDraft(String taskId, TaskDraft draft);
 
   /// The sub-tasks of a main task from the server (needs a connection;
   /// not stored on the device).

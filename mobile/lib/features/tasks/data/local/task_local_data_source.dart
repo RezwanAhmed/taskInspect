@@ -5,16 +5,22 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/save_draft_task.dart';
+import 'package:uuid/uuid.dart';
 
 /// Reads and writes tasks and requirements in the local database.
 class TaskLocalDataSource {
-  TaskLocalDataSource(this._db, {SyncQueue? queue}) : _queue = queue ?? SyncQueue(_db);
+  TaskLocalDataSource(this._db, {SyncQueue? queue, Uuid? ids})
+      : _queue = queue ?? SyncQueue(_db),
+        _ids = ids ?? const Uuid();
 
   final AppDatabase _db;
   final SyncQueue _queue;
+  final Uuid _ids;
 
   Stream<List<Task>> watchTasks({TaskStatus? status}) {
     final query = _db.select(_db.localTasks)
@@ -283,6 +289,85 @@ class TaskLocalDataSource {
   }
 
   /// Removes tasks that are no longer on the server (with their requirements).
+  /// Creates a draft task on the device and queues it for the server, in
+  /// one transaction, so it works offline: the task gets its ID here and is
+  /// sent as a `Task CREATE` at the next sync.
+  Future<Task> createDraft(TaskDraft draft, {required PersonRef creator}) {
+    return _db.transaction(() async {
+      final task = Task(
+        id: _ids.v4(),
+        title: draft.title,
+        description: draft.description,
+        priority: draft.priority,
+        status: TaskStatus.draft,
+        dueDate: draft.dueDate.toUtc(),
+        createdBy: creator,
+        reviewer: draft.reviewer ?? creator,
+        version: 0,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      await _db.into(_db.localTasks).insert(_toTaskRow(task));
+      await _queue.add(
+        entity: SyncEntity.task,
+        entityId: task.id,
+        taskId: task.id,
+        operation: SyncOperation.create,
+        payload: _draftPayload(draft),
+      );
+      return task;
+    });
+  }
+
+  /// Changes a task's details on the device and queues the change, in one
+  /// transaction. While the task's CREATE is still waiting to be sent, that
+  /// CREATE carries the new details instead; otherwise a `Task UPDATE` with
+  /// the version from the last pull is queued (the server refuses it if
+  /// someone changed the task meanwhile). Returns `null` when the task is
+  /// not on the device or can no longer be edited.
+  Future<Task?> updateDraft(String taskId, TaskDraft draft) {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.localTasks)..where((t) => t.id.equals(taskId))).getSingleOrNull();
+      if (row == null || !SaveDraftTask.editable.contains(TaskStatus.fromApi(row.status))) {
+        return null;
+      }
+      final updated = row.copyWith(
+        title: draft.title,
+        description: Value(draft.description),
+        priority: draft.priority.apiName,
+        dueDate: draft.dueDate.toUtc(),
+        reviewerId: draft.reviewer?.id ?? row.createdById,
+        reviewerName: draft.reviewer?.name ?? row.createdByName,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      await _db.update(_db.localTasks).replace(updated);
+      final waitingCreate = await (_db.update(_db.localSyncOperations)
+            ..where((o) =>
+                o.taskId.equals(taskId) &
+                o.entityType.equals(SyncEntity.task.apiName) &
+                o.operation.equals(SyncOperation.create.apiName) &
+                o.status.equals('PENDING')))
+          .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode(_draftPayload(draft)))));
+      if (waitingCreate == 0) {
+        await _queue.add(
+          entity: SyncEntity.task,
+          entityId: taskId,
+          taskId: taskId,
+          operation: SyncOperation.update,
+          payload: {..._draftPayload(draft), 'version': row.version},
+        );
+      }
+      return _toTask(updated);
+    });
+  }
+
+  static Map<String, Object?> _draftPayload(TaskDraft draft) => {
+        'title': draft.title,
+        'description': draft.description,
+        'priority': draft.priority.apiName,
+        'dueDate': draft.dueDate.toUtc().toIso8601String(),
+        'reviewerId': draft.reviewer?.id,
+      };
+
   /// Replaces a task's details (e.g. after taking it), keeping its
   /// requirements, answers and evidence on the device.
   Future<void> saveTaskDetails(Task task) => _db.into(_db.localTasks).insertOnConflictUpdate(_toTaskRow(task));

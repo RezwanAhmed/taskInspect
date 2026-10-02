@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -19,6 +20,7 @@ import 'package:taskinspect/features/requirements/data/local/answer_local_data_s
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
@@ -279,6 +281,21 @@ void main() {
     expect(seen, hasLength(2));
     expect(seen.first, isNull);
     expect(seen.last, isNotNull);
+  });
+
+  test('after an edit of a task is applied, the next edit carries the new version', () async {
+    final local = TaskLocalDataSource(db);
+    await local.saveTask(fakeTask('x'), const []);
+    final draft = TaskDraft(title: 'Kitchen', priority: TaskPriority.high, dueDate: DateTime.utc(2026, 12, 1));
+    await local.updateDraft('x', draft);
+    serve((_) => 'APPLIED');
+
+    await manager.push();
+    await local.updateDraft('x', draft);
+
+    expect((await local.watchTask('x').first)!.version, 2);
+    final waiting = await db.select(db.localSyncOperations).getSingle();
+    expect((jsonDecode(waiting.payload) as Map)['version'], 2);
   });
 
   group('pull', () {

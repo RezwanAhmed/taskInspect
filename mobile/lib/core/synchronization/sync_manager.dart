@@ -261,6 +261,7 @@ class SyncManager {
             progressed = true;
             await (_db.delete(_db.localSyncOperations)..where((o) => o.id.equals(operation.id))).go();
             await _markEntitySynced(operation);
+            await _followTaskVersion(operation);
           case SyncResultStatus.rejected:
             progressed = true;
             await (_db.update(_db.localSyncOperations)..where((o) => o.id.equals(operation.id))).write(
@@ -291,6 +292,35 @@ class SyncManager {
     return (_db.update(_db.localTasks)
           ..where((t) => t.id.equals(operation.taskId) & t.status.equals(TaskStatus.submitted.apiName)))
         .write(LocalTasksCompanion(status: Value(TaskStatus.inProgress.apiName)));
+  }
+
+  /// The server raised the task's version by one when it applied our Task
+  /// UPDATE. The device does the same, also in a later edit still waiting
+  /// to be sent, so that edit isn't refused as made on an old version
+  /// before the next pull brings the task again.
+  Future<void> _followTaskVersion(SyncOperationRow operation) async {
+    if (operation.entityType != SyncEntity.task.apiName || operation.operation != SyncOperation.update.apiName) {
+      return;
+    }
+    final task = await (_db.select(_db.localTasks)..where((t) => t.id.equals(operation.taskId))).getSingleOrNull();
+    if (task == null) {
+      return;
+    }
+    final version = task.version + 1;
+    await (_db.update(_db.localTasks)..where((t) => t.id.equals(task.id)))
+        .write(LocalTasksCompanion(version: Value(version)));
+    final waiting = await (_db.select(_db.localSyncOperations)
+          ..where((o) =>
+              o.taskId.equals(task.id) &
+              o.entityType.equals(SyncEntity.task.apiName) &
+              o.operation.equals(SyncOperation.update.apiName) &
+              o.status.equals('PENDING')))
+        .get();
+    for (final later in waiting) {
+      final payload = jsonDecode(later.payload) as Map<String, Object?>;
+      await (_db.update(_db.localSyncOperations)..where((o) => o.id.equals(later.id)))
+          .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode({...payload, 'version': version}))));
+    }
   }
 
   /// An answer counts as synced once no change of it is left in the queue.

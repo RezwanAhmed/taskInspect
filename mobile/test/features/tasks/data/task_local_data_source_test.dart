@@ -1,6 +1,10 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/config/app_config.dart';
+import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
@@ -8,6 +12,7 @@ import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.d
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 
 Task task(String id, String title, DateTime due, {TaskStatus status = TaskStatus.assigned}) => Task(
@@ -138,5 +143,72 @@ void main() {
     expect(answers.map((a) => a.requirementId), ['r1']);
     expect(await db.select(db.localEvidence).get(), hasLength(1));
     expect((await db.select(db.localRequirements).getSingle()).title, 'Renamed');
+  });
+
+  group('drafts made on the device', () {
+    const mia = PersonRef(id: 'm1', name: 'Mia Manager');
+    final draft = TaskDraft(title: 'Boiler room', priority: TaskPriority.high, dueDate: DateTime.utc(2026, 12, 1, 9));
+
+    Future<List<SyncOperationRow>> queue() =>
+        (db.select(db.localSyncOperations)..orderBy([(o) => OrderingTerm(expression: o.createdAt)])).get();
+
+    test('a new draft is stored and its CREATE queued, with the ID made here', () async {
+      final created = await local.createDraft(draft, creator: mia);
+
+      final stored = await local.watchTask(created.id).first;
+      expect(stored!.status, TaskStatus.draft);
+      expect(stored.reviewer, mia);
+      final operations = await queue();
+      expect(operations.single.operation, 'CREATE');
+      expect(operations.single.entityType, 'Task');
+      expect(operations.single.taskId, created.id);
+      expect(jsonDecode(operations.single.payload), {
+        'title': 'Boiler room',
+        'description': null,
+        'priority': 'HIGH',
+        'dueDate': '2026-12-01T09:00:00.000Z',
+        'reviewerId': null,
+      });
+    });
+
+    test('editing before the CREATE is sent changes the CREATE', () async {
+      final created = await local.createDraft(draft, creator: mia);
+
+      await local.updateDraft(created.id, TaskDraft(title: 'Boiler room 2', priority: TaskPriority.low,
+          dueDate: DateTime.utc(2026, 12, 2, 9)));
+
+      final operations = await queue();
+      expect(operations.single.operation, 'CREATE');
+      expect((jsonDecode(operations.single.payload) as Map)['title'], 'Boiler room 2');
+      expect((await local.watchTask(created.id).first)!.title, 'Boiler room 2');
+    });
+
+    test('once its CREATE is being sent (or failed), an edit queues an UPDATE', () async {
+      final created = await local.createDraft(draft, creator: mia);
+      await db.update(db.localSyncOperations).write(const LocalSyncOperationsCompanion(status: Value('FAILED')));
+
+      await local.updateDraft(created.id, draft);
+
+      expect([for (final o in await queue()) o.operation], ['CREATE', 'UPDATE']);
+    });
+
+    test('editing a task already on the server queues an UPDATE with its version', () async {
+      await local.saveTask(task('t1', 'Kitchen', DateTime.utc(2026, 10, 2)), const []);
+
+      await local.updateDraft('t1', draft);
+      await local.updateDraft('t1', draft);
+
+      final operations = await queue();
+      expect(operations.single.operation, 'UPDATE');
+      expect((jsonDecode(operations.single.payload) as Map)['version'], 1);
+    });
+
+    test('a started task can no longer be edited', () async {
+      await local.saveTask(task('t1', 'Kitchen', DateTime.utc(2026, 10, 2), status: TaskStatus.inProgress), const []);
+
+      expect(await local.updateDraft('t1', draft), isNull);
+      expect(await repository.updateDraft('t1', draft), isA<Err<Task>>());
+      expect(await queue(), isEmpty);
+    });
   });
 }

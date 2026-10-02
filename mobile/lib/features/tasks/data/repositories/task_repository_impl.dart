@@ -5,6 +5,7 @@ import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.d
 import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
@@ -56,6 +57,18 @@ class TaskRepositoryImpl implements TaskRepository {
     // Tasks with unsent local changes keep their local version.
     await _local.replaceAll([for (final task in loaded) (task, requirements[task.id]!)]);
     return const Ok(null);
+  }
+
+  @override
+  Future<Result<Task>> createDraft(TaskDraft draft, {required PersonRef creator}) async =>
+      Ok(await _local.createDraft(draft, creator: creator));
+
+  @override
+  Future<Result<Task>> updateDraft(String taskId, TaskDraft draft) async {
+    final updated = await _local.updateDraft(taskId, draft);
+    return updated == null
+        ? const Err(InvalidInputFailure(field: 'task', message: 'This task can no longer be edited.'))
+        : Ok(updated);
   }
 
   @override
