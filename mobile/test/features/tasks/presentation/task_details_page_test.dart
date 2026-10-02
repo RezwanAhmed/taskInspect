@@ -5,8 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
@@ -103,5 +106,57 @@ void main() {
     await go(tester, AppRoutes.task('t1'));
 
     expect(find.byKey(const Key('review-result')), findsNothing);
+  });
+
+  group('open task', () {
+    final open = Task(
+      id: 'o1',
+      title: 'Boiler room',
+      priority: TaskPriority.high,
+      status: TaskStatus.open,
+      dueDate: DateTime.utc(2099),
+      createdBy: const PersonRef(id: 'm1', name: 'Mia Manager'),
+      reviewer: const PersonRef(id: 'm1', name: 'Mia Manager'),
+      version: 1,
+      updatedAt: DateTime.utc(2026, 10, 1),
+    );
+
+    Future<FakeTaskRepository> openOpenTask(WidgetTester tester, AuthUser user) async {
+      final tasks = FakeTaskRepository([open]);
+      registerFakeTasks(tasks);
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: user))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('o1'));
+      return tasks;
+    }
+
+    testWidgets('a worker takes it, then can start it', (tester) async {
+      await openOpenTask(tester, testWorker);
+
+      await tester.tap(find.byKey(const Key('take-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The task is yours now.'), findsOneWidget);
+      expect(find.byKey(const Key('take-task')), findsNothing);
+      expect(find.byKey(const Key('start-task')), findsOneWidget);
+    });
+
+    testWidgets('when another worker was faster, it says so', (tester) async {
+      final tasks = await openOpenTask(tester, testWorker);
+      tasks.takeFailure = const ServerFailure(statusCode: 409, code: 'TASK_ALREADY_TAKEN');
+
+      await tester.tap(find.byKey(const Key('take-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Another worker has already taken this task.'), findsOneWidget);
+      expect(find.text('This task is not on this device.'), findsOneWidget);
+      expect(find.byKey(const Key('take-task')), findsNothing);
+    });
+
+    testWidgets('managers do not get the take button', (tester) async {
+      await openOpenTask(tester, testManager);
+
+      expect(find.byKey(const Key('take-task')), findsNothing);
+    });
   });
 }

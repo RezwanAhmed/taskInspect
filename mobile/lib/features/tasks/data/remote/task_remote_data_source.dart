@@ -66,6 +66,14 @@ class TaskRemoteDataSource {
     );
   }
 
+  /// Takes an open task (first worker wins: 409 TASK_ALREADY_TAKEN for the others).
+  Future<Result<Task>> take(String taskId) {
+    return _api.send(
+      (dio) => dio.post<Object?>('/api/tasks/$taskId/take'),
+      (body) => taskFromJson(body! as Map<String, Object?>),
+    );
+  }
+
   static Task taskFromJson(Map<String, Object?> json) => Task(
         id: json['id']! as String,
         title: json['title']! as String,

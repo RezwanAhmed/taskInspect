@@ -171,4 +171,68 @@ void main() {
 
     expect((await repository.watchTask('t1').first)!.title, 'Kitchen (renamed)');
   });
+
+  group('take', () {
+    Future<void> storeOpenTask() async {
+      await local.saveTask(
+        Task(
+          id: 't1',
+          title: 'Boiler room',
+          priority: TaskPriority.high,
+          status: TaskStatus.open,
+          dueDate: DateTime.utc(2026, 10, 2, 9),
+          createdBy: const PersonRef(id: 'm1', name: 'Mia Manager'),
+          reviewer: const PersonRef(id: 'm1', name: 'Mia Manager'),
+          version: 1,
+          updatedAt: DateTime.utc(2026, 10, 1),
+        ),
+        const [],
+      );
+    }
+
+    test('stores the taken task as the worker\'s', () async {
+      await storeOpenTask();
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        expect(request.path, '/api/tasks/t1/take');
+        return (200, taskJson('t1', 'Boiler room'));
+      });
+
+      final result = await repository.take('t1');
+
+      expect(result, isA<Ok<Task>>());
+      final stored = await local.watchTask('t1').first;
+      expect(stored!.status, TaskStatus.assigned);
+      expect(stored.assignee!.id, 'w1');
+    });
+
+    test('someone else was faster: the open task leaves the device', () async {
+      await storeOpenTask();
+      api.dio.httpClientAdapter = FakeServer(
+        (_) async => (409, {'status': 409, 'code': 'TASK_ALREADY_TAKEN', 'message': 'Taken'}),
+      );
+
+      final result = await repository.take('t1');
+
+      expect(result, isA<Err<Task>>());
+      expect(await local.watchTask('t1').first, isNull);
+    });
+
+    test('no longer open to the worker (404): the open task leaves the device', () async {
+      await storeOpenTask();
+      api.dio.httpClientAdapter = FakeServer(
+        (_) async => (404, {'status': 404, 'code': 'TASK_NOT_FOUND', 'message': 'Task not found'}),
+      );
+
+      expect(await repository.take('t1'), isA<Err<Task>>());
+      expect(await local.watchTask('t1').first, isNull);
+    });
+
+    test('without a connection nothing changes', () async {
+      await storeOpenTask();
+      api.dio.httpClientAdapter = FakeServer((_) async => (0, null));
+
+      expect(await repository.take('t1'), isA<Err<Task>>());
+      expect((await local.watchTask('t1').first)!.status, TaskStatus.open);
+    });
+  });
 }

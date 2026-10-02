@@ -10,6 +10,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_details_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/status_chip.dart';
@@ -25,7 +26,7 @@ class TaskDetailsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => TaskDetailsCubit(getIt(), getIt(), taskId),
+      create: (_) => TaskDetailsCubit(getIt(), getIt(), getIt(), taskId),
       child: BlocConsumer<TaskDetailsCubit, TaskDetailsState>(
         listenWhen: (previous, current) =>
             (current.message != null && previous.message != current.message) ||
@@ -45,7 +46,8 @@ class TaskDetailsPage extends StatelessWidget {
         builder: (context, state) {
           final task = state.task;
           final auth = context.watch<AuthBloc>().state;
-          final userId = auth is Authenticated ? auth.user.id : '';
+          final user = auth is Authenticated ? auth.user : null;
+          final userId = user?.id ?? '';
           return Scaffold(
             appBar: AppBar(
               title: const Text('Task'),
@@ -80,6 +82,27 @@ class TaskDetailsPage extends StatelessWidget {
                             context.push(AppRoutes.execute(taskId)),
                         icon: const Icon(Icons.edit_note),
                         label: const Text('Continue'),
+                      ),
+                    ),
+                  )
+                : task != null && user != null && TakeTask.canTake(task, user)
+                ? SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FilledButton.icon(
+                        key: const Key('take-task'),
+                        onPressed: state.isTaking
+                            ? null
+                            : () => context.read<TaskDetailsCubit>().take(),
+                        icon: state.isTaking
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.pan_tool_alt_outlined),
+                        label: const Text('Take task'),
                       ),
                     ),
                   )

@@ -9,6 +9,7 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 class TaskDetailsState extends Equatable {
@@ -18,6 +19,7 @@ class TaskDetailsState extends Equatable {
     this.review,
     this.isLoading = true,
     this.isStarting = false,
+    this.isTaking = false,
     this.message,
   });
 
@@ -29,6 +31,7 @@ class TaskDetailsState extends Equatable {
   final TaskReview? review;
   final bool isLoading;
   final bool isStarting;
+  final bool isTaking;
 
   /// A one-off message, e.g. why starting failed.
   final String? message;
@@ -39,6 +42,7 @@ class TaskDetailsState extends Equatable {
     TaskReview? Function()? review,
     bool? isLoading,
     bool? isStarting,
+    bool? isTaking,
     String? Function()? message,
   }) {
     return TaskDetailsState(
@@ -47,17 +51,19 @@ class TaskDetailsState extends Equatable {
       review: review != null ? review() : this.review,
       isLoading: isLoading ?? this.isLoading,
       isStarting: isStarting ?? this.isStarting,
+      isTaking: isTaking ?? this.isTaking,
       message: message != null ? message() : this.message,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, review, isLoading, isStarting, message];
+  List<Object?> get props => [task, requirements, review, isLoading, isStarting, isTaking, message];
 }
 
 /// Follows one task and its requirements on the device.
 class TaskDetailsCubit extends Cubit<TaskDetailsState> {
-  TaskDetailsCubit(WatchTaskDetails watch, this._startTask, this.taskId) : super(const TaskDetailsState()) {
+  TaskDetailsCubit(WatchTaskDetails watch, this._startTask, this._takeTask, this.taskId)
+      : super(const TaskDetailsState()) {
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: () => task, isLoading: false)));
     _requirements = watch.requirements(taskId).listen((requirements) {
       emit(state.copyWith(requirements: requirements));
@@ -66,6 +72,7 @@ class TaskDetailsCubit extends Cubit<TaskDetailsState> {
   }
 
   final StartTask _startTask;
+  final TakeTask _takeTask;
   late final StreamSubscription<TaskReview?> _review;
   final String taskId;
 
@@ -81,6 +88,26 @@ class TaskDetailsCubit extends Cubit<TaskDetailsState> {
       message: () => switch (result) {
         Ok() => null,
         Err(failure: NetworkFailure()) => 'No connection. Starting a task needs the internet for now.',
+        Err(:final failure) => userMessage(failure),
+      },
+    ));
+  }
+
+  /// Takes the open task; the screen updates from the device when it
+  /// succeeds (it becomes the worker's ASSIGNED task).
+  Future<void> take() async {
+    emit(state.copyWith(isTaking: true, message: () => null));
+    final result = await _takeTask(taskId);
+    if (isClosed) {
+      return;
+    }
+    emit(state.copyWith(
+      isTaking: false,
+      message: () => switch (result) {
+        Ok() => 'The task is yours now.',
+        Err(failure: NetworkFailure()) => 'No connection. Taking a task needs the internet.',
+        Err(failure: ServerFailure(code: 'TASK_ALREADY_TAKEN')) => 'Another worker has already taken this task.',
+        Err(failure: ServerFailure(code: 'TASK_NOT_FOUND')) => 'This task is no longer open to you.',
         Err(:final failure) => userMessage(failure),
       },
     ));

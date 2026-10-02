@@ -35,6 +35,11 @@ abstract interface class TaskRepository {
   /// local data stays as it was.
   Future<Result<void>> refresh();
 
+  /// A worker takes an open task (needs a connection). On success the task
+  /// is stored as theirs; when someone else took it first (or it is no
+  /// longer open to them) it is removed from the device.
+  Future<Result<Task>> take(String taskId);
+
   /// The assigned worker starts the task (or starts again after a reject
   /// or correction request). Works offline: the task is started on the
   /// device and the start is sent to the server by the sync queue.

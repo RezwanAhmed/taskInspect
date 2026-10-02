@@ -23,6 +23,7 @@ import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dar
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_team_tasks.dart';
@@ -112,6 +113,37 @@ class FakeTaskRepository implements TaskRepository {
     );
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
+  }
+
+  /// When set, taking a task fails with this.
+  Failure? takeFailure;
+
+  /// Takes the open task for the test worker (u1), like the server.
+  @override
+  Future<Result<Task>> take(String taskId) async {
+    if (takeFailure case final failure?) {
+      // Like the real repository: someone else has it, so it leaves the device.
+      if (failure case ServerFailure(code: 'TASK_ALREADY_TAKEN' || 'TASK_NOT_FOUND')) {
+        emit([for (final t in current) if (t.id != taskId) t]);
+      }
+      return Err(failure);
+    }
+    final task = current.firstWhere((t) => t.id == taskId);
+    final taken = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: TaskStatus.assigned,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: const PersonRef(id: 'u1', name: 'Wendy Worker'),
+      version: task.version + 1,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? taken : t]);
+    return Ok(taken);
   }
 
   /// The history [loadHistory] returns, or [historyFailure].
@@ -346,6 +378,7 @@ void registerFakeTasks(
   for (final unregister in [
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
+    () => getIt.isRegistered<TakeTask>() ? getIt.unregister<TakeTask>() : null,
     () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
     () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
@@ -362,6 +395,7 @@ void registerFakeTasks(
     ..registerFactory(() => WatchTeamTasks(repository))
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
+    ..registerFactory(() => TakeTask(repository))
     ..registerFactory(() => SubmitTask(repository))
     ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())

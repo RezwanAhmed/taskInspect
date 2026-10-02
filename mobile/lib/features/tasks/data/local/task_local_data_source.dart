@@ -283,6 +283,13 @@ class TaskLocalDataSource {
   }
 
   /// Removes tasks that are no longer on the server (with their requirements).
+  /// Replaces a task's details (e.g. after taking it), keeping its
+  /// requirements, answers and evidence on the device.
+  Future<void> saveTaskDetails(Task task) => _db.into(_db.localTasks).insertOnConflictUpdate(_toTaskRow(task));
+
+  /// Removes one task with its requirements (e.g. an open task someone else took).
+  Future<void> deleteTask(String id) => (_db.delete(_db.localTasks)..where((t) => t.id.equals(id))).go();
+
   Future<void> deleteTasksExcept(Set<String> keepIds) {
     return (_db.delete(_db.localTasks)..where((t) => t.id.isNotIn(keepIds))).go();
   }

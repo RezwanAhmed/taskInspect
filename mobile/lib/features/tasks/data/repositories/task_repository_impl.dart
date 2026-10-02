@@ -59,6 +59,20 @@ class TaskRepositoryImpl implements TaskRepository {
   }
 
   @override
+  Future<Result<Task>> take(String taskId) async {
+    final result = await _remote.take(taskId);
+    switch (result) {
+      case Ok(:final value):
+        await _local.saveTaskDetails(value);
+      case Err(failure: ServerFailure(code: 'TASK_ALREADY_TAKEN' || 'TASK_NOT_FOUND')):
+        await _local.deleteTask(taskId);
+      case Err():
+        break;
+    }
+    return result;
+  }
+
+  @override
   Future<Result<Task>> start(String taskId) async {
     final started = await _local.start(taskId);
     return started == null ? Err(UnexpectedFailure(StateError('Task $taskId is not on the device'))) : Ok(started);
