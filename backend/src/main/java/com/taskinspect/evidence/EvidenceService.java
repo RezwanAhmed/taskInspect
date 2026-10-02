@@ -8,6 +8,7 @@ import com.taskinspect.filestorage.SignedUrl;
 import com.taskinspect.requirements.Requirement;
 import com.taskinspect.requirements.RequirementService;
 import com.taskinspect.requirements.RequirementType;
+import com.taskinspect.reviews.CorrectionScope;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskService;
 import com.taskinspect.tasks.TaskStatus;
@@ -65,15 +66,18 @@ public class EvidenceService {
     private final UserService userService;
     private final FileStorage fileStorage;
     private final Clock clock;
+    private final CorrectionScope correctionScope;
 
     public EvidenceService(EvidenceRepository evidenceRepository, TaskService taskService,
-            RequirementService requirementService, UserService userService, FileStorage fileStorage, Clock clock) {
+            RequirementService requirementService, UserService userService, FileStorage fileStorage, Clock clock,
+            CorrectionScope correctionScope) {
         this.evidenceRepository = evidenceRepository;
         this.taskService = taskService;
         this.requirementService = requirementService;
         this.userService = userService;
         this.fileStorage = fileStorage;
         this.clock = clock;
+        this.correctionScope = correctionScope;
     }
 
     @Transactional(readOnly = true)
@@ -90,7 +94,7 @@ public class EvidenceService {
     @Transactional
     public Registration register(CurrentUser caller, UUID taskId, UUID requirementId,
             RegisterEvidenceRequest request) {
-        Task task = requireWritable(caller, taskId);
+        Task task = requireLockedWritable(caller, taskId);
         Requirement requirement = requirementService.getForTask(task.getId(), requirementId);
 
         Optional<Evidence> existing = evidenceRepository.findById(request.id());
@@ -102,6 +106,8 @@ public class EvidenceService {
             }
             return new Registration(evidence, false);
         }
+        // While correcting, new files only for the requirements the reviewer marked.
+        correctionScope.requireChangeable(task, requirement.getId());
 
         String contentType = request.contentType().trim().toLowerCase();
         Set<String> allowed = ALLOWED_TYPES.get(requirement.getType());
@@ -143,7 +149,7 @@ public class EvidenceService {
      */
     @Transactional
     public Evidence complete(CurrentUser caller, UUID taskId, UUID evidenceId) {
-        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        Evidence evidence = find(requireLockedWritable(caller, taskId), evidenceId);
         if (evidence.getStatus() == EvidenceStatus.UPLOADED) {
             return evidence;
         }
@@ -170,7 +176,9 @@ public class EvidenceService {
     /** Removes evidence from the task; the stored file is deleted once the change is committed. */
     @Transactional
     public void delete(CurrentUser caller, UUID taskId, UUID evidenceId) {
-        Evidence evidence = find(requireWritable(caller, taskId), evidenceId);
+        Task task = requireLockedWritable(caller, taskId);
+        Evidence evidence = find(task, evidenceId);
+        correctionScope.requireChangeable(task, evidence.getRequirement().getId());
         evidenceRepository.delete(evidence);
         String key = evidence.getStorageKey();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -185,6 +193,16 @@ public class EvidenceService {
         return evidenceRepository.findById(evidenceId)
                 .filter(e -> e.getTask().getId().equals(task.getId()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, EVIDENCE_NOT_FOUND, "Evidence not found"));
+    }
+
+    /**
+     * Like {@link #requireWritable}, for changes: waits for a submit of the
+     * task running at the same time (then the evidence is locked). Not for
+     * read-only transactions (a row lock needs a writable one).
+     */
+    private Task requireLockedWritable(CurrentUser caller, UUID taskId) {
+        taskService.lockForUpdate(taskId);
+        return requireWritable(caller, taskId);
     }
 
     private Task requireWritable(CurrentUser caller, UUID taskId) {

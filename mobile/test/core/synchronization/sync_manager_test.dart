@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,11 +14,15 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_manager.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
+import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
+import 'package:taskinspect/features/evidence/data/remote/evidence_remote_data_source.dart';
 import 'package:taskinspect/features/requirements/data/local/answer_local_data_source.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
 import '../../helpers/fake_server.dart';
 import '../../helpers/fake_tasks.dart';
@@ -37,7 +44,7 @@ void main() {
     api = ApiClient.forConfig(AppConfig(environment: AppEnvironment.dev, apiBaseUrl: 'http://api.test'));
     now = DateTime.utc(2026, 10, 1, 9);
     queue = SyncQueue(db, now: () => now = now.add(const Duration(seconds: 1)));
-    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db), batchSize: 2);
+    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db), EvidenceUploader(db, EvidenceRemoteDataSource(api)), batchSize: 2);
     pushes = [];
     for (final id in ['t1', 't2']) {
       await TaskLocalDataSource(db).saveTask(fakeTask(id, status: TaskStatus.inProgress), [
@@ -276,6 +283,21 @@ void main() {
     expect(seen.last, isNotNull);
   });
 
+  test('after an edit of a task is applied, the next edit carries the new version', () async {
+    final local = TaskLocalDataSource(db);
+    await local.saveTask(fakeTask('x'), const []);
+    final draft = TaskDraft(title: 'Kitchen', priority: TaskPriority.high, dueDate: DateTime.utc(2026, 12, 1));
+    await local.updateDraft('x', draft);
+    serve((_) => 'APPLIED');
+
+    await manager.push();
+    await local.updateDraft('x', draft);
+
+    expect((await local.watchTask('x').first)!.version, 2);
+    final waiting = await db.select(db.localSyncOperations).getSingle();
+    expect((jsonDecode(waiting.payload) as Map)['version'], 2);
+  });
+
   group('pull', () {
     Map<String, Object?> taskJson(String id, String title, {String status = 'ASSIGNED'}) => {
           'id': id,
@@ -333,6 +355,61 @@ void main() {
       expect(requirements.single.unit, '°C');
     });
 
+    test("stores each changed task's latest review; no review removes the stored one", () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1'],
+        'tasks': [
+          {
+            ...pulled('t1', 'Kitchen'),
+            'task': taskJson('t1', 'Kitchen', status: 'CORRECTION_REQUESTED'),
+            'latestReview': {
+              'id': 'v1',
+              'result': 'CORRECTION_REQUESTED',
+              'reason': 'Almost',
+              'reviewer': {'id': 'm1', 'fullName': 'Mia Manager'},
+              'requirements': [
+                {'requirementId': 'r-t1-new', 'comment': 'Measure again'},
+              ],
+              'createdAt': '2026-10-01T09:30:00Z',
+            },
+          },
+        ],
+      });
+
+      await manager.pull();
+
+      final review = await TaskLocalDataSource(db).watchReview('t1').first;
+      expect(review!.result, ReviewResult.correctionRequested);
+      expect(review.reason, 'Almost');
+      expect(review.reviewerName, 'Mia Manager');
+      expect(review.markedRequirements, {'r-t1-new': 'Measure again'});
+
+      servePull({
+        'cursor': '2026-10-01T11:00:00Z',
+        'taskIds': ['t1'],
+        'tasks': [pulled('t1', 'Kitchen')],
+      });
+      await manager.pull();
+      expect(await TaskLocalDataSource(db).watchReview('t1').first, isNull);
+    });
+
+    test('a review result this app version does not know is skipped, not a broken pull', () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1'],
+        'tasks': [
+          {
+            ...pulled('t1', 'Kitchen'),
+            'latestReview': {'result': 'ESCALATED', 'reason': null, 'reviewer': null, 'createdAt': '2026-10-01T09:30:00Z'},
+          },
+        ],
+      });
+
+      expect(await manager.pull(), isA<Ok<void>>());
+      expect(await TaskLocalDataSource(db).watchReview('t1').first, isNull);
+    });
+
     test('the first pull loads everything, the next one only changes since its cursor', () async {
       final sinces = servePull({'cursor': '2026-10-01T10:00:00Z', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
 
@@ -340,6 +417,106 @@ void main() {
       await manager.pull();
 
       expect(sinces, [null, '2026-10-01T10:00:00Z']);
+    });
+
+    Map<String, Object?> tileJson(String id, String title, {String status = 'IN_PROGRESS'}) => {
+          'id': id,
+          'title': title,
+          'priority': 'HIGH',
+          'status': status,
+          'dueDate': '2026-12-01T09:00:00Z',
+          'assignee': {'id': 'u2', 'fullName': 'Tom Teammate'},
+          'updatedAt': '2026-10-01T09:00:00Z',
+        };
+
+    Future<List<String>> tileTitles() async =>
+        (await TaskLocalDataSource(db).watchTeamTasks().first).map((t) => '${t.title}/${t.assignee?.name}').toList();
+
+    test('stores team tiles apart from the tasks and removes tiles no longer visible', () async {
+      final body = <String, Object?>{
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'tileIds': ['x1', 'x2'],
+        'tiles': [tileJson('x1', 'Roof'), tileJson('x2', 'Cellar', status: 'REJECTED')],
+        'teamVersion': 'v1',
+      };
+      servePull(body);
+
+      await manager.pull();
+      expect(await tileTitles(), ['Cellar/Tom Teammate', 'Roof/Tom Teammate']);
+      expect(await localTitles(), ['Task t1', 'Task t2']);
+
+      body
+        ..['tileIds'] = ['x2']
+        ..['tiles'] = <Object?>[];
+      await manager.pull();
+      expect(await tileTitles(), ['Cellar/Tom Teammate']);
+    });
+
+    test('a new team version pulls everything again, once', () async {
+      final body = <String, Object?>{
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'teamVersion': 'v1',
+      };
+      final sinces = servePull(body);
+
+      await manager.pull();
+      await manager.pull();
+      body['teamVersion'] = 'v2';
+      await manager.pull();
+
+      expect(sinces, [null, '2026-10-01T10:00:00Z', '2026-10-01T10:00:00Z', null]);
+    });
+
+    test('when the full pull after a team change fails, the next pull tries it again', () async {
+      final body = <String, Object?>{
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'teamVersion': 'v1',
+      };
+      servePull(body);
+      await manager.pull();
+
+      body['teamVersion'] = 'v2';
+      final sinces = <Object?>[];
+      var failFull = true;
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        final since = request.queryParameters['since'];
+        sinces.add(since);
+        return failFull && since == null ? (503, null) : (200, body);
+      });
+      expect(await manager.pull(), isA<Err<void>>());
+      failFull = false;
+      expect(await manager.pull(), isA<Ok<void>>());
+
+      expect(sinces, ['2026-10-01T10:00:00Z', null, '2026-10-01T10:00:00Z', null]);
+    });
+
+    test('a tile with a status this app does not know is skipped, not a broken pull', () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'tileIds': ['x1', 'x2'],
+        'tiles': [tileJson('x1', 'Roof'), tileJson('x2', 'Cellar', status: 'ESCALATED')],
+      });
+
+      expect(await manager.pull(), isA<Ok<void>>());
+      expect(await tileTitles(), ['Roof/Tom Teammate']);
+    });
+
+    test('a server without team versions never forces a full pull', () async {
+      final sinces = servePull({'cursor': '2026-10-01T10:00:00Z', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
+
+      await manager.pull();
+      await manager.pull();
+
+      expect(sinces, [null, '2026-10-01T10:00:00Z']);
+      expect(await tileTitles(), isEmpty);
     });
 
     test('a task with unsent changes keeps its local version and is not removed', () async {
@@ -455,5 +632,61 @@ void main() {
       expect(await manager.sync(), isA<Err<void>>());
       expect(pulls, 0);
     });
+  });
+
+  test('a sync uploads the files the push registered, then pulls; a failed upload still pulls', () async {
+    final folder = await Directory.systemTemp.createTemp('sync_upload_test');
+    addTearDown(() => folder.delete(recursive: true));
+    final file = File('${folder.path}/e1.jpg');
+    await file.writeAsBytes([1, 2, 3]);
+    await db.into(db.localEvidence).insert(LocalEvidenceCompanion.insert(
+          id: 'e1',
+          taskId: 't1',
+          requirementId: 'r-t1',
+          localPath: file.path,
+          mimeType: 'image/jpeg',
+          sizeBytes: 3,
+          createdAt: now,
+        ));
+    await add('t1', 'e1');
+    final steps = <String>[];
+    var completeStatus = 503;
+    api.dio.httpClientAdapter = FakeServer((request) async {
+      final step = request.path.split('/').last;
+      steps.add(step);
+      return switch (step) {
+        'push' => (200, {
+            'results': [
+              for (final operation in ((request.data as Map)['operations'] as List).cast<_Sent>())
+                {'id': operation['id'], 'status': 'APPLIED'},
+            ],
+          }),
+        'upload-url' => (200, {'url': 'http://files.test/f', 'method': 'PUT', 'headers': {'Content-Type': 'image/jpeg'}}),
+        'complete' => (completeStatus, {'code': null}),
+        _ => (200, {'cursor': 'c1', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]}),
+      };
+    });
+    final files = Dio()..httpClientAdapter = FakeServer((_) async => (200, null));
+    manager = SyncManager(db, SyncRemoteDataSource(api), TaskLocalDataSource(db),
+        EvidenceUploader(db, EvidenceRemoteDataSource(api, files: files)));
+
+    final failed = await manager.sync();
+
+    expect(steps, ['push', 'upload-url', 'complete', 'pull']);
+    expect(failed, isA<Err<void>>(), reason: 'the scheduler retries the upload');
+
+    completeStatus = 200;
+    await manager.retryTemporaryFailures();
+    steps.clear();
+    expect(await manager.sync(), isA<Ok<void>>());
+    expect(steps, ['upload-url', 'complete', 'pull'], reason: 'nothing left to push');
+    expect((await db.select(db.localEvidence).getSingle()).uploadStatus, 'UPLOADED');
+  });
+
+  test('an expired upload URL counts as temporary, so the scheduler retries the sync', () {
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 403, code: EvidenceRemoteDataSource.urlExpired)), isTrue);
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 403, code: 'FORBIDDEN')), isFalse);
+    expect(SyncManager.isTemporary(const ServerFailure(statusCode: 503)), isTrue);
+    expect(SyncManager.isTemporary(const NetworkFailure()), isTrue);
   });
 }

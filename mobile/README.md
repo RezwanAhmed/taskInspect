@@ -10,7 +10,7 @@ the design.
 | Flutter | 3.47 (stable) |
 | Dart | 3.13 |
 | Platforms | Android (released first), iOS (after the Google Play release) |
-| Application ID | `com.taskinspect.taskinspect` |
+| Application ID | `com.taskinspect` |
 
 ## Requirements
 

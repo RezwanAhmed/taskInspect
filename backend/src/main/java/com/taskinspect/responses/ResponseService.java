@@ -5,6 +5,7 @@ import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.requirements.Requirement;
 import com.taskinspect.requirements.RequirementOption;
 import com.taskinspect.requirements.RequirementService;
+import com.taskinspect.reviews.CorrectionScope;
 import com.taskinspect.responses.dto.SaveResponseRequest;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskService;
@@ -34,13 +35,15 @@ public class ResponseService {
     private final TaskService taskService;
     private final RequirementService requirementService;
     private final UserService userService;
+    private final CorrectionScope correctionScope;
 
     public ResponseService(ResponseRepository responseRepository, TaskService taskService,
-            RequirementService requirementService, UserService userService) {
+            RequirementService requirementService, UserService userService, CorrectionScope correctionScope) {
         this.responseRepository = responseRepository;
         this.taskService = taskService;
         this.requirementService = requirementService;
         this.userService = userService;
+        this.correctionScope = correctionScope;
     }
 
     @Transactional(readOnly = true)
@@ -52,12 +55,16 @@ public class ResponseService {
     /** Saves (or replaces) the answer to one requirement. Sending the same answer again is harmless. */
     @Transactional
     public Response save(CurrentUser caller, UUID taskId, UUID requirementId, SaveResponseRequest request) {
+        // Waits for a submit of the task running at the same time (then the answers are locked).
+        taskService.lockForUpdate(taskId);
         Task task = taskService.requireAssignee(caller, taskId);
         if (task.getStatus() != TaskStatus.IN_PROGRESS) {
             throw new ApiException(HttpStatus.CONFLICT, RESPONSES_LOCKED,
                     "Answers can only be changed while the task is IN_PROGRESS (status " + task.getStatus() + ")");
         }
         Requirement requirement = requirementService.getForTask(task.getId(), requirementId);
+        // While correcting, only the requirements the reviewer marked.
+        correctionScope.requireChangeable(task, requirement.getId());
         validate(requirement, request);
 
         Response response = responseRepository.findByRequirementId(requirement.getId())

@@ -1,15 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/status_chip.dart';
 
-/// One task in a list: title, status, priority, due date and worker.
+/// A team member's task in a list (a tile): title, status, priority, due
+/// date and who works on it. Nothing to open - workers see no more of it.
+class TeamTaskTile extends StatelessWidget {
+  const TeamTaskTile({required this.task, required this.now, super.key});
+
+  final TeamTask task;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final overdue = task.isOverdue(now);
+    final dueStyle = theme.textTheme.bodySmall?.copyWith(color: overdue ? theme.colorScheme.error : null);
+    return Card(
+      child: ListTile(
+        title: Text(task.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              StatusChip(task.status),
+              _Priority(task.priority),
+              Text('${overdue ? 'Overdue · ' : 'Due '}${TaskTile.formatDue(task.dueDate)}', style: dueStyle),
+              if (task.assignee != null) Text(task.assignee!.name, style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One task in a list: title, status, priority, due date and worker, and
+/// a mark when it has changes that are not on the server yet.
 class TaskTile extends StatelessWidget {
-  const TaskTile({required this.task, required this.now, this.onTap, super.key});
+  const TaskTile({required this.task, required this.now, this.onTap, this.hasUnsentChanges = false, super.key});
 
   final Task task;
   final DateTime now;
   final VoidCallback? onTap;
+  final bool hasUnsentChanges;
 
   static String formatDue(DateTime due) {
     final local = due.toLocal();
@@ -37,6 +75,16 @@ class TaskTile extends StatelessWidget {
               _Priority(task.priority),
               Text('${overdue ? 'Overdue · ' : 'Due '}${formatDue(task.dueDate)}', style: dueStyle),
               if (task.assignee != null) Text(task.assignee!.name, style: theme.textTheme.bodySmall),
+              if (hasUnsentChanges)
+                Row(
+                  key: const Key('task-unsent'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_upload_outlined, size: 14),
+                    const SizedBox(width: 4),
+                    Text('Not synced yet', style: theme.textTheme.bodySmall),
+                  ],
+                ),
             ],
           ),
         ),

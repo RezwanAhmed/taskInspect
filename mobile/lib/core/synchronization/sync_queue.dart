@@ -8,7 +8,11 @@ import 'package:uuid/uuid.dart';
 enum SyncEntity {
   task('Task'),
   taskResponse('TaskResponse'),
-  evidence('Evidence');
+  evidence('Evidence'),
+  requirement('Requirement'),
+
+  /// The order of a task's requirements (entity ID = the task's ID).
+  requirementOrder('RequirementOrder');
 
   const SyncEntity(this.apiName);
 

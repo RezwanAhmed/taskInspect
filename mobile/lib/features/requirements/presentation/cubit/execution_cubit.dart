@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:taskinspect/core/error/failure_messages.dart';
+import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
@@ -10,6 +12,9 @@ import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 
 class ExecutionState extends Equatable {
@@ -21,6 +26,10 @@ class ExecutionState extends Equatable {
     this.evidenceError,
     this.index = 0,
     this.isLoading = true,
+    this.isSubmitting = false,
+    this.isSubmitted = false,
+    this.review,
+    this.message,
   });
 
   final Task? task;
@@ -38,6 +47,27 @@ class ExecutionState extends Equatable {
   /// The requirement on screen.
   final int index;
   final bool isLoading;
+  final bool isSubmitting;
+
+  /// The task was submitted (on the device; the sync sends it).
+  final bool isSubmitted;
+
+  /// Shown once, e.g. which required requirement is still missing.
+  final String? message;
+
+  /// The task's latest review: while correcting, only the requirements it
+  /// marked can be changed (docs/architecture.md "Rules").
+  final TaskReview? review;
+
+  bool get isCorrecting =>
+      task?.status == TaskStatus.inProgress && review?.result == ReviewResult.correctionRequested;
+
+  /// Not marked for correction: stays as submitted.
+  bool isLocked(Requirement requirement) =>
+      isCorrecting && !review!.markedRequirements.containsKey(requirement.id);
+
+  /// What the reviewer asked to fix, while correcting.
+  String? whatToFix(Requirement requirement) => isCorrecting ? review!.markedRequirements[requirement.id] : null;
 
   Requirement? get current => requirements.isEmpty ? null : requirements[index];
 
@@ -63,6 +93,10 @@ class ExecutionState extends Equatable {
     String? Function()? evidenceError,
     int? index,
     bool? isLoading,
+    bool? isSubmitting,
+    bool? isSubmitted,
+    TaskReview? Function()? review,
+    String? Function()? message,
   }) {
     return ExecutionState(
       task: task ?? this.task,
@@ -72,21 +106,45 @@ class ExecutionState extends Equatable {
       evidenceError: evidenceError != null ? evidenceError() : this.evidenceError,
       index: index ?? this.index,
       isLoading: isLoading ?? this.isLoading,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
+      isSubmitted: isSubmitted ?? this.isSubmitted,
+      review: review != null ? review() : this.review,
+      message: message != null ? message() : this.message,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, answers, evidence, evidenceError, index, isLoading];
+  List<Object?> get props => [
+        task,
+        requirements,
+        answers,
+        evidence,
+        evidenceError,
+        index,
+        isLoading,
+        isSubmitting,
+        isSubmitted,
+        review,
+        message,
+      ];
 }
 
 /// Walks the worker through a task's requirements one at a time. Answers
 /// are saved on the device as they change.
 class ExecutionCubit extends Cubit<ExecutionState> {
-  ExecutionCubit(WatchTaskDetails watch, this._answers, this._picker, this._evidence, this._opener, this.taskId)
-      : super(const ExecutionState()) {
+  ExecutionCubit(
+    WatchTaskDetails watch,
+    this._answers,
+    this._picker,
+    this._evidence,
+    this._opener,
+    this._submit,
+    this.taskId,
+  ) : super(const ExecutionState()) {
     _evidenceSubscription =
         _evidence.watchEvidence(taskId).listen((evidence) => emit(state.copyWith(evidence: evidence)));
     _task = watch.task(taskId).listen((task) => emit(state.copyWith(task: task)));
+    _review = watch.review(taskId).listen((review) => emit(state.copyWith(review: () => review)));
     // Saved answers are read once; after that this screen is the only one
     // changing them, so a slower write can never undo newer typing.
     unawaited(_answers.watchAnswers(taskId).first.then((saved) {
@@ -104,10 +162,12 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   final EvidencePicker _picker;
   final EvidenceRepository _evidence;
   final DocumentOpener _opener;
+  final SubmitTask _submit;
   late final StreamSubscription<Map<String, List<EvidenceItem>>> _evidenceSubscription;
   final String taskId;
   Future<void> _saving = Future.value();
   late final StreamSubscription<Task?> _task;
+  late final StreamSubscription<TaskReview?> _review;
   late final StreamSubscription<List<Requirement>> _requirements;
 
   void goTo(int index) {
@@ -119,6 +179,9 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   /// Changes the answer to a requirement, starting from its latest value,
   /// and saves it on the device (saves run one after another, in order).
   void answer(Requirement requirement, Answer Function(Answer current) update) {
+    if (state.isLocked(requirement)) {
+      return;
+    }
     final changed = update(state.answerFor(requirement));
     emit(state.copyWith(answers: {...state.answers, requirement.id: changed}));
     _saving = _saving.then(
@@ -129,6 +192,9 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   /// Takes a photo with the camera (or chooses one from the gallery) for a
   /// PHOTO requirement. Nothing changes when the worker cancels.
   Future<void> addPhoto(Requirement requirement, {required bool fromCamera}) async {
+    if (state.isLocked(requirement)) {
+      return;
+    }
     final path = fromCamera ? await _picker.takePhoto() : await _picker.chooseFromGallery();
     if (path == null || isClosed) {
       return;
@@ -145,6 +211,9 @@ class ExecutionCubit extends Cubit<ExecutionState> {
   /// Chooses a PDF document from the device's files for a DOCUMENT
   /// requirement and stores a copy. Nothing changes when the worker cancels.
   Future<void> addDocument(Requirement requirement) async {
+    if (state.isLocked(requirement)) {
+      return;
+    }
     final picked = await _picker.chooseDocument();
     if (picked == null || isClosed) {
       return;
@@ -170,14 +239,67 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     _setError(opened ? null : 'No app on this device can open PDF documents.');
   }
 
-  /// Removes a photo or document from the device.
-  Future<void> removeEvidence(EvidenceItem item) => _evidence.remove(item);
+  /// Removes a photo or document from the device (not while it stays as
+  /// submitted during a correction).
+  Future<void> removeEvidence(EvidenceItem item) async {
+    final requirement = state.requirements.where((r) => r.id == item.requirementId).firstOrNull;
+    if (requirement != null && state.isLocked(requirement)) {
+      return;
+    }
+    await _evidence.remove(item);
+  }
 
   void _setError(String? message) {
     if (!isClosed) {
       emit(state.copyWith(evidenceError: () => message));
     }
   }
+
+  /// Submits the task for review once every required requirement is
+  /// complete (after the answers typed so far are saved); otherwise shows
+  /// the first one that is missing.
+  Future<void> submit() async {
+    if (state.isSubmitting) {
+      return;
+    }
+    emit(state.copyWith(isSubmitting: true, message: () => null));
+    await _saving;
+    if (isClosed) {
+      return;
+    }
+    // While correcting, the requirements that stay as submitted are on
+    // the server already (and can't be changed here), e.g. on another phone
+    // where their answers are not stored.
+    final changeable = [for (final r in state.requirements) if (!state.isLocked(r)) r];
+    final missing = SubmitTask.missing(changeable, state.isComplete);
+    final lost = [
+      for (final requirement in changeable)
+        if (state.evidenceFor(requirement).any((item) => item.fileMissing)) requirement,
+    ];
+    if (missing.isNotEmpty || lost.isNotEmpty) {
+      final first = missing.isNotEmpty ? missing.first : lost.first;
+      goTo(state.requirements.indexOf(first));
+      emit(state.copyWith(
+        isSubmitting: false,
+        message: () => missing.isEmpty
+            ? 'A file of "${first.title}" is missing on this device. Remove it and add it again.'
+            : missing.length == 1
+                ? '"${first.title}" still needs an answer.'
+                : '${missing.length} required requirements still need an answer.',
+      ));
+      return;
+    }
+    final result = await _submit(taskId);
+    if (isClosed) {
+      return;
+    }
+    emit(switch (result) {
+      Ok() => state.copyWith(isSubmitting: false, isSubmitted: true),
+      Err(:final failure) => state.copyWith(isSubmitting: false, message: () => userMessage(failure)),
+    });
+  }
+
+  void clearMessage() => emit(state.copyWith(message: () => null));
 
   /// Completes when every answer so far is saved.
   Future<void> get saved => _saving;
@@ -191,6 +313,7 @@ class ExecutionCubit extends Cubit<ExecutionState> {
     await _saving;
     await _evidenceSubscription.cancel();
     await _task.cancel();
+    await _review.cancel();
     await _requirements.cancel();
     return super.close();
   }

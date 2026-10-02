@@ -4,6 +4,8 @@ package com.taskinspect.tasks;
 public enum TaskStatus {
 
     DRAFT,
+    /** Published without an assignee; a worker who may take it does so (Phase 7A). */
+    OPEN,
     ASSIGNED,
     IN_PROGRESS,
     SUBMITTED,

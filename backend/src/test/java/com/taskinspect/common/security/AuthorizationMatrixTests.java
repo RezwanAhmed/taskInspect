@@ -67,12 +67,19 @@ class AuthorizationMatrixTests {
     }
 
     private static final Endpoint LIST_USERS = new Endpoint("GET /api/users", null, (f, a) -> get("/api/users"));
+    private static final Endpoint LIST_TEAMS = new Endpoint("GET /api/teams", null, (f, a) -> get("/api/teams"));
+    private static final Endpoint LIST_TEAM_TASKS = new Endpoint("GET /api/tasks/team", null,
+            (f, a) -> get("/api/tasks/team"));
     private static final Endpoint CREATE_USER = new Endpoint("POST /api/users", null, (f, a) -> post("/api/users")
             .contentType(MediaType.APPLICATION_JSON).content("""
                     {"email": "new-%s@example.com", "fullName": "New", "password": "password-123",
                      "roles": ["WORKER"]}""".formatted(a.name().toLowerCase())));
     private static final Endpoint GET_WORKER = new Endpoint("GET /api/users/{assignedWorker}", null,
             (f, a) -> get("/api/users/{id}", f.users().get(Actor.ASSIGNED_WORKER).getId()));
+    private static final Endpoint SET_TEAM = new Endpoint("PUT /api/users/{assignedWorker}/team", null,
+            (f, a) -> put("/api/users/{id}/team", f.users().get(Actor.ASSIGNED_WORKER).getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"managerId\": \"" + f.users().get(Actor.CREATOR).getId() + "\"}"));
     private static final Endpoint CREATE_TASK = new Endpoint("POST /api/tasks", null, (f, a) -> post("/api/tasks")
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"title\": \"T\", \"priority\": \"LOW\", \"dueDate\": \"2026-12-01T09:00:00Z\"}"));
@@ -93,6 +100,24 @@ class AuthorizationMatrixTests {
     private static final Endpoint ANSWER = new Endpoint("PUT .../response", TaskStatus.IN_PROGRESS,
             (f, a) -> put("/api/tasks/{t}/requirements/{r}/response", f.task().getId(), f.requirement().getId())
                     .contentType(MediaType.APPLICATION_JSON).content("{\"booleanValue\": true}"));
+    // The fixture's required requirement is unanswered: the assigned worker gets 409 REQUIREMENTS_MISSING,
+    // which shows the call was allowed.
+    private static final Endpoint SUBMIT = new Endpoint("POST /api/tasks/{id}/submit", TaskStatus.IN_PROGRESS,
+            (f, a) -> post("/api/tasks/{id}/submit", f.task().getId()));
+    private static final Endpoint APPROVE = new Endpoint("POST /api/tasks/{id}/approve", TaskStatus.SUBMITTED,
+            (f, a) -> post("/api/tasks/{id}/approve", f.task().getId()));
+    private static final Endpoint REJECT = new Endpoint("POST /api/tasks/{id}/reject", TaskStatus.SUBMITTED,
+            (f, a) -> post("/api/tasks/{id}/reject", f.task().getId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"reason\": \"Wrong room\"}"));
+    private static final Endpoint REQUEST_CORRECTION = new Endpoint("POST /api/tasks/{id}/request-correction",
+            TaskStatus.SUBMITTED, (f, a) -> post("/api/tasks/{id}/request-correction", f.task().getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"requirements\": [{\"requirementId\": \"" + f.requirement().getId()
+                            + "\", \"comment\": \"Fix\"}]}"));
+    private static final Endpoint HISTORY = new Endpoint("GET /api/tasks/{id}/history", TaskStatus.SUBMITTED,
+            (f, a) -> get("/api/tasks/{id}/history", f.task().getId()));
+    private static final Endpoint LIST_REVIEWS = new Endpoint("GET /api/tasks/{id}/reviews", TaskStatus.SUBMITTED,
+            (f, a) -> get("/api/tasks/{id}/reviews", f.task().getId()));
     private static final Endpoint LIST_RESPONSES = new Endpoint("GET /api/tasks/{id}/responses",
             TaskStatus.IN_PROGRESS, (f, a) -> get("/api/tasks/{id}/responses", f.task().getId()));
 
@@ -101,13 +126,22 @@ class AuthorizationMatrixTests {
                 row(LIST_USERS, 401, 200, 200, 200, 403, 403),
                 row(CREATE_USER, 401, 201, 403, 403, 403, 403),
                 row(GET_WORKER, 401, 200, 200, 200, 200, 403),
-                row(CREATE_TASK, 401, 403, 201, 201, 403, 403),
+                row(SET_TEAM, 401, 200, 403, 403, 403, 403),
+                row(LIST_TEAMS, 401, 200, 200, 200, 200, 200),
+                row(LIST_TEAM_TASKS, 401, 200, 200, 200, 200, 200),
+                row(CREATE_TASK, 401, 201, 201, 201, 403, 403),
                 row(GET_TASK, 401, 200, 200, 200, 200, 404),
                 row(EDIT_TASK, 401, 403, 200, 403, 403, 403),
                 row(ADD_REQUIREMENT, 401, 403, 201, 403, 403, 403),
                 row(ASSIGN, 401, 403, 200, 403, 403, 403),
                 row(START, 401, 403, 403, 403, 200, 404),
                 row(ANSWER, 401, 403, 403, 403, 200, 404),
+                row(SUBMIT, 401, 403, 403, 403, 409, 404),
+                row(APPROVE, 401, 403, 200, 403, 403, 403),
+                row(REJECT, 401, 403, 200, 403, 403, 403),
+                row(REQUEST_CORRECTION, 401, 403, 200, 403, 403, 403),
+                row(LIST_REVIEWS, 401, 200, 200, 200, 200, 404),
+                row(HISTORY, 401, 200, 200, 200, 200, 404),
                 row(LIST_RESPONSES, 401, 200, 200, 200, 200, 404))
                 .flatMap(Function.identity());
     }
@@ -184,8 +218,11 @@ class AuthorizationMatrixTests {
             TaskFixtures.assign(task, users.get(Actor.ASSIGNED_WORKER));
             stateMachine.apply(task, TaskAction.ASSIGN);
         }
-        if (wanted == TaskStatus.IN_PROGRESS) {
+        if (wanted == TaskStatus.IN_PROGRESS || wanted == TaskStatus.SUBMITTED) {
             stateMachine.apply(task, TaskAction.START);
+        }
+        if (wanted == TaskStatus.SUBMITTED) {
+            stateMachine.apply(task, TaskAction.SUBMIT);
         }
         return new Fixture(users, taskRepository.save(task), requirement);
     }

@@ -2,9 +2,15 @@ import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
+import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 
 class TaskRepositoryImpl implements TaskRepository {
@@ -17,10 +23,19 @@ class TaskRepositoryImpl implements TaskRepository {
   Stream<List<Task>> watchTasks({TaskStatus? status}) => _local.watchTasks(status: status);
 
   @override
+  Stream<List<TeamTask>> watchTeamTasks() => _local.watchTeamTasks();
+
+  @override
   Stream<Task?> watchTask(String id) => _local.watchTask(id);
 
   @override
   Stream<List<Requirement>> watchRequirements(String taskId) => _local.watchRequirements(taskId);
+
+  @override
+  Stream<TaskReview?> watchReview(String taskId) => _local.watchReview(taskId);
+
+  @override
+  Future<Result<List<HistoryEntry>>> loadHistory(String taskId) => _remote.fetchHistory(taskId);
 
   @override
   Future<Result<void>> refresh() async {
@@ -47,8 +62,107 @@ class TaskRepositoryImpl implements TaskRepository {
   }
 
   @override
+  Future<Result<Task>> createDraft(TaskDraft draft, {required PersonRef creator}) async =>
+      Ok(await _local.createDraft(draft, creator: creator));
+
+  @override
+  Future<Result<Task>> updateDraft(String taskId, TaskDraft draft) async {
+    final updated = await _local.updateDraft(taskId, draft);
+    return updated == null
+        ? const Err(InvalidInputFailure(field: 'task', message: 'This task can no longer be edited.'))
+        : Ok(updated);
+  }
+
+  @override
+  Future<Result<Requirement>> addRequirement(String taskId, RequirementDraft draft) async =>
+      Ok(await _local.addRequirement(taskId, draft));
+
+  @override
+  Future<Result<void>> updateRequirement(String taskId, String requirementId, RequirementDraft draft) async {
+    await _local.updateRequirement(taskId, requirementId, draft);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> deleteRequirement(String taskId, String requirementId) async {
+    await _local.deleteRequirement(taskId, requirementId);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds) async =>
+      await _local.reorderRequirements(taskId, requirementIds)
+          ? const Ok(null)
+          : const Err(InvalidInputFailure(field: 'requirements', message: 'The requirements changed meanwhile.'));
+
+  /// Kept when a draft's changes still wait in the sync queue.
+  static const notSyncedYet =
+      InvalidInputFailure(field: 'task', message: 'This task is not on the server yet. Sync first, then try again.');
+
+  @override
+  Future<Result<Task>> createSubTask(String mainTaskId, TaskDraft draft) async {
+    final result = await _remote.createSubTask(mainTaskId, TaskLocalDataSource.draftPayload(draft));
+    if (result case Ok(:final value)) {
+      await _local.saveTask(value, const []);
+    }
+    return result;
+  }
+
+  @override
+  Future<Result<List<WorkerOption>>> loadWorkers(String managerId) async {
+    final result = await _remote.fetchWorkers(managerId);
+    return switch (result) {
+      Ok(:final value) => Ok([...value.where((w) => w.inMyTeam), ...value.where((w) => !w.inMyTeam)]),
+      Err() => result,
+    };
+  }
+
+  @override
+  Future<Result<Task>> assign(String taskId, String workerId) =>
+      _sentNow(taskId, () => _remote.assign(taskId, workerId));
+
+  @override
+  Future<Result<Task>> publish(String taskId, OpenScope scope) => _sentNow(taskId, () => _remote.publish(taskId, scope));
+
+  Future<Result<Task>> _sentNow(String taskId, Future<Result<Task>> Function() call) async {
+    if (await _local.hasQueuedChanges(taskId)) {
+      return const Err(notSyncedYet);
+    }
+    final result = await call();
+    if (result case Ok(:final value)) {
+      await _local.saveTaskDetails(value);
+    }
+    return result;
+  }
+
+  @override
+  Future<Result<List<Task>>> loadSubTasks(String mainTaskId) => _remote.fetchSubTasks(mainTaskId);
+
+  @override
+  Future<Result<Task>> take(String taskId) async {
+    final result = await _remote.take(taskId);
+    switch (result) {
+      case Ok(:final value):
+        await _local.saveTaskDetails(value);
+      case Err(failure: ServerFailure(code: 'TASK_ALREADY_TAKEN' || 'TASK_NOT_FOUND')):
+        await _local.deleteTask(taskId);
+      case Err():
+        break;
+    }
+    return result;
+  }
+
+  @override
   Future<Result<Task>> start(String taskId) async {
     final started = await _local.start(taskId);
     return started == null ? Err(UnexpectedFailure(StateError('Task $taskId is not on the device'))) : Ok(started);
+  }
+
+  @override
+  Future<Result<Task>> submit(String taskId) async {
+    final submitted = await _local.submit(taskId);
+    return submitted == null
+        ? Err(UnexpectedFailure(StateError('Task $taskId is not on the device or not in progress')))
+        : Ok(submitted);
   }
 }

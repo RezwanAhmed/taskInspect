@@ -5,9 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 
 import '../../../helpers/fake_auth.dart';
 import '../../../helpers/fake_tasks.dart';
@@ -72,5 +77,202 @@ void main() {
     await go(tester, AppRoutes.task('missing'));
 
     expect(find.text('This task is not on this device.'), findsOneWidget);
+  });
+
+  testWidgets('a task sent back for correction shows the reviewer, the reason and what to fix', (tester) async {
+    final tasks = await openApp(tester);
+    tasks
+      ..reviews = {
+        't1': TaskReview(
+          result: ReviewResult.correctionRequested,
+          reviewerName: 'Mia Manager',
+          createdAt: DateTime.utc(2026, 10, 1, 9),
+          reason: 'Almost there',
+          markedRequirements: const {'r2': 'Measure the fridge again'},
+        ),
+      }
+      ..emit([fakeTask('t1', title: 'Daily kitchen safety inspection', status: TaskStatus.correctionRequested)]);
+    await go(tester, AppRoutes.task('t1'));
+
+    expect(find.byKey(const Key('review-result')), findsOneWidget);
+    expect(find.text('Correction requested by Mia Manager'), findsOneWidget);
+    expect(find.text('Almost there'), findsOneWidget);
+    expect(find.text('Measure the fridge again'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('review-result')), matching: find.text('Record refrigerator temperature')),
+        findsOneWidget);
+  });
+
+  testWidgets('a task without a review shows no review result', (tester) async {
+    await openApp(tester);
+    await go(tester, AppRoutes.task('t1'));
+
+    expect(find.byKey(const Key('review-result')), findsNothing);
+  });
+
+  group('open task', () {
+    final open = Task(
+      id: 'o1',
+      title: 'Boiler room',
+      priority: TaskPriority.high,
+      status: TaskStatus.open,
+      dueDate: DateTime.utc(2099),
+      createdBy: const PersonRef(id: 'm1', name: 'Mia Manager'),
+      reviewer: const PersonRef(id: 'm1', name: 'Mia Manager'),
+      version: 1,
+      updatedAt: DateTime.utc(2026, 10, 1),
+    );
+
+    Future<FakeTaskRepository> openOpenTask(WidgetTester tester, AuthUser user) async {
+      final tasks = FakeTaskRepository([open]);
+      registerFakeTasks(tasks);
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: user))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('o1'));
+      return tasks;
+    }
+
+    testWidgets('a worker takes it, then can start it', (tester) async {
+      await openOpenTask(tester, testWorker);
+
+      await tester.tap(find.byKey(const Key('take-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The task is yours now.'), findsOneWidget);
+      expect(find.byKey(const Key('take-task')), findsNothing);
+      expect(find.byKey(const Key('start-task')), findsOneWidget);
+    });
+
+    testWidgets('when another worker was faster, it says so', (tester) async {
+      final tasks = await openOpenTask(tester, testWorker);
+      tasks.takeFailure = const ServerFailure(statusCode: 409, code: 'TASK_ALREADY_TAKEN');
+
+      await tester.tap(find.byKey(const Key('take-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Another worker has already taken this task.'), findsOneWidget);
+      expect(find.text('This task is not on this device.'), findsOneWidget);
+      expect(find.byKey(const Key('take-task')), findsNothing);
+    });
+
+    testWidgets('managers do not get the take button', (tester) async {
+      await openOpenTask(tester, testManager);
+
+      expect(find.byKey(const Key('take-task')), findsNothing);
+    });
+  });
+
+  group('main task (manager)', () {
+    Task task(String id, String title, TaskStatus status, {PersonRef? assignee}) => Task(
+          id: id,
+          title: title,
+          priority: TaskPriority.high,
+          status: status,
+          dueDate: DateTime.utc(2099),
+          createdBy: const PersonRef(id: 'a1', name: 'Ada Admin'),
+          reviewer: const PersonRef(id: 'a1', name: 'Ada Admin'),
+          assignee: assignee,
+          version: 1,
+          updatedAt: DateTime.utc(2026, 10, 1),
+        );
+    const manager = PersonRef(id: 'm1', name: 'Mia Manager');
+    const worker = PersonRef(id: 'u2', name: 'Tom Teammate');
+
+    Future<FakeTaskRepository> openMainTask(WidgetTester tester, List<Task> subTasks) async {
+      final tasks = FakeTaskRepository([task('main', 'Inspect building B', TaskStatus.inProgress, assignee: manager)])
+        ..subTasks = {'main': subTasks};
+      registerFakeTasks(tasks);
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testManager))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('main'));
+      return tasks;
+    }
+
+    testWidgets('shows the sub-tasks and their progress; submit waits for all approvals', (tester) async {
+      await openMainTask(tester, [
+        task('s1', 'Floor 1', TaskStatus.approved, assignee: worker),
+        task('s2', 'Floor 2', TaskStatus.submitted, assignee: worker),
+        task('s3', 'Floor 3', TaskStatus.cancelled),
+      ]);
+
+      expect(find.text('1 of 2 approved'), findsOneWidget);
+      expect(find.text('Floor 2'), findsOneWidget);
+      expect(find.byKey(const Key('continue-task')), findsNothing);
+      final submit = tester.widget<FilledButton>(find.byKey(const Key('submit-main-task')));
+      expect(submit.onPressed, isNull);
+      expect(find.text('Every sub-task must be approved first.'), findsOneWidget);
+    });
+
+    testWidgets('submits once every sub-task is approved', (tester) async {
+      await openMainTask(tester, [task('s1', 'Floor 1', TaskStatus.approved, assignee: worker)]);
+
+      await tester.ensureVisible(find.byKey(const Key('submit-main-task')));
+      await tester.tap(find.byKey(const Key('submit-main-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Main task submitted for review.'), findsOneWidget);
+    });
+
+    testWidgets("a worker-manager's own personal task is a normal task", (tester) async {
+      const both = AuthUser(id: 'm1', email: 'both@example.com', fullName: 'Mia Manager', roles: {UserRole.worker, UserRole.manager});
+      final personal = Task(
+        id: 'p1',
+        title: 'My own check',
+        priority: TaskPriority.low,
+        status: TaskStatus.inProgress,
+        dueDate: DateTime.utc(2099),
+        createdBy: manager,
+        reviewer: manager,
+        assignee: manager,
+        version: 1,
+        updatedAt: DateTime.utc(2026, 10, 1),
+      );
+      registerFakeTasks(FakeTaskRepository([personal]));
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: both))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('p1'));
+
+      expect(find.byKey(const Key('main-task-panel')), findsNothing);
+      expect(find.byKey(const Key('continue-task')), findsOneWidget);
+    });
+
+    testWidgets('the manager adds a sub-task from the panel', (tester) async {
+      await openMainTask(tester, const []);
+      expect(find.text('No sub-tasks yet.'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('add-sub-task')));
+      await tester.pumpAndSettle();
+      expect(find.text('New sub-task'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('task-title')), 'Floor 1');
+      await tester.tap(find.byKey(const Key('save-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sub-task added. Open it to add requirements and assign it.'), findsOneWidget);
+      // Back on the main task: the panel lists the new sub-task; it opens from there.
+      expect(find.text('0 of 1 approved'), findsOneWidget);
+      await tester.tap(find.text('Floor 1'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assign-task')), findsOneWidget);
+    });
+
+    testWidgets('adding a sub-task offline says it needs the internet', (tester) async {
+      final tasks = await openMainTask(tester, const []);
+      tasks.subTaskFailure = const NetworkFailure();
+
+      await tester.tap(find.byKey(const Key('add-sub-task')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('task-title')), 'Floor 1');
+      await tester.tap(find.byKey(const Key('save-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No connection. Adding a sub-task needs the internet.'), findsOneWidget);
+      expect(find.text('New sub-task'), findsOneWidget);
+    });
+
+    testWidgets('workers never see the panel', (tester) async {
+      await openApp(tester);
+      await go(tester, AppRoutes.task('t1'));
+
+      expect(find.byKey(const Key('main-task-panel')), findsNothing);
+    });
   });
 }

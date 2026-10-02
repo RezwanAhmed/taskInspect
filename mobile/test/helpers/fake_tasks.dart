@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
+import 'package:taskinspect/core/synchronization/sync_status.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/features/dashboard/presentation/cubit/dashboard_cubit.dart';
 import 'package:taskinspect/features/evidence/domain/document_opener.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
@@ -10,14 +12,28 @@ import 'package:taskinspect/features/evidence/domain/evidence_picker.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_repository.dart';
 import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
+import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/assign_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/edit_requirements.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/save_draft_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/watch_team_tasks.dart';
 
 Task fakeTask(String id, {TaskStatus status = TaskStatus.assigned, DateTime? due, String? title}) => Task(
       id: id,
@@ -38,12 +54,26 @@ class FakeTaskRepository implements TaskRepository {
 
   final List<StreamController<List<Task>>> _watchers = [];
   List<Task> current;
-  Map<String, List<Requirement>> requirements = {};
+  /// Requirements per task ID; changing them notifies every watcher, like the local database.
+  Map<String, List<Requirement>> get requirements => _requirements;
+
+  set requirements(Map<String, List<Requirement>> value) {
+    _requirements = value;
+    for (final (taskId, watcher) in _requirementWatchers) {
+      watcher.add(value[taskId] ?? const []);
+    }
+  }
+
+  Map<String, List<Requirement>> _requirements = {};
+  final List<(String, StreamController<List<Requirement>>)> _requirementWatchers = [];
   Failure? refreshFailure;
   int refreshes = 0;
 
   /// When set, starting a task fails with this.
   Failure? startFailure;
+
+  /// The team members' tasks (tiles) on the "device".
+  List<TeamTask> teamTasks = [];
 
   /// Changes the tasks on the "device"; every watcher sees the change.
   void emit(List<Task> tasks) {
@@ -69,12 +99,25 @@ class FakeTaskRepository implements TaskRepository {
   }
 
   @override
+  Stream<List<TeamTask>> watchTeamTasks() => Stream.value(teamTasks);
+
+  @override
   Stream<Task?> watchTask(String id) =>
       watchTasks().map((tasks) => tasks.where((t) => t.id == id).firstOrNull);
 
   @override
-  Stream<List<Requirement>> watchRequirements(String taskId) async* {
-    yield requirements[taskId] ?? const [];
+  Stream<List<Requirement>> watchRequirements(String taskId) {
+    // Ends when its listener cancels (onCancel), like watchTasks.
+    // ignore: close_sinks
+    late final StreamController<List<Requirement>> controller;
+    controller = StreamController<List<Requirement>>(
+      onListen: () {
+        _requirementWatchers.add((taskId, controller));
+        controller.add(requirements[taskId] ?? const []);
+      },
+      onCancel: () => _requirementWatchers.removeWhere((entry) => entry.$2 == controller),
+    );
+    return controller.stream;
   }
 
   @override
@@ -98,6 +141,246 @@ class FakeTaskRepository implements TaskRepository {
     );
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
+  }
+
+  /// Drafts made with [createDraft] get the IDs d1, d2, ...
+  int _drafts = 0;
+
+  @override
+  Future<Result<Task>> createDraft(TaskDraft draft, {required PersonRef creator}) async {
+    final task = Task(
+      id: 'd${++_drafts}',
+      title: draft.title,
+      description: draft.description,
+      priority: draft.priority,
+      status: TaskStatus.draft,
+      dueDate: draft.dueDate,
+      createdBy: creator,
+      reviewer: draft.reviewer ?? creator,
+      version: 0,
+      updatedAt: DateTime.utc(2026, 10, 2),
+    );
+    emit([...current, task]);
+    return Ok(task);
+  }
+
+  @override
+  Future<Result<Task>> updateDraft(String taskId, TaskDraft draft) async {
+    final task = current.firstWhere((t) => t.id == taskId);
+    final updated = Task(
+      id: task.id,
+      title: draft.title,
+      description: draft.description,
+      priority: draft.priority,
+      status: task.status,
+      dueDate: draft.dueDate,
+      createdBy: task.createdBy,
+      reviewer: draft.reviewer ?? task.createdBy,
+      assignee: task.assignee,
+      version: task.version,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? updated : t]);
+    return Ok(updated);
+  }
+
+  @override
+  Future<Result<Requirement>> addRequirement(String taskId, RequirementDraft draft) async {
+    final list = requirements[taskId] ?? const <Requirement>[];
+    final requirement = Requirement(
+      id: 'r${list.length + 1}-$taskId',
+      taskId: taskId,
+      title: draft.title,
+      description: draft.description,
+      type: draft.type,
+      required: draft.required,
+      position: list.length,
+      unit: draft.unit,
+      options: [
+        for (final (index, label) in draft.options.indexed) RequirementOption(id: 'o$index', label: label, position: index),
+      ],
+    );
+    requirements = {...requirements, taskId: [...list, requirement]};
+    return Ok(requirement);
+  }
+
+  @override
+  Future<Result<void>> updateRequirement(String taskId, String requirementId, RequirementDraft draft) async {
+    requirements = {
+      ...requirements,
+      taskId: [
+        for (final r in requirements[taskId] ?? const <Requirement>[])
+          r.id == requirementId
+              ? Requirement(
+                  id: r.id,
+                  taskId: taskId,
+                  title: draft.title,
+                  description: draft.description,
+                  type: draft.type,
+                  required: draft.required,
+                  position: r.position,
+                  unit: draft.type == RequirementType.number ? draft.unit : null,
+                  options: draft.type.hasOptions
+                      ? [
+                          for (final (index, label) in draft.options.indexed)
+                            RequirementOption(id: 'o$index', label: label, position: index),
+                        ]
+                      : const [],
+                )
+              : r,
+      ],
+    };
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> deleteRequirement(String taskId, String requirementId) async {
+    requirements = {
+      ...requirements,
+      taskId: [for (final r in requirements[taskId] ?? const <Requirement>[]) if (r.id != requirementId) r],
+    };
+    return const Ok(null);
+  }
+
+  /// The last order [reorderRequirements] got.
+  List<String>? lastOrder;
+
+  @override
+  Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds) async {
+    lastOrder = requirementIds;
+    final byId = {for (final r in requirements[taskId] ?? const <Requirement>[]) r.id: r};
+    requirements = {...requirements, taskId: [for (final id in requirementIds) if (byId[id] != null) byId[id]!]};
+    return const Ok(null);
+  }
+
+  /// Sub-tasks made with [createSubTask], per main task; when set, it fails with [subTaskFailure].
+  Failure? subTaskFailure;
+
+  @override
+  Future<Result<Task>> createSubTask(String mainTaskId, TaskDraft draft) async {
+    if (subTaskFailure case final failure?) {
+      return Err(failure);
+    }
+    final created = await createDraft(draft, creator: const PersonRef(id: 'm1', name: 'Mia Manager'));
+    final task = (created as Ok<Task>).value;
+    subTasks = {...subTasks, mainTaskId: [...?subTasks[mainTaskId], task]};
+    return Ok(task);
+  }
+
+  /// Workers for [loadWorkers]; when set, assigning or publishing fails with [assignFailure].
+  List<WorkerOption> workers = const [];
+  Failure? assignFailure;
+
+  @override
+  Future<Result<List<WorkerOption>>> loadWorkers(String managerId) async => Ok(workers);
+
+  @override
+  Future<Result<Task>> assign(String taskId, String workerId) async {
+    final worker = workers.firstWhere((w) => w.id == workerId);
+    return _changeStatus(taskId, TaskStatus.assigned, PersonRef(id: worker.id, name: worker.name));
+  }
+
+  @override
+  Future<Result<Task>> publish(String taskId, OpenScope scope) async =>
+      _changeStatus(taskId, TaskStatus.open, null);
+
+  Result<Task> _changeStatus(String taskId, TaskStatus status, PersonRef? assignee) {
+    if (assignFailure case final failure?) {
+      return Err(failure);
+    }
+    final task = current.firstWhere((t) => t.id == taskId);
+    final changed = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: status,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: assignee,
+      version: task.version + 1,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? changed : t]);
+    return Ok(changed);
+  }
+
+  /// Sub-tasks per main task ID for [loadSubTasks], or [subTasksFailure].
+  Map<String, List<Task>> subTasks = {};
+  Failure? subTasksFailure;
+
+  @override
+  Future<Result<List<Task>>> loadSubTasks(String mainTaskId) async =>
+      subTasksFailure == null ? Ok(subTasks[mainTaskId] ?? const []) : Err(subTasksFailure!);
+
+  /// When set, taking a task fails with this.
+  Failure? takeFailure;
+
+  /// Takes the open task for the test worker (u1), like the server.
+  @override
+  Future<Result<Task>> take(String taskId) async {
+    if (takeFailure case final failure?) {
+      // Like the real repository: someone else has it, so it leaves the device.
+      if (failure case ServerFailure(code: 'TASK_ALREADY_TAKEN' || 'TASK_NOT_FOUND')) {
+        emit([for (final t in current) if (t.id != taskId) t]);
+      }
+      return Err(failure);
+    }
+    final task = current.firstWhere((t) => t.id == taskId);
+    final taken = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: TaskStatus.assigned,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: const PersonRef(id: 'u1', name: 'Wendy Worker'),
+      version: task.version + 1,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? taken : t]);
+    return Ok(taken);
+  }
+
+  /// The history [loadHistory] returns, or [historyFailure].
+  List<HistoryEntry> history = [];
+  Failure? historyFailure;
+
+  @override
+  Future<Result<List<HistoryEntry>>> loadHistory(String taskId) async =>
+      historyFailure == null ? Ok(history) : Err(historyFailure!);
+
+  /// Latest reviews by task ID (set by tests).
+  Map<String, TaskReview> reviews = {};
+
+  @override
+  Stream<TaskReview?> watchReview(String taskId) => Stream.value(reviews[taskId]);
+
+  /// Task IDs submitted through [submit].
+  final List<String> submitted = [];
+
+  @override
+  Future<Result<Task>> submit(String taskId) async {
+    submitted.add(taskId);
+    final task = current.firstWhere((t) => t.id == taskId);
+    final done = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: TaskStatus.submitted,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: task.assignee,
+      version: task.version,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? done : t]);
+    return Ok(done);
   }
 
   @override
@@ -252,6 +535,26 @@ class FakeDocumentOpener implements DocumentOpener {
   }
 }
 
+/// A [SyncStatusSource] the test sets: [status] first, then [emit]ted ones.
+class FakeSyncStatusSource implements SyncStatusSource {
+  FakeSyncStatusSource([this.status = const SyncStatus()]);
+
+  SyncStatus status;
+  final _changes = StreamController<SyncStatus>.broadcast();
+  int retries = 0;
+
+  void emit(SyncStatus next) {
+    status = next;
+    _changes.add(next);
+  }
+
+  @override
+  Stream<SyncStatus> watch() async* {
+    yield status;
+    yield* _changes.stream;
+  }
+}
+
 /// Registers the task screens' dependencies with [repository] in the
 /// service locator, as the app does.
 void registerFakeTasks(
@@ -260,6 +563,7 @@ void registerFakeTasks(
   FakeEvidencePicker? picker,
   FakeEvidenceRepository? evidence,
   FakeDocumentOpener? opener,
+  FakeSyncStatusSource? syncStatus,
 }) {
   if (getIt.isRegistered<DashboardCubit>()) {
     getIt.unregister<DashboardCubit>();
@@ -267,23 +571,44 @@ void registerFakeTasks(
   if (getIt.isRegistered<WatchTasks>()) {
     getIt.unregister<WatchTasks>();
   }
+  if (getIt.isRegistered<WatchTeamTasks>()) {
+    getIt.unregister<WatchTeamTasks>();
+  }
   for (final unregister in [
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
+    () => getIt.isRegistered<TakeTask>() ? getIt.unregister<TakeTask>() : null,
+    () => getIt.isRegistered<LoadSubTasks>() ? getIt.unregister<LoadSubTasks>() : null,
+    () => getIt.isRegistered<SaveDraftTask>() ? getIt.unregister<SaveDraftTask>() : null,
+    () => getIt.isRegistered<EditRequirements>() ? getIt.unregister<EditRequirements>() : null,
+    () => getIt.isRegistered<AssignTask>() ? getIt.unregister<AssignTask>() : null,
+    () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
+    () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
     () => getIt.isRegistered<EvidencePicker>() ? getIt.unregister<EvidencePicker>() : null,
     () => getIt.isRegistered<EvidenceRepository>() ? getIt.unregister<EvidenceRepository>() : null,
     () => getIt.isRegistered<DocumentOpener>() ? getIt.unregister<DocumentOpener>() : null,
+    () => getIt.isRegistered<SyncStatusCubit>() ? getIt.unregister<SyncStatusCubit>() : null,
   ]) {
     unregister();
   }
   getIt
     ..registerFactory(() => DashboardCubit(repository, RefreshTasks(repository)))
     ..registerFactory(() => WatchTasks(repository))
+    ..registerFactory(() => WatchTeamTasks(repository))
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
+    ..registerFactory(() => TakeTask(repository))
+    ..registerFactory(() => LoadSubTasks(repository))
+    ..registerFactory(() => SaveDraftTask(repository))
+    ..registerFactory(() => EditRequirements(repository))
+    ..registerFactory(() => AssignTask(repository))
+    ..registerFactory(() => SubmitTask(repository))
+    ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())
     ..registerSingleton<EvidencePicker>(picker ?? FakeEvidencePicker())
     ..registerSingleton<EvidenceRepository>(evidence ?? FakeEvidenceRepository())
     ..registerSingleton<DocumentOpener>(opener ?? FakeDocumentOpener());
+  final source = syncStatus ?? FakeSyncStatusSource();
+  getIt.registerFactory(() => SyncStatusCubit(source, () async => source.retries++));
 }

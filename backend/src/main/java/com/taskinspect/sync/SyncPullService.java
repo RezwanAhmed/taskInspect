@@ -3,10 +3,14 @@ package com.taskinspect.sync;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.requirements.RequirementService;
 import com.taskinspect.requirements.dto.RequirementResponse;
+import com.taskinspect.reviews.ReviewRepository;
+import com.taskinspect.reviews.dto.ReviewResponse;
 import com.taskinspect.sync.dto.SyncPullResponse;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskService;
 import com.taskinspect.tasks.dto.TaskResponse;
+import com.taskinspect.tasks.dto.TaskTile;
+import com.taskinspect.users.UserService;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * GET /api/sync/pull: the tasks that changed on the server since the app's
  * last pull (docs/architecture.md, "Sync Cycle"), with the same visibility
- * rules as the task list.
+ * rules as the task list, plus the team's tiles and the team version
+ * (docs/architecture.md, "What a Worker Sees").
  */
 @Service
 public class SyncPullService {
@@ -31,11 +36,16 @@ public class SyncPullService {
 
     private final TaskService taskService;
     private final RequirementService requirementService;
+    private final ReviewRepository reviewRepository;
+    private final UserService userService;
     private final Clock clock;
 
-    public SyncPullService(TaskService taskService, RequirementService requirementService, Clock clock) {
+    public SyncPullService(TaskService taskService, RequirementService requirementService,
+            ReviewRepository reviewRepository, UserService userService, Clock clock) {
         this.taskService = taskService;
         this.requirementService = requirementService;
+        this.reviewRepository = reviewRepository;
+        this.userService = userService;
         this.clock = clock;
     }
 
@@ -48,9 +58,17 @@ public class SyncPullService {
         List<SyncPullResponse.PulledTask> changed = visible.stream()
                 .filter(task -> from == null || !task.getUpdatedAt().isBefore(from))
                 .map(task -> new SyncPullResponse.PulledTask(TaskResponse.from(task),
-                        requirementService.listForTask(task.getId()).stream().map(RequirementResponse::from).toList()))
+                        requirementService.listForTask(task.getId()).stream().map(RequirementResponse::from).toList(),
+                        reviewRepository.findFirstByTaskIdOrderByCreatedAtDescIdDesc(task.getId())
+                                .map(ReviewResponse::from).orElse(null)))
                 .toList();
-        return new SyncPullResponse(cursor, visible.stream().map(Task::getId).toList(), changed);
+        List<Task> tiles = taskService.listTeamAll(caller);
+        List<TaskTile> changedTiles = tiles.stream()
+                .filter(task -> from == null || !task.getUpdatedAt().isBefore(from))
+                .map(TaskTile::from)
+                .toList();
+        return new SyncPullResponse(cursor, visible.stream().map(Task::getId).toList(), changed,
+                tiles.stream().map(Task::getId).toList(), changedTiles, userService.teamVersion(caller));
     }
 
 }

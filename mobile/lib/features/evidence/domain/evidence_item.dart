@@ -12,6 +12,7 @@ class EvidenceItem extends Equatable {
     required this.createdAt,
     this.fileName,
     this.uploaded = false,
+    this.fileMissing = false,
   });
 
   /// Created on the device, so it stays the same when uploaded.
@@ -29,6 +30,10 @@ class EvidenceItem extends Equatable {
   /// Whether the file reached the server (Phase 6 / 8).
   final bool uploaded;
 
+  /// The file is gone from the device (its upload failed with
+  /// FILE_MISSING): it must be removed and added again.
+  final bool fileMissing;
+
   @override
-  List<Object?> get props => [id, taskId, requirementId, localPath, mimeType, sizeBytes, createdAt, fileName, uploaded];
+  List<Object?> get props => [id, taskId, requirementId, localPath, mimeType, sizeBytes, createdAt, fileName, uploaded, fileMissing];
 }

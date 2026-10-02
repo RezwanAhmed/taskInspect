@@ -39,7 +39,10 @@ public class SyncController {
                     + "is checked like the matching API call and gets its own result: APPLIED, REJECTED (with "
                     + "the error code) or SKIPPED (an earlier change of the same task was rejected). Safe to "
                     + "send again: operations applied before are not applied twice. Supported: TaskResponse "
-                    + "UPDATE, Evidence CREATE / DELETE, Task START.")
+                    + "UPDATE, Evidence CREATE / DELETE, Task START / SUBMIT (workers; START / SUBMIT also the "
+                    + "manager of a main task), Task CREATE / UPDATE, "
+                    + "Requirement CREATE / UPDATE / DELETE and RequirementOrder UPDATE (managers: drafts made "
+                    + "offline; CREATE uses the ID the app gave the task or requirement).")
     public SyncPushResponse push(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody SyncPushRequest request) {
         return new SyncPushResponse(syncService.push(CurrentUser.from(jwt), request.operations()));
     }
@@ -49,7 +52,9 @@ public class SyncController {
             description = "Without `since` (first pull, after sign in): every task the user may see, with its "
                     + "requirements. With `since` = the `cursor` of the last pull: only the tasks changed since "
                     + "then (changes from shortly before are sent again, so none is missed). `taskIds` lists every "
-                    + "task the user may see now, so the app can remove the others.")
+                    + "task the user may see now, so the app can remove the others. Tiles (team members' tasks, "
+                    + "without requirements) come the same way in `tileIds` / `tiles`. `teamVersion` changes when "
+                    + "the user's team changes; then the app pulls again without `since`.")
     public SyncPullResponse pull(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) Instant since) {
         return syncPullService.pull(CurrentUser.from(jwt), since);
     }

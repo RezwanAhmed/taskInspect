@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -6,7 +7,10 @@ import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/core/synchronization/sync_remote_data_source.dart';
+import 'package:taskinspect/features/evidence/data/evidence_uploader.dart';
+import 'package:taskinspect/features/evidence/data/remote/evidence_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 
 /// Sends the sync queue to the server (docs/architecture.md, "Sync Cycle").
 ///
@@ -19,79 +23,140 @@ import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dar
 /// [networkError] or [serverError]; the SyncScheduler retries those with
 /// a growing delay. Nothing is ever dropped.
 ///
-/// [pull] then loads what changed on the server since the last pull.
+/// A sync cycle then uploads the evidence files the server now knows
+/// (EvidenceUploader), and [pull] loads what changed on the server since
+/// the last pull.
 class SyncManager {
-  SyncManager(this._db, this._remote, this._tasks, {this.batchSize = 100});
+  SyncManager(this._db, this._remote, this._tasks, this._uploads, {this.batchSize = 100});
 
   static const pullCursorKey = 'pullCursor';
+
+  /// The team version of the last pull (Phase 7A).
+  static const teamVersionKey = 'teamVersion';
 
   /// `lastError` of operations whose push failed for a temporary reason.
   static const networkError = SyncErrors.network;
   static const serverError = SyncErrors.server;
 
-  /// Whether a failed sync is worth retrying automatically: no connection
-  /// or a server error. A business error would fail again.
+  /// Whether a failed sync is worth retrying automatically: no connection,
+  /// a server error or an expired upload URL (a new one will work). A
+  /// business error would fail again.
   static bool isTemporary(Failure failure) =>
-      failure is NetworkFailure || (failure is ServerFailure && failure.isServerError);
+      failure is NetworkFailure ||
+      (failure is ServerFailure && (failure.isServerError || failure.code == EvidenceRemoteDataSource.urlExpired));
 
   final AppDatabase _db;
   final SyncRemoteDataSource _remote;
   final TaskLocalDataSource _tasks;
+  final EvidenceUploader _uploads;
   final int batchSize;
   Future<Result<void>>? _running;
   Future<Result<void>>? _syncing;
+  final _syncingChanges = StreamController<bool>.broadcast();
+
+  /// Whether a sync cycle is running.
+  bool get isSyncing => _syncing != null;
+
+  /// Emits `true` when a sync cycle starts and `false` when it ends.
+  Stream<bool> get syncingChanges => _syncingChanges.stream;
+
+  Future<void> dispose() => _syncingChanges.close();
 
   /// Sends every PENDING operation that may go now. Only one push runs at a
   /// time; calling again meanwhile returns the running one.
   Future<Result<void>> push() => _running ??= _pushAll().whenComplete(() => _running = null);
 
-  /// A full sync cycle: push the local changes first, then pull the
-  /// server's. If the push fails (e.g. offline), there is no pull. Only one
-  /// cycle runs at a time.
-  Future<Result<void>> sync() => _syncing ??= _syncOnce().whenComplete(() => _syncing = null);
+  /// A full sync cycle: push the local changes first, then upload the
+  /// evidence files, then pull the server's changes. If the push fails
+  /// (e.g. offline), nothing else is tried. A failed upload doesn't stop
+  /// the pull, but its failure is returned (so the sync is retried). Only
+  /// one cycle runs at a time.
+  Future<Result<void>> sync() {
+    if (_syncing case final running?) {
+      return running;
+    }
+    _syncingChanges.add(true);
+    return _syncing = _syncOnce().whenComplete(() {
+      _syncing = null;
+      _syncingChanges.add(false);
+    });
+  }
 
   Future<Result<void>> _syncOnce() async {
     final pushed = await push();
     if (pushed is Err<void>) {
       return pushed;
     }
-    return pull();
+    final uploaded = await _uploads.uploadAll();
+    if (uploaded case Err(failure: UnauthorizedFailure())) {
+      return uploaded;
+    }
+    if (uploaded is Ok<void>) {
+      // Submits that waited for these files can go now.
+      final submitted = await push();
+      if (submitted is Err<void>) {
+        return submitted;
+      }
+    }
+    final pulled = await pull();
+    return pulled is Err<void> ? pulled : uploaded;
   }
 
   /// Loads what changed on the server since the last pull (everything the
   /// first time) and stores it. The new cursor is stored in the same
   /// transaction as the changes, so a failure half-way loads them again.
-  Future<Result<void>> pull() async {
-    final cursor = await (_db.select(_db.localSyncState)..where((s) => s.key.equals(pullCursorKey)))
-        .map((row) => row.value)
-        .getSingleOrNull();
+  ///
+  /// When the team version differs from the stored one, the user's team
+  /// changed: tasks and tiles may have become visible without changing
+  /// themselves, which a cursor can't show, so everything is pulled again
+  /// once (docs/architecture.md, "Data Changes").
+  Future<Result<void>> pull() => _pull(fresh: false);
+
+  Future<Result<void>> _pull({required bool fresh}) async {
+    final cursor = fresh ? null : await _state(pullCursorKey);
+    final teamVersion = await _state(teamVersionKey);
     switch (await _remote.pull(since: cursor)) {
       case Err(:final failure):
         return Err(failure);
+      case Ok(:final value) when cursor != null && value.teamVersion != null && value.teamVersion != teamVersion:
+        // Nothing is stored, so a failed full pull is tried again next time.
+        return _pull(fresh: true);
       case Ok(:final value):
         await _db.transaction(() async {
-          await _tasks.applyServerChanges(value.tasks, value.taskIds);
+          await _tasks.applyServerChanges(value.tasks, value.taskIds, reviews: value.reviews);
+          await _tasks.applyTeamChanges(value.teamTasks, value.teamTaskIds);
           await _db
               .into(_db.localSyncState)
               .insertOnConflictUpdate(LocalSyncStateCompanion.insert(key: pullCursorKey, value: value.cursor));
+          if (value.teamVersion case final version?) {
+            await _db
+                .into(_db.localSyncState)
+                .insertOnConflictUpdate(LocalSyncStateCompanion.insert(key: teamVersionKey, value: version));
+          }
         });
         return const Ok(null);
     }
   }
 
-  /// Operations that failed for a temporary reason go back to PENDING, for
-  /// the automatic retry.
-  Future<void> retryTemporaryFailures() {
-    return (_db.update(_db.localSyncOperations)
+  Future<String?> _state(String key) =>
+      (_db.select(_db.localSyncState)..where((s) => s.key.equals(key))).map((row) => row.value).getSingleOrNull();
+
+  /// Operations and uploads that failed for a temporary reason go back to
+  /// PENDING, for the automatic retry.
+  Future<void> retryTemporaryFailures() async {
+    await (_db.update(_db.localSyncOperations)
           ..where((o) => o.status.equals('FAILED') & o.lastError.isIn(SyncErrors.temporary)))
         .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+    await _uploads.retryTemporaryFailures();
   }
 
-  /// Every FAILED operation goes back to PENDING: the user tapped Retry.
-  /// A START refused because the task changed on the server is sent with
-  /// the task's version from the last pull, so it can succeed now.
+  /// Every FAILED operation and upload goes back to PENDING: the user
+  /// tapped Retry. A START refused because the task changed on the server
+  /// is sent with the task's version from the last pull, so it can succeed
+  /// now.
   Future<void> retryFailed() {
     return _db.transaction(() async {
+      await _uploads.retryFailed();
       final failedStarts = await (_db.select(_db.localSyncOperations)
             ..where((o) => o.status.equals('FAILED') & o.operation.equals(SyncOperation.start.apiName)))
           .get();
@@ -103,20 +168,31 @@ class SyncManager {
               .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode({'version': task.version}))));
         }
       }
+      // A submit the server refused is not sent again as it was: the task
+      // is back with the worker, who submits it again when it is complete.
+      // (One that failed for a temporary reason is sent again like others.)
+      await (_db.delete(_db.localSyncOperations)
+            ..where((o) =>
+                o.status.equals('FAILED') &
+                o.operation.equals(SyncOperation.submit.apiName) &
+                o.lastError.isNotIn(SyncErrors.temporary)))
+          .go();
       await (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('FAILED')))
           .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
     });
   }
 
-  /// Operations left SYNCING because the app was closed during a push go
-  /// back to PENDING. Sending them again is safe: the server doesn't apply
-  /// an operation twice.
+  /// Operations left SYNCING (and uploads left UPLOADING) because the app
+  /// was closed during a sync go back to PENDING. Sending them again is
+  /// safe: the server doesn't apply an operation twice, and an upload is
+  /// only confirmed once the whole file arrived.
   Future<void> resetInterrupted() async {
-    if (_running != null) {
+    if (_running != null || _syncing != null) {
       return;
     }
     await (_db.update(_db.localSyncOperations)..where((o) => o.status.equals('SYNCING')))
         .write(const LocalSyncOperationsCompanion(status: Value('PENDING')));
+    await _uploads.resetInterrupted();
   }
 
   /// When the newest queued change was made; emits again whenever a change
@@ -148,14 +224,25 @@ class SyncManager {
     }
   }
 
-  /// The oldest PENDING operations, except those of tasks with a FAILED one.
+  /// The oldest PENDING operations, except those of tasks with a FAILED
+  /// one, and except a SUBMIT while files of its task are not uploaded yet
+  /// (docs/architecture.md "Sync Cycle": a task is never submitted with
+  /// evidence the server cannot find).
   Future<List<SyncOperationRow>> _nextBatch() {
     final queue = _db.localSyncOperations;
+    // A refused submit doesn't block: the worker fixes the task and submits again.
     final blockedTasks = _db.selectOnly(queue)
       ..addColumns([queue.taskId])
-      ..where(queue.status.equals('FAILED'));
+      ..where(queue.status.equals('FAILED') & queue.operation.equals(SyncOperation.submit.apiName).not());
+    final evidence = _db.localEvidence;
+    final tasksWithFilesToUpload = _db.selectOnly(evidence)
+      ..addColumns([evidence.taskId])
+      ..where(evidence.uploadStatus.equals('UPLOADED').not());
     final query = _db.select(queue)
-      ..where((o) => o.status.equals('PENDING') & o.taskId.isNotInQuery(blockedTasks))
+      ..where((o) =>
+          o.status.equals('PENDING') &
+          o.taskId.isNotInQuery(blockedTasks) &
+          (o.operation.equals(SyncOperation.submit.apiName).not() | o.taskId.isNotInQuery(tasksWithFilesToUpload)))
       ..orderBy([(o) => OrderingTerm(expression: o.createdAt)])
       ..limit(batchSize);
     return query.get();
@@ -174,6 +261,7 @@ class SyncManager {
             progressed = true;
             await (_db.delete(_db.localSyncOperations)..where((o) => o.id.equals(operation.id))).go();
             await _markEntitySynced(operation);
+            await _followTaskVersion(operation);
           case SyncResultStatus.rejected:
             progressed = true;
             await (_db.update(_db.localSyncOperations)..where((o) => o.id.equals(operation.id))).write(
@@ -183,6 +271,9 @@ class SyncManager {
                 lastError: Value(result!.code ?? 'REJECTED'),
               ),
             );
+            if (operation.operation == SyncOperation.submit.apiName) {
+              await _reopenRefusedSubmit(operation);
+            }
           case SyncResultStatus.skipped || null:
             // Waits for the operation of its task that failed.
             await _setStatus([operation.id], 'PENDING');
@@ -190,6 +281,46 @@ class SyncManager {
       }
       return progressed;
     });
+  }
+
+  /// The server refused a submit (e.g. a required requirement is missing):
+  /// the task is back IN_PROGRESS on the device, so the worker can fix it
+  /// and submit again. The refused SUBMIT stays FAILED to show the reason,
+  /// but it doesn't hold back the task's other changes, and the next
+  /// submit replaces it.
+  Future<void> _reopenRefusedSubmit(SyncOperationRow operation) {
+    return (_db.update(_db.localTasks)
+          ..where((t) => t.id.equals(operation.taskId) & t.status.equals(TaskStatus.submitted.apiName)))
+        .write(LocalTasksCompanion(status: Value(TaskStatus.inProgress.apiName)));
+  }
+
+  /// The server raised the task's version by one when it applied our Task
+  /// UPDATE. The device does the same, also in a later edit still waiting
+  /// to be sent, so that edit isn't refused as made on an old version
+  /// before the next pull brings the task again.
+  Future<void> _followTaskVersion(SyncOperationRow operation) async {
+    if (operation.entityType != SyncEntity.task.apiName || operation.operation != SyncOperation.update.apiName) {
+      return;
+    }
+    final task = await (_db.select(_db.localTasks)..where((t) => t.id.equals(operation.taskId))).getSingleOrNull();
+    if (task == null) {
+      return;
+    }
+    final version = task.version + 1;
+    await (_db.update(_db.localTasks)..where((t) => t.id.equals(task.id)))
+        .write(LocalTasksCompanion(version: Value(version)));
+    final waiting = await (_db.select(_db.localSyncOperations)
+          ..where((o) =>
+              o.taskId.equals(task.id) &
+              o.entityType.equals(SyncEntity.task.apiName) &
+              o.operation.equals(SyncOperation.update.apiName) &
+              o.status.equals('PENDING')))
+        .get();
+    for (final later in waiting) {
+      final payload = jsonDecode(later.payload) as Map<String, Object?>;
+      await (_db.update(_db.localSyncOperations)..where((o) => o.id.equals(later.id)))
+          .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode({...payload, 'version': version}))));
+    }
   }
 
   /// An answer counts as synced once no change of it is left in the queue.

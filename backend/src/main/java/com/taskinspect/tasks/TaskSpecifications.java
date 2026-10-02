@@ -22,6 +22,32 @@ public final class TaskSpecifications {
         return (task, query, cb) -> cb.equal(task.get("assignee").get("id"), userId);
     }
 
+    /** Tasks assigned to a member of the manager's team. */
+    public static Specification<Task> assignedToTeamOf(UUID teamManagerId) {
+        return (task, query, cb) -> cb.equal(task.get("assignee").get("teamManager").get("id"), teamManagerId);
+    }
+
+    /**
+     * Open tasks a worker may take: those open to everyone, and those open to
+     * the team of {@code teamManagerId} (the manager who published them).
+     * Without a team ({@code null}) only the ones open to everyone.
+     */
+    public static Specification<Task> openFor(UUID teamManagerId) {
+        return (task, query, cb) -> cb.and(cb.equal(task.get("status"), TaskStatus.OPEN), teamManagerId == null
+                ? cb.equal(task.get("openScope"), OpenScope.EVERYONE)
+                : cb.or(cb.equal(task.get("openScope"), OpenScope.EVERYONE),
+                        cb.and(cb.equal(task.get("openScope"), OpenScope.TEAM),
+                                cb.equal(task.get("createdBy").get("id"), teamManagerId))));
+    }
+
+    public static Specification<Task> notAssignedTo(UUID userId) {
+        return (task, query, cb) -> cb.notEqual(task.get("assignee").get("id"), userId);
+    }
+
+    public static Specification<Task> notInStatus(TaskStatus status) {
+        return (task, query, cb) -> cb.notEqual(task.get("status"), status);
+    }
+
     public static Specification<Task> hasStatus(TaskStatus status) {
         return status == null ? Specification.unrestricted() : (task, query, cb) -> cb.equal(task.get("status"), status);
     }

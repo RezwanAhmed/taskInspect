@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/evidence/presentation/pages/evidence_preview_page.dart';
 import 'package:taskinspect/features/requirements/presentation/cubit/execution_cubit.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/comment_field.dart';
@@ -9,6 +10,7 @@ import 'package:taskinspect/features/requirements/presentation/widgets/inputs/ph
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_card.dart';
 import 'package:taskinspect/features/requirements/presentation/widgets/requirement_input.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 
 /// Requirement-by-requirement execution of a task (spec: "Task Execution").
@@ -20,7 +22,7 @@ class ExecutionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), getIt(), getIt(), taskId),
+      create: (_) => ExecutionCubit(getIt(), getIt(), getIt(), getIt(), getIt(), getIt(), taskId),
       child: const _ExecutionView(),
     );
   }
@@ -84,15 +86,43 @@ class _ExecutionViewState extends State<_ExecutionView> {
     }
   }
 
+  Future<bool> _confirmSubmit(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Submit for review?'),
+        content: const Text('Your answers and evidence go to the reviewer. You can\'t change them after submitting.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Submit')),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
+    final userId = auth is Authenticated ? auth.user.id : '';
     return BlocConsumer<ExecutionCubit, ExecutionState>(
       listenWhen: (previous, current) =>
           previous.index != current.index ||
-          (current.evidenceError != null && previous.evidenceError != current.evidenceError),
+          (current.evidenceError != null && previous.evidenceError != current.evidenceError) ||
+          (current.message != null && previous.message != current.message) ||
+          (current.isSubmitted && !previous.isSubmitted),
       listener: (context, state) {
+        if (state.isSubmitted) {
+          // Back to the task, which now shows that it was submitted.
+          Navigator.of(context).pop();
+          return;
+        }
         if (state.evidenceError != null) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.evidenceError!)));
+        }
+        if (state.message != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.message!)));
+          context.read<ExecutionCubit>().clearMessage();
         }
         if (_pages.hasClients && _pages.page?.round() != state.index) {
           _pages.animateToPage(state.index, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
@@ -139,10 +169,28 @@ class _ExecutionViewState extends State<_ExecutionView> {
                 itemBuilder: (context, index) {
                   final requirement = state.requirements[index];
                   final answer = state.answerFor(requirement);
+                  final locked = state.isLocked(requirement);
+                  final toFix = state.whatToFix(requirement);
                   return RequirementCard(
                     requirement: requirement,
+                    // Photos and documents stay viewable; their inputs lock themselves.
+                    locked: locked && !requirement.type.isEvidence,
+                    notice: locked
+                        ? const _Notice(
+                            key: Key('locked-notice'),
+                            icon: Icons.lock_outline,
+                            text: 'Not marked for correction - stays as submitted.',
+                          )
+                        : toFix == null
+                            ? null
+                            : _Notice(
+                                key: const Key('to-fix-notice'),
+                                icon: Icons.build_circle_outlined,
+                                text: 'To fix: $toFix',
+                                highlighted: true,
+                              ),
                     // A COMMENT requirement's answer already is a comment.
-                    comment: requirement.type == RequirementType.comment
+                    comment: locked || requirement.type == RequirementType.comment
                         ? null
                         : CommentField(
                             key: ValueKey('comment-${requirement.id}'),
@@ -151,17 +199,19 @@ class _ExecutionViewState extends State<_ExecutionView> {
                           ),
                     input: switch (requirement.type) {
                       RequirementType.photo => PhotoInput(
+                          readOnly: locked,
                           photoPaths: [for (final photo in state.evidenceFor(requirement)) photo.localPath],
                           onTakePhoto: () => cubit.addPhoto(requirement, fromCamera: true),
                           onChoosePhoto: () => cubit.addPhoto(requirement, fromCamera: false),
                           onOpenPhoto: (photoIndex) async {
                             final photo = state.evidenceFor(requirement)[photoIndex];
-                            if (await EvidencePreviewPage.show(context, photo)) {
+                            if (await EvidencePreviewPage.show(context, photo, canRemove: !locked)) {
                               await cubit.removeEvidence(photo);
                             }
                           },
                         ),
                       RequirementType.document => DocumentInput(
+                          readOnly: locked,
                           documents: state.evidenceFor(requirement),
                           onChoose: () => cubit.addDocument(requirement),
                           onOpen: cubit.openDocument,
@@ -194,18 +244,52 @@ class _ExecutionViewState extends State<_ExecutionView> {
                           label: const Text('Previous'),
                         ),
                         const Spacer(),
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(minimumSize: const Size(120, 48)),
-                          onPressed: state.isLast ? null : cubit.next,
-                          icon: const Icon(Icons.chevron_right),
-                          label: const Text('Next'),
-                        ),
+                        if (state.isLast && state.task != null && SubmitTask.canSubmit(state.task!, userId))
+                          FilledButton.icon(
+                            key: const Key('submit-task'),
+                            style: FilledButton.styleFrom(minimumSize: const Size(120, 48)),
+                            onPressed: state.isSubmitting
+                                ? null
+                                : () async {
+                                    if (await _confirmSubmit(context)) {
+                                      await cubit.submit();
+                                    }
+                                  },
+                            icon: const Icon(Icons.send),
+                            label: const Text('Submit'),
+                          )
+                        else
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(minimumSize: const Size(120, 48)),
+                            onPressed: state.isLast ? null : cubit.next,
+                            icon: const Icon(Icons.chevron_right),
+                            label: const Text('Next'),
+                          ),
                       ],
                     ),
                   ),
                 ),
         );
       },
+    );
+  }
+}
+
+/// A short message on a requirement while correcting.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.icon, required this.text, this.highlighted = false, super.key});
+
+  final IconData icon;
+  final String text;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      color: highlighted ? colors.tertiaryContainer : colors.surfaceContainerHighest,
+      child: ListTile(leading: Icon(icon), title: Text(text)),
     );
   }
 }

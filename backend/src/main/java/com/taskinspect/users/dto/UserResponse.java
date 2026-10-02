@@ -13,12 +13,19 @@ public record UserResponse(
         String fullName,
         List<String> roles,
         boolean active,
+        TeamManagerRef teamManager,
         Instant createdAt) {
 
     public static UserResponse from(User user) {
+        User manager = user.getTeamManager();
         return new UserResponse(user.getId(), user.getEmail(), user.getFullName(),
                 user.getRoles().stream().map(Role::getName).map(Enum::name).sorted().toList(),
-                user.isActive(), user.getCreatedAt());
+                user.isActive(), manager == null ? null : new TeamManagerRef(manager.getId(), manager.getFullName()),
+                user.getCreatedAt());
+    }
+
+    /** The manager whose team the user is in. */
+    public record TeamManagerRef(UUID id, String fullName) {
     }
 
 }

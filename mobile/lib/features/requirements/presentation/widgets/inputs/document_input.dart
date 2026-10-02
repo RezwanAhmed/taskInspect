@@ -9,6 +9,7 @@ class DocumentInput extends StatelessWidget {
     required this.onChoose,
     required this.onOpen,
     required this.onRemove,
+    this.readOnly = false,
     super.key,
   });
 
@@ -16,6 +17,11 @@ class DocumentInput extends StatelessWidget {
   final VoidCallback onChoose;
   final ValueChanged<EvidenceItem> onOpen;
   final ValueChanged<EvidenceItem> onRemove;
+
+  /// Documents can be opened but not added or removed (e.g. not marked for
+  /// correction). Otherwise any document can be removed, also an uploaded
+  /// one (the removal is sent to the server).
+  final bool readOnly;
 
   static String sizeLabel(int bytes) =>
       bytes < 1024 * 1024 ? '${(bytes / 1024).ceil()} KB' : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
@@ -34,7 +40,7 @@ class DocumentInput extends StatelessWidget {
               title: Text(document.fileName ?? 'Document', maxLines: 2, overflow: TextOverflow.ellipsis),
               subtitle: Text(sizeLabel(document.sizeBytes)),
               onTap: () => onOpen(document),
-              trailing: document.uploaded
+              trailing: readOnly
                   ? null
                   : IconButton(
                       key: Key('remove-document-$index'),
@@ -44,16 +50,18 @@ class DocumentInput extends StatelessWidget {
                     ),
             ),
           ),
-        if (documents.isNotEmpty) const SizedBox(height: 4),
-        OutlinedButton.icon(
-          key: const Key('choose-document'),
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          onPressed: onChoose,
-          icon: const Icon(Icons.upload_file),
-          label: Text(documents.isEmpty ? 'Choose PDF' : 'Add another PDF'),
-        ),
-        const SizedBox(height: 4),
-        Text('PDF only, up to 20 MB', style: Theme.of(context).textTheme.bodySmall),
+        if (!readOnly) ...[
+          if (documents.isNotEmpty) const SizedBox(height: 4),
+          OutlinedButton.icon(
+            key: const Key('choose-document'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            onPressed: onChoose,
+            icon: const Icon(Icons.upload_file),
+            label: Text(documents.isEmpty ? 'Choose PDF' : 'Add another PDF'),
+          ),
+          const SizedBox(height: 4),
+          Text('PDF only, up to 20 MB', style: Theme.of(context).textTheme.bodySmall),
+        ],
       ],
     );
   }

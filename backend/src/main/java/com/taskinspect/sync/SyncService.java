@@ -5,11 +5,17 @@ import com.taskinspect.common.error.ErrorCode;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.evidence.EvidenceService;
 import com.taskinspect.evidence.dto.RegisterEvidenceRequest;
+import com.taskinspect.requirements.RequirementService;
+import com.taskinspect.requirements.dto.RequirementOrderRequest;
+import com.taskinspect.requirements.dto.RequirementRequest;
 import com.taskinspect.responses.ResponseService;
 import com.taskinspect.responses.dto.SaveResponseRequest;
+import com.taskinspect.reviews.SubmissionService;
 import com.taskinspect.sync.dto.SyncOperationRequest;
 import com.taskinspect.sync.dto.SyncOperationResult;
 import com.taskinspect.tasks.TaskService;
+import com.taskinspect.tasks.dto.CreateTaskRequest;
+import com.taskinspect.tasks.dto.UpdateTaskRequest;
 import com.taskinspect.users.RoleName;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -52,17 +58,22 @@ public class SyncService {
     private final TaskService taskService;
     private final ResponseService responseService;
     private final EvidenceService evidenceService;
+    private final SubmissionService submissionService;
+    private final RequirementService requirementService;
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final TransactionTemplate transactions;
 
     public SyncService(SyncRecordRepository syncRecordRepository, TaskService taskService,
-            ResponseService responseService, EvidenceService evidenceService, ObjectMapper objectMapper,
-            Validator validator, PlatformTransactionManager transactionManager) {
+            ResponseService responseService, EvidenceService evidenceService, SubmissionService submissionService,
+            RequirementService requirementService, ObjectMapper objectMapper, Validator validator,
+            PlatformTransactionManager transactionManager) {
         this.syncRecordRepository = syncRecordRepository;
         this.taskService = taskService;
         this.responseService = responseService;
         this.evidenceService = evidenceService;
+        this.submissionService = submissionService;
+        this.requirementService = requirementService;
         this.objectMapper = objectMapper;
         this.validator = validator;
         this.transactions = new TransactionTemplate(transactionManager);
@@ -118,12 +129,22 @@ public class SyncService {
     }
 
     private void apply(CurrentUser caller, SyncOperationRequest operation) {
-        // The same role check as the matching API endpoints.
-        if (!caller.hasRole(RoleName.WORKER.name())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "Only workers can do this");
+        // The same role check as the matching API endpoints. Start and submit
+        // also for managers (their main tasks, Phase 7A); the services check
+        // that the caller is the task's assignee. Drafts are managers' work.
+        String kind = operation.entityType() + " " + operation.operation();
+        Set<RoleName> roles = switch (kind) {
+            case "Task START", "Task SUBMIT" -> Set.of(RoleName.WORKER, RoleName.MANAGER);
+            case "Task CREATE", "Task UPDATE", "Requirement CREATE", "Requirement UPDATE", "Requirement DELETE",
+                    "RequirementOrder UPDATE" -> Set.of(RoleName.MANAGER);
+            default -> Set.of(RoleName.WORKER);
+        };
+        if (roles.stream().noneMatch(role -> caller.hasRole(role.name()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    roles.contains(RoleName.WORKER) ? "Only workers can do this" : "Only managers can do this");
         }
         UUID taskId = operation.taskId();
-        switch (operation.entityType() + " " + operation.operation()) {
+        switch (kind) {
             case "TaskResponse UPDATE" -> responseService.save(caller, taskId, operation.entityId(),
                     payload(operation, SaveResponseRequest.class));
             case "Evidence CREATE" -> {
@@ -134,7 +155,26 @@ public class SyncService {
                 evidenceService.register(caller, taskId, uuid(operation.payload(), "requirementId"), request);
             }
             case "Evidence DELETE" -> evidenceService.delete(caller, taskId, operation.entityId());
+            case "Task CREATE" -> {
+                requireTaskEntity(operation);
+                taskService.createWithId(caller, taskId, payload(operation, CreateTaskRequest.class));
+            }
+            case "Task UPDATE" -> {
+                requireTaskEntity(operation);
+                taskService.update(caller, taskId, payload(operation, UpdateTaskRequest.class));
+            }
+            case "Requirement CREATE" -> requirementService.createWithId(caller, taskId, operation.entityId(),
+                    payload(operation, RequirementRequest.class));
+            case "Requirement UPDATE" -> requirementService.update(caller, taskId, operation.entityId(),
+                    payload(operation, RequirementRequest.class));
+            case "Requirement DELETE" -> requirementService.deleteIfPresent(caller, taskId, operation.entityId());
+            case "RequirementOrder UPDATE" -> {
+                requireTaskEntity(operation);
+                requirementService.reorder(caller, taskId,
+                        payload(operation, RequirementOrderRequest.class).requirementIds());
+            }
             case "Task START" -> start(caller, operation);
+            case "Task SUBMIT" -> submit(caller, operation);
             default -> throw new ApiException(HttpStatus.BAD_REQUEST, UNSUPPORTED_OPERATION,
                     operation.operation() + " of " + operation.entityType() + " can't be synchronized");
         }
@@ -155,6 +195,17 @@ public class SyncService {
                     "The task was changed on the server. Reload it and try again.");
         }
         taskService.start(caller, operation.taskId());
+    }
+
+    /**
+     * No version check: the device's version is older after its own START
+     * was applied; the state machine and the requirement checks decide.
+     */
+    private void submit(CurrentUser caller, SyncOperationRequest operation) {
+        if (!operation.entityId().equals(operation.taskId())) {
+            throw invalidPayload("entityId must be the task ID");
+        }
+        submissionService.submit(caller, operation.taskId());
     }
 
     private <T> T payload(SyncOperationRequest operation, Class<T> type) {
@@ -181,6 +232,12 @@ public class SyncService {
             return UUID.fromString(String.valueOf(value));
         } catch (IllegalArgumentException ex) {
             throw invalidPayload(field + " must be a UUID");
+        }
+    }
+
+    private static void requireTaskEntity(SyncOperationRequest operation) {
+        if (!operation.entityId().equals(operation.taskId())) {
+            throw invalidPayload("entityId must be the task ID");
         }
     }
 

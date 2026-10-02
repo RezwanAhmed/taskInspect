@@ -4,15 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:taskinspect/features/evidence/domain/evidence_item.dart';
 
 /// Full-screen view of one photo with zoom. Returns `true` when the worker
-/// chose to remove it.
+/// chose to remove it ([canRemove]: not while it stays as submitted during
+/// a correction).
 class EvidencePreviewPage extends StatelessWidget {
-  const EvidencePreviewPage({required this.item, super.key});
+  const EvidencePreviewPage({required this.item, this.canRemove = true, super.key});
 
   final EvidenceItem item;
+  final bool canRemove;
 
-  static Future<bool> show(BuildContext context, EvidenceItem item) async {
+  static Future<bool> show(BuildContext context, EvidenceItem item, {bool canRemove = true}) async {
     final removed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => EvidencePreviewPage(item: item), fullscreenDialog: true),
+      MaterialPageRoute(
+        builder: (_) => EvidencePreviewPage(item: item, canRemove: canRemove),
+        fullscreenDialog: true,
+      ),
     );
     return removed ?? false;
   }
@@ -44,7 +49,9 @@ class EvidencePreviewPage extends StatelessWidget {
         foregroundColor: Colors.white,
         title: Text('Photo · $kilobytes KB'),
         actions: [
-          if (!item.uploaded)
+          // Also an uploaded photo: e.g. replaced during a correction (the
+          // removal is sent to the server).
+          if (canRemove)
             IconButton(
               key: const Key('remove-evidence'),
               tooltip: 'Remove photo',

@@ -6,6 +6,7 @@ import 'package:taskinspect/features/authentication/data/datasources/auth_remote
 import 'package:taskinspect/features/authentication/data/models/session_model.dart';
 import 'package:taskinspect/features/authentication/data/token_refresher.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/repositories/auth_repository.dart';
 
 /// [AuthRepository] backed by the API and secure storage. The session (and
@@ -18,10 +19,12 @@ class AuthRepositoryImpl implements AuthRepository {
     this._refresher, {
     DateTime Function()? now,
     Future<void> Function()? clearLocalData,
-    Future<void> Function(String userId)? claimLocalData,
+    Future<void> Function(AuthUser user)? claimLocalData,
+    Future<UnsyncedChanges?> Function()? unsyncedChanges,
   }) : _now = now ?? DateTime.now,
        _clearLocalData = clearLocalData ?? _nothing,
-       _claimLocalData = claimLocalData ?? _nobody;
+       _claimLocalData = claimLocalData ?? _nobody,
+       _unsyncedChanges = unsyncedChanges ?? _none;
 
   final AuthRemoteDataSource _remote;
   final TokenStorage _storage;
@@ -33,11 +36,16 @@ class AuthRepositoryImpl implements AuthRepository {
 
   /// Makes the device's data the signed-in user's; another user's data is
   /// removed first (see LocalDataOwner).
-  final Future<void> Function(String userId) _claimLocalData;
+  final Future<void> Function(AuthUser user) _claimLocalData;
+
+  /// Unsynced changes on the device and whose they are (LocalDataOwner).
+  final Future<UnsyncedChanges?> Function() _unsyncedChanges;
 
   static Future<void> _nothing() async {}
 
-  static Future<void> _nobody(String userId) async {}
+  static Future<void> _nobody(AuthUser user) async {}
+
+  static Future<UnsyncedChanges?> _none() async => null;
 
   @override
   Future<Result<AuthUser>> login({
@@ -47,7 +55,7 @@ class AuthRepositoryImpl implements AuthRepository {
     final result = await _remote.login(email: email, password: password);
     switch (result) {
       case Ok(:final value):
-        await _claimLocalData(value.user.id);
+        await _claimLocalData(value.user);
         await _refresher.save(value);
         return Ok(value.user);
       case Err(:final failure):
@@ -65,7 +73,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Ok(null);
     }
     if (!tokens.isAccessTokenExpired(now)) {
-      await _claimLocalData(user.id);
+      await _claimLocalData(user);
       return Ok(user);
     }
 
@@ -77,7 +85,7 @@ class AuthRepositoryImpl implements AuthRepository {
       RefreshOutcome.refused => null,
     };
     if (restored != null) {
-      await _claimLocalData(restored.id);
+      await _claimLocalData(restored);
     }
     return Ok(restored);
   }
@@ -86,7 +94,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<void> logout() async {
     final tokens = await _storage.read();
     await _storage.clear();
-    // TODO(phase-6): warn before signing out when answers are not synced yet.
+    // The dashboard warns first when changes are not synced yet (6.13b).
     await _clearLocalData();
     if (tokens != null) {
       // Best effort: the token is already gone from the device.
@@ -96,6 +104,9 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> endExpiredSession() => _storage.clear();
+
+  @override
+  Future<UnsyncedChanges?> unsyncedChanges() => _unsyncedChanges();
 
   Future<AuthUser?> _readUser() async {
     final json = await _storage.readUserProfile();

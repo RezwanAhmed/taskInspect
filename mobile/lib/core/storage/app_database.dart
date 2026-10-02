@@ -13,12 +13,12 @@ part 'app_database.g.dart';
 ///
 /// Every schema change raises [schemaVersion] and adds a step to
 /// [migration], because devices keep their database between app updates.
-@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations, LocalSyncState])
+@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations, LocalSyncState, LocalTaskReviews, LocalTeamTasks])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -45,10 +45,31 @@ class AppDatabase extends _$AppDatabase {
           if (from < 7) {
             await migrator.createTable(localSyncState);
           }
+          if (from >= 4 && from < 8) {
+            // Created with these columns when from < 4.
+            await migrator.addColumn(localEvidence, localEvidence.uploadRetryCount);
+            await migrator.addColumn(localEvidence, localEvidence.uploadError);
+          }
+          if (from < 9) {
+            await migrator.createTable(localTaskReviews);
+            // The next pull loads everything again (SyncManager.pullCursorKey),
+            // so tasks already on the device get their latest review.
+            await (delete(localSyncState)..where((s) => s.key.equals('pullCursor'))).go();
+          }
+          if (from < 10) {
+            // Filled by the next pull: no team version is stored yet, so
+            // SyncManager.pull loads everything again.
+            await migrator.createTable(localTeamTasks);
+          }
         },
         beforeOpen: (details) async {
           // SQLite does not check foreign keys unless asked to.
           await customStatement('PRAGMA foreign_keys = ON');
+          // The background sync (task 6.11) opens its own connection: wait
+          // for its writes instead of failing with "database is locked",
+          // and let reads go on while it writes.
+          await customStatement('PRAGMA busy_timeout = 5000');
+          await customStatement('PRAGMA journal_mode = WAL');
         },
       );
 

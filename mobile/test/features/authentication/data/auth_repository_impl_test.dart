@@ -45,7 +45,7 @@ void main() {
     repository = AuthRepositoryImpl(remote, storage, TokenRefresher(remote, storage),
         now: () => now,
         clearLocalData: () async => clearedLocalData++,
-        claimLocalData: (userId) async => claimedBy.add(userId));
+        claimLocalData: (user) async => claimedBy.add(user.id));
   });
 
   Future<void> loggedIn() async {

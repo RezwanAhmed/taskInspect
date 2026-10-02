@@ -4,6 +4,8 @@ package com.taskinspect.tasks;
 public enum TaskAction {
 
     ASSIGN,
+    PUBLISH,
+    TAKE,
     START,
     SUBMIT,
     APPROVE,

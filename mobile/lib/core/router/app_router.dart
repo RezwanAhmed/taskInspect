@@ -7,9 +7,14 @@ import 'package:taskinspect/features/authentication/presentation/pages/login_pag
 import 'package:taskinspect/features/authentication/presentation/pages/splash_page.dart';
 import 'package:taskinspect/features/dashboard/presentation/pages/home_page.dart';
 import 'package:taskinspect/features/requirements/presentation/pages/execution_page.dart';
+import 'package:taskinspect/features/review/presentation/pages/review_page.dart';
+import 'package:taskinspect/features/tasks/presentation/pages/requirement_editor_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_details_page.dart';
+import 'package:taskinspect/features/tasks/presentation/pages/task_form_page.dart';
+import 'package:taskinspect/features/tasks/presentation/pages/task_history_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_list_page.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
+import 'package:taskinspect/features/teams/presentation/pages/teams_page.dart';
 
 /// Route paths, so screens never hard-code URLs.
 abstract final class AppRoutes {
@@ -17,13 +22,26 @@ abstract final class AppRoutes {
   static const login = '/login';
   static const home = '/home';
   static const tasks = '/tasks';
+  static const teams = '/teams';
 
   /// The task list opened on one tab, e.g. `/tasks?tab=inProgress`.
   static String tasksOn(TaskTab tab) => '$tasks?tab=${tab.name}';
 
   static String task(String id) => '$tasks/$id';
 
+  static const newTask = '$tasks/new';
+
+  static String editTask(String id) => '$tasks/$id/edit';
+
+  static String editRequirements(String id) => '$tasks/$id/requirements';
+
+  static String newSubTask(String mainTaskId) => '$tasks/$mainTaskId/sub-tasks/new';
+
   static String execute(String id) => '$tasks/$id/execute';
+
+  static String review(String id) => '$tasks/$id/review';
+
+  static String history(String id) => '$tasks/$id/history';
 }
 
 /// Creates the app's router. It follows the [AuthBloc]: while the session
@@ -46,17 +64,40 @@ GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.spl
       GoRoute(path: AppRoutes.splash, builder: (context, state) => const SplashPage()),
       GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginPage()),
       GoRoute(path: AppRoutes.home, builder: (context, state) => const HomePage()),
+      GoRoute(path: AppRoutes.teams, builder: (context, state) => const TeamsPage()),
       GoRoute(
         path: AppRoutes.tasks,
         builder: (context, state) => TaskListPage(initialTab: TaskTab.parse(state.uri.queryParameters['tab'])),
       ),
+      // Before "/tasks/:id", so "new" is not taken for a task ID.
+      GoRoute(path: AppRoutes.newTask, builder: (context, state) => const TaskFormPage()),
       GoRoute(
         path: '${AppRoutes.tasks}/:id',
         builder: (context, state) => TaskDetailsPage(taskId: state.pathParameters['id']!),
       ),
       GoRoute(
+        path: '${AppRoutes.tasks}/:id/edit',
+        builder: (context, state) => TaskFormPage(taskId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/sub-tasks/new',
+        builder: (context, state) => TaskFormPage(mainTaskId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/requirements',
+        builder: (context, state) => RequirementEditorPage(taskId: state.pathParameters['id']!),
+      ),
+      GoRoute(
         path: '${AppRoutes.tasks}/:id/execute',
         builder: (context, state) => ExecutionPage(taskId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/history',
+        builder: (context, state) => TaskHistoryPage(taskId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/review',
+        builder: (context, state) => ReviewPage(taskId: state.pathParameters['id']!),
       ),
     ],
     errorBuilder: (context, state) => const _NotFoundPage(),

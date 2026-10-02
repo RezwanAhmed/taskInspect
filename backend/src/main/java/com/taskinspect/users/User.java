@@ -55,6 +55,14 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
 
+    /**
+     * The manager whose team this worker is in; {@code null}: no team.
+     * Loaded only where needed (the repository's finders for API responses).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "team_manager_id")
+    private User teamManager;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -94,6 +102,15 @@ public class User {
 
     public void changePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    /** Puts this worker into [manager]'s team ({@code null}: no team). */
+    public void joinTeamOf(User manager) {
+        this.teamManager = manager;
+    }
+
+    public User getTeamManager() {
+        return teamManager;
     }
 
     public UUID getId() {

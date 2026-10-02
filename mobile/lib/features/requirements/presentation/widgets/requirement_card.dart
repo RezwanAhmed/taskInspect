@@ -3,13 +3,26 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 
 /// One requirement on the execution screen: what to do, the [input] to
-/// answer it and an optional [comment] field.
+/// answer it and an optional [comment] field. [notice] (e.g. the
+/// reviewer's comment while correcting) is shown above the input.
 class RequirementCard extends StatelessWidget {
-  const RequirementCard({required this.requirement, this.input, this.comment, super.key});
+  const RequirementCard({
+    required this.requirement,
+    this.input,
+    this.comment,
+    this.notice,
+    this.locked = false,
+    super.key,
+  });
 
   final Requirement requirement;
   final Widget? input;
   final Widget? comment;
+  final Widget? notice;
+
+  /// The answer is shown but can't be changed (e.g. not marked for
+  /// correction); the card still scrolls.
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
@@ -39,8 +52,18 @@ class RequirementCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(requirement.description!, style: theme.textTheme.bodyLarge),
           ],
+          if (notice != null) ...[const SizedBox(height: 16), notice!],
           const SizedBox(height: 24),
-          input ??
+          if (locked && input != null)
+            // Can't be tapped, focused or typed into; screen readers say it's disabled.
+            ExcludeFocus(
+              child: Semantics(
+                enabled: false,
+                child: IgnorePointer(child: Opacity(opacity: 0.6, child: input)),
+              ),
+            )
+          else
+            input ??
               Container(
                 key: const Key('input-placeholder'),
                 padding: const EdgeInsets.all(24),

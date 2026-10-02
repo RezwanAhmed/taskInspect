@@ -7,7 +7,7 @@ import java.util.OptionalLong;
  * Where evidence files are kept (ADR-0005). Files never pass through the
  * API's business endpoints: the app uploads to and downloads from
  * short-lived signed URLs. The local implementation stores files on disk
- * for development and tests; the AWS S3 implementation follows in Phase 8.
+ * for development and tests; {@link S3FileStorage} uses AWS S3.
  */
 public interface FileStorage {
 

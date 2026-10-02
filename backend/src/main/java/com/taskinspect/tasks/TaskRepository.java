@@ -1,5 +1,6 @@
 package com.taskinspect.tasks;
 
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
@@ -31,6 +33,11 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
     @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
     List<Task> findAll(Specification<Task> spec);
 
+    /** The sub-tasks of a main task, oldest first. */
+    @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
+    @Query("select t from Task t where t.parentTask.id = :parentTaskId order by t.createdAt asc, t.id asc")
+    List<Task> findAllByParentTaskIdOrderByCreatedAtAscIdAsc(UUID parentTaskId);
+
     /**
      * Sets {@code updatedAt} without a new version, e.g. when a requirement
      * changed, so the sync pull sends the task again but the manager can
@@ -39,5 +46,21 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
     @Modifying(flushAutomatically = true)
     @Query("update Task t set t.updatedAt = :at where t.id = :id")
     void markChanged(UUID id, Instant at);
+
+    /**
+     * Per team manager: how many tasks the team members have that are not
+     * finished yet (also those of deactivated members: the work still exists).
+     */
+    @Query("""
+            select t.assignee.teamManager.id, count(t) from Task t
+            where t.organization.id = :organizationId and t.assignee.teamManager is not null
+              and t.status not in (com.taskinspect.tasks.TaskStatus.APPROVED, com.taskinspect.tasks.TaskStatus.CANCELLED)
+            group by t.assignee.teamManager.id""")
+    List<Object[]> countUnfinishedTasksPerTeam(UUID organizationId);
+
+    /** Loads the task and locks its row until the transaction ends (SELECT ... FOR UPDATE). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select t from Task t where t.id = :id")
+    Optional<Task> findForUpdate(UUID id);
 
 }

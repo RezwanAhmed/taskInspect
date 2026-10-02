@@ -109,6 +109,8 @@ stateDiagram-v2
     direction LR
     [*] --> DRAFT: create
     DRAFT --> ASSIGNED: assign
+    DRAFT --> OPEN: publish
+    OPEN --> ASSIGNED: take
     ASSIGNED --> IN_PROGRESS: start
     IN_PROGRESS --> SUBMITTED: submit
     SUBMITTED --> APPROVED: approve
@@ -119,6 +121,7 @@ stateDiagram-v2
     APPROVED --> [*]
 
     DRAFT --> CANCELLED: cancel
+    OPEN --> CANCELLED: cancel
     ASSIGNED --> CANCELLED: cancel
     IN_PROGRESS --> CANCELLED: cancel
     REJECTED --> CANCELLED: cancel
@@ -131,6 +134,7 @@ stateDiagram-v2
 | State | Meaning |
 |-------|---------|
 | `DRAFT` | Created by a manager; title, details and requirements are still being defined. Not visible to workers. |
+| `OPEN` | Published without an assignee, for a team (or every worker) to take (Phase 7A, see *Open Tasks*). |
 | `ASSIGNED` | Assigned to a worker, who has not started it yet (shown as *pending* in the app). |
 | `IN_PROGRESS` | The worker is completing the requirements and attaching evidence. |
 | `SUBMITTED` | The worker has submitted the task; it is waiting for review. |
@@ -143,8 +147,10 @@ stateDiagram-v2
 
 | From | To | Action | Who | Conditions |
 |------|----|--------|-----|------------|
-| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. A reviewer is set (defaults to the creator). |
-| `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
+| — | `DRAFT` | Create (`POST /api/tasks`) | Manager, or administrator (main task) | Title, priority and due date are valid. A reviewer is set (defaults to the creator); for a main task it is an administrator. |
+| `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager, or administrator (main task) | The task has at least one requirement; the assignee is an active worker. A main task goes to an active manager and needs no requirement. |
+| `DRAFT` | `OPEN` | Publish (`POST /api/tasks/{id}/publish`) | Manager | The task has at least one requirement; who may take it: team (needs an active team member, else `409 TEAM_HAS_NO_MEMBERS`) or everyone. |
+| `OPEN` | `ASSIGNED` | Take (`POST /api/tasks/{id}/take`) | A worker who may take it | The first one wins (`409 TASK_ALREADY_TAKEN` for the others). |
 | `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `IN_PROGRESS` | `SUBMITTED` | Submit (`POST /api/tasks/{id}/submit`) | Assigned worker | Every required requirement has a response. |
 | `SUBMITTED` | `APPROVED` | Approve | Task's reviewer | The reviewer is not the assignee (except solo accounts). |
@@ -152,7 +158,7 @@ stateDiagram-v2
 | `SUBMITTED` | `CORRECTION_REQUESTED` | Request correction | Task's reviewer | At least one requirement is marked, each with a comment; the reviewer is not the assignee (except solo accounts). |
 | `REJECTED` | `IN_PROGRESS` | Start again (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `CORRECTION_REQUESTED` | `IN_PROGRESS` | Start correction (`POST /api/tasks/{id}/start`) | Assigned worker | — |
-| `DRAFT`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED`, `CORRECTION_REQUESTED` | `CANCELLED` | Cancel | Manager | — |
+| `DRAFT`, `OPEN`, `ASSIGNED`, `IN_PROGRESS`, `REJECTED`, `CORRECTION_REQUESTED` | `CANCELLED` | Cancel | Manager | — |
 
 *Reject* and *request correction* are two different results:
 
@@ -213,6 +219,176 @@ without reshaping the data.
   start and submit a task offline; the app shows it as *submitted locally*
   and the state machine checks the action when it is synchronized (see
   the offline sync section).
+
+## Teams, Open Tasks and Sub-tasks
+
+Decided by Rezwan on 2026-10-01; built in Phase 7A. These rules extend
+the task lifecycle above; everything else stays as described there.
+
+### Teams
+
+- Every worker belongs to **one** manager's team. An administrator sets
+  a worker's team (and can move them to another team). A worker without
+  a team sees only the tasks assigned to them.
+- A manager leads one team. Managers and administrators keep seeing all
+  tasks of their organization, as before.
+
+### What a Worker Sees
+
+| Tasks | What the worker sees |
+|-------|----------------------|
+| Assigned to them | Everything (requirements, their answers and evidence) — as before |
+| Of their own team (assigned to a team member) | A **tile**: title, status, priority, due date and who it is assigned to — no requirements, answers or evidence |
+| Open tasks they may take (see below) | Everything, so they can decide to take it |
+| Of other teams | Only numbers per manager: how many tasks, how many team members |
+
+The server enforces this on every call, including the sync pull: a tile
+is sent without requirements, and other teams only as counts. In the
+app, the **Teams** page (from the dashboard) shows every manager's team
+in numbers: members and open tasks, the user's own team marked. It is
+loaded online (`GET /api/teams`), not stored on the device.
+
+### Open Tasks
+
+A manager can publish a task **without an assignee**, for a team to pick
+up. A worker takes it, and from then on it is their task.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    DRAFT --> OPEN: publish<br/>(team or everyone)
+    OPEN --> ASSIGNED: take<br/>(first worker wins)
+    OPEN --> CANCELLED: cancel
+    ASSIGNED --> IN_PROGRESS: start
+```
+
+- When publishing, the manager chooses who may take it: **their team
+  only** or **every worker** of the organization (per task).
+- The first worker who takes it gets it; a second one gets
+  `409 TASK_ALREADY_TAKEN`. Taking needs a connection (like assigning).
+- The task's reviewer stays the one the manager chose.
+- A worker sees the open tasks they may take in the task list, the
+  details and the sync pull. Open to the team means: the team of the
+  manager who published it, while that manager is active. Once taken,
+  the task leaves the other workers' lists (`404` for them).
+
+### Tasks for Managers and Sub-tasks
+
+An administrator can create a task and assign it to a **manager** (the
+main task). The manager keeps the main task and:
+
+- for a one-person job, creates **one sub-task** for a worker of their
+  team (the work is passed on);
+- for a big job, splits it into **several sub-tasks**, each assigned to
+  a worker (or published as an open task).
+
+Sub-tasks are normal tasks with a link to their main task: the manager
+reviews them. The main task's progress shows how many sub-tasks are
+approved; when all of them are, the manager submits the main task and
+the administrator reviews it.
+
+This widens three rules of the lifecycle tables for main tasks only:
+an administrator may **create** a task, **assign** it to a manager, and
+the assigned manager **starts** and **submits** it (the worker-only
+rules stay for every other task). A main task has no answers of its
+own: it is complete when all its sub-tasks are approved.
+
+The manager adds sub-tasks with `POST /api/tasks/{id}/sub-tasks` (same
+body as creating a task). A sub-task starts as `DRAFT`, is created by
+the manager (who reviews it by default) and carries `parentTaskId`;
+the manager then assigns it to a worker or publishes it, as any task.
+Workers see only their sub-task, never the main task.
+
+The main task's progress is the number of approved sub-tasks out of
+those not cancelled (the app counts them from
+`GET /api/tasks/{id}/sub-tasks`). The manager starts the main task and
+submits it once every sub-task that is not cancelled is approved; the
+administrator then approves or rejects it. After a reject the manager
+starts it again and can add sub-tasks. (A correction request needs
+marked requirements, so it does not apply to a main task.)
+
+A task an administrator creates is a main task: its reviewer is an
+administrator (by default the creator), it is assigned to an active
+manager without requirements, and it cannot be published as an open
+task (`409 MAIN_TASK_NOT_PUBLISHABLE`).
+
+### Registering a Task Again
+
+Once work has started a task can no longer be edited. If the manager
+needs a change:
+
+- that the worker can fix in the same task — they **request a
+  correction** (review flow above);
+- that is a new piece of work — they **register a new task for the same
+  worker** from the existing one (its details and requirements are
+  copied and can be changed). Both tasks stay with the worker; the new
+  one links to the one it was made from.
+
+A correction can only be requested while the task is `SUBMITTED`. A task
+can be registered again once work has started (`IN_PROGRESS` or later,
+including `APPROVED`); the new one starts as `ASSIGNED` to the same
+worker, so the manager can still edit it before the worker starts.
+
+The manager who created the task registers it again with
+`POST /api/tasks/{id}/reissue` (`409 TASK_NOT_REISSUABLE` before work
+has started, for a cancelled task and for a main task). The new task
+copies the title, description, priority, due date and requirements,
+carries `reissuedFromId`, and is assigned to the same worker (who must
+still be active). The reviewer stays, unless they were deactivated:
+then the manager reviews it. The original task is not changed.
+
+### The Worker's Tabs
+
+| Tab | Shows |
+|-----|-------|
+| **My tasks** — Pending | Assigned to me, not started |
+| **My tasks** — Rejected | Mine, rejected or with a correction request |
+| **My tasks** — Partially done | Mine, in progress |
+| **My tasks** — Done | Mine, submitted or approved (read-only) |
+| **All tasks** — Open tasks | Open tasks I may take |
+| **All tasks** — Team: pending | My team's tasks that are not done yet: assigned, in progress, submitted (tiles) |
+| **All tasks** — Team: rejected | My team's rejected tasks, also with a correction request (tiles) |
+
+Managers keep the dashboard and task list they have now (they see every
+task of their organization).
+
+### Data Changes
+
+| Table | New column | Meaning |
+|-------|------------|---------|
+| `users` | `team_manager_id` | The manager whose team the worker is in (null: no team) |
+| `tasks` | `open_scope` | `TEAM` or `EVERYONE` while the task is `OPEN`, otherwise null |
+| `tasks` | `parent_task_id` | The main task of a sub-task |
+| `tasks` | `reissued_from_id` | The task a re-registered task was made from |
+
+New state `OPEN`; new actions *publish* and *take* in the state machine.
+
+On the phone, tiles are stored in their own table (`local_team_tasks`,
+no requirements, answers or evidence), apart from the full tasks, so a
+tile is never shown or synced as one of the user's own tasks. The sync pull
+follows the new visibility: tasks the worker may no longer see (e.g. an
+open task someone else took) leave `taskIds` and are removed. A team
+change makes the next pull a full one (the server tells the app with a
+team version in the pull), because a change cursor can't show tasks that
+became visible without changing themselves. In the pull, tiles come apart from
+the full tasks: `tileIds` (every tile the user may see now) and `tiles`
+(the changed ones, without requirements), so an app that doesn't know
+tiles yet never stores them as tasks. `teamVersion` changes when the
+user joins or leaves a team, a member joins or leaves it, or its manager
+is deactivated; it is `none` without a team. Other teams' numbers are
+not in the pull (`GET /api/teams`, online). Publishing and taking need a
+connection (see *What Works Offline*). The API permissions table below
+changes with tasks 7A.3-7A.7.
+
+| Part | Tasks |
+|------|-------|
+| This design | 7A.1 |
+| Teams, visibility | 7A.3-7A.4 |
+| Open tasks | 7A.5 |
+| Tasks for managers, sub-tasks | 7A.6 |
+| Registering a task again | 7A.7 |
+| Sync pull with the new visibility | 7A.8 |
+| App: tabs, other teams' numbers, manager screens | 7A.9-7A.12 |
 
 ## Mobile Architecture
 
@@ -477,17 +653,29 @@ matters, ownership in the service. Tasks a user may not see answer
 |----------|---------|---------------|
 | `POST /api/auth/login`, `/refresh`, `/logout` | Anyone | — |
 | `GET /api/auth/me` | Any logged-in user | `401` |
-| `GET /api/users` | Administrators, managers | `403` |
+| `GET /api/users` (`?role=`, `?teamManagerId=`) | Administrators, managers | `403` |
 | `GET /api/users/{id}` | Administrators, managers; others only themselves | `403` |
 | `POST /api/users` | Administrators | `403` |
-| `POST /api/tasks` | Managers | `403` |
-| `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them | `404` (hidden) |
-| `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
-| `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
+| `PUT /api/users/{id}/team` | Administrators (a worker joins one manager's team, or leaves it) | `403` |
+| `POST /api/tasks` | Managers; administrators (main tasks for managers) | `403` |
+| `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them and open tasks they may take (open to everyone, or to their team while its manager is active) | `404` (hidden) |
+| `GET /api/tasks/team` (`?status=`) | Any logged-in user: their team members' tasks as tiles (not their own, no cancelled ones). Empty without a team, when the team's manager is deactivated, and for administrators and managers (they have no team; they see all tasks above) | `401` |
+| `GET /api/teams` | Any logged-in user: every active manager's team in numbers (active members; tasks not approved or cancelled, also those of deactivated members) | `401` |
+| `PUT /api/tasks/{id}` | The manager (or administrator, main task) who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
+| `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
+| `PUT /api/tasks/{id}/requirements/order` (`{"requirementIds": […]}`) | The manager who created the task, while DRAFT / OPEN / ASSIGNED; every requirement exactly once (`400 INVALID_ORDER`) | `403` |
 | `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
-| `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
-| `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
+| `POST /api/tasks/{id}/assign` | The manager who created the task (to a worker); the administrator who created a main task (to a manager) | `403` |
+| `POST /api/tasks/{id}/publish` (`{"scope": "TEAM" \| "EVERYONE"}`) | The manager who created the task, while DRAFT | `403` |
+| `POST /api/tasks/{id}/sub-tasks` | The manager the main task is assigned to, while ASSIGNED / IN_PROGRESS / REJECTED / CORRECTION_REQUESTED (`409 MAIN_TASK_CLOSED` otherwise, `409 NOT_A_MAIN_TASK` for other tasks) | `403` |
+| `GET /api/tasks/{id}/sub-tasks` | Administrators and managers | `403` / `404` |
+| `POST /api/tasks/{id}/reissue` | The manager who created the task, once work has started (IN_PROGRESS / SUBMITTED / REJECTED / CORRECTION_REQUESTED / APPROVED); not a main task | `403` / `404` |
+| `POST /api/tasks/{id}/take` | A worker the open task is open to; the first one wins (`409 TASK_ALREADY_TAKEN` for the others); taking it again returns it unchanged | `403` / `404` |
+| `POST /api/tasks/{id}/start` | The assigned worker (main task: the assigned manager) | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
+| `POST /api/tasks/{id}/submit` | The assigned worker, while IN_PROGRESS; every required requirement answered (files uploaded). Main task: the assigned manager, once it has sub-tasks and every one not cancelled is approved (`409 NO_SUB_TASKS` / `409 SUB_TASKS_NOT_APPROVED`) | `403` / `404` |
+| `POST /api/tasks/{id}/approve`, `…/reject`, `…/request-correction` | The task's reviewer (a manager; an administrator for a main task), while SUBMITTED; never the task's worker, except a personal task a manager assigned to themself | `403` / `404` |
+| `GET /api/tasks/{id}/reviews`, `GET /api/tasks/{id}/history` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/requirements/{rid}/evidence`, `POST …/evidence/{eid}/upload-url`, `POST …/evidence/{eid}/complete`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
 | `GET /api/tasks/{id}/evidence/{eid}/download-url` | Anyone who can see the task | `404` |
 | `PUT/GET /api/files/…` (local file storage only) | Anyone with a valid signed URL from the endpoints above | `403` |
@@ -533,6 +721,7 @@ in the background.
 | Open tasks already downloaded to the device | Log in |
 | Create and edit draft tasks and their requirements (manager) | Assign tasks (manager) |
 | Start a task | Review: approve, reject, request correction |
+| | Publish an open task (manager), take an open task (worker) |
 | Answer requirements, add comments | Download tasks not yet on the device |
 | Take photos, attach PDF documents | |
 | Submit a task (shown as *submitted locally*) | |
@@ -573,6 +762,15 @@ stateDiagram-v2
     SYNCED --> [*]
 ```
 
+Operations the server accepts: `TaskResponse UPDATE`, `Evidence CREATE` /
+`DELETE` and `Task START` / `SUBMIT` (workers; start and submit also the
+manager of a main task), and `Task CREATE` / `UPDATE`, `Requirement
+CREATE` / `UPDATE` / `DELETE` and `RequirementOrder UPDATE` (managers:
+drafts made offline). A `CREATE` carries the ID the app gave the task
+or requirement; sending it again changes nothing, and an ID that belongs
+to something else is refused (`409 TASK_ID_CONFLICT` /
+`REQUIREMENT_ID_CONFLICT`).
+
 The queue is stored in the database, not in memory, so nothing is lost
 when the app is closed or the phone restarts. Its contents can be shown
 in the app and inspected in tests.
@@ -592,27 +790,33 @@ sequenceDiagram
     App->>App: Save locally + queue operations
     App-->>W: Shown at once as pending
     Note over SM: Connection returns
-    SM->>API: Request pre-signed URL for each new file
-    SM->>S3: Upload photos and PDFs
     SM->>API: POST /api/sync/push (queued operations, in order)
     API->>API: Skip already-applied IDs,<br/>check rules, save
     API-->>SM: Result per operation
     SM->>App: Mark SYNCED / FAILED
+    SM->>API: Request pre-signed URL for each registered file
+    SM->>S3: Upload photos and PDFs
+    SM->>API: Confirm each upload (complete)
     SM->>API: GET /api/sync/pull?since=cursor
     API-->>SM: Changed tasks, reviews, status
     SM->>App: Update local records + cursor
 ```
 
-1. **Files first.** Photos and PDFs are uploaded before the operations that
-   depend on them, so a task is never submitted to the server with
-   evidence the server cannot find. Files have their own upload queue
-   with the same statuses and retries (task 6.12).
-2. **Push.** `POST /api/sync/push` sends pending operations in the order
+1. **Push.** `POST /api/sync/push` sends pending operations in the order
    they were created. The server records every applied operation ID in
    `sync_records`; if an ID arrives again (for example after a timeout),
    it returns the earlier result instead of applying it twice. Each
    operation goes through the same services and rules as a normal API
-   call — the task state machine, role and ownership checks.
+   call — the task state machine, role and ownership checks. Adding a
+   photo or PDF is one of these operations: it registers the file
+   (type, size) with the server.
+2. **Files.** Once a file is registered, the app asks for a pre-signed
+   upload URL, sends the file to it and confirms the upload (`complete`;
+   the server checks the stored size). Files have their own upload queue
+   with the same statuses (`PENDING`, `UPLOADING`, `FAILED`, `UPLOADED`)
+   and retries (task 6.12); a failed upload doesn't stop the pull. A
+   submit waits until all of the task's files are uploaded (task 7.5),
+   so a task is never submitted with evidence the server cannot find.
 3. **Pull.** `GET /api/sync/pull?since=<cursor>` returns everything that
    changed on the server since the last pull: new assignments, status
    changes, review results and reasons. The app stores the new cursor
@@ -631,10 +835,28 @@ sync.**
 - When the app starts or returns to the foreground.
 - Shortly after a local change, grouped so that quick edits are sent
   together.
-- Periodically in the background (task 6.11). Android schedules this
-  with WorkManager; on iOS, background time is limited and decided by the
-  system, so the app also syncs every time it is opened. Both platforms
+- Periodically in the background (task 6.11): about every 15 minutes
+  while the device is online, also when the app is closed or the phone
+  was restarted. Android schedules this with WorkManager; on iOS,
+  background time is limited and decided by the system (set up in task
+  12.7), so the app also syncs every time it is opened. Both platforms
   use the same SyncManager.
+
+Only one of them syncs at a time:
+
+- While the app is open in the foreground it syncs itself, and a
+  background run that starts meanwhile skips.
+- When the app comes back to the foreground, it first waits until a
+  background run that is still busy has finished.
+- When the app goes to the background, it lets its own running sync
+  finish before the background sync may run.
+- Nothing syncs while nobody is signed in.
+
+Refreshing the login is locked across the app and the background sync:
+only one of them refreshes at a time, and the other then uses the new
+tokens, so a refresh token is never used twice (ADR-0003). When the app
+comes back to the foreground it reloads its screens from the local
+database, which may have been changed by the background sync.
 
 ### Retries and Errors
 

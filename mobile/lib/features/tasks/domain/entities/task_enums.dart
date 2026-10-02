@@ -1,6 +1,9 @@
 /// Task status, as in the backend's task lifecycle.
 enum TaskStatus {
   draft('DRAFT'),
+
+  /// Published without an assignee; a worker may take it (Phase 7A).
+  open('OPEN'),
   assigned('ASSIGNED'),
   inProgress('IN_PROGRESS'),
   submitted('SUBMITTED'),
@@ -54,4 +57,15 @@ enum RequirementType {
 
   /// Photos and documents are answered with evidence files.
   bool get isEvidence => this == photo || this == document;
+}
+
+/// Who may take an open task (Phase 7A): the publishing manager's team or
+/// every worker of the organization.
+enum OpenScope {
+  team('TEAM'),
+  everyone('EVERYONE');
+
+  const OpenScope(this.apiName);
+
+  final String apiName;
 }

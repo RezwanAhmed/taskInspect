@@ -1,11 +1,15 @@
 package com.taskinspect.tasks;
 
 import static com.taskinspect.tasks.TaskSpecifications.assignedTo;
+import static com.taskinspect.tasks.TaskSpecifications.assignedToTeamOf;
 import static com.taskinspect.tasks.TaskSpecifications.dueBefore;
 import static com.taskinspect.tasks.TaskSpecifications.dueFrom;
 import static com.taskinspect.tasks.TaskSpecifications.hasPriority;
 import static com.taskinspect.tasks.TaskSpecifications.hasStatus;
 import static com.taskinspect.tasks.TaskSpecifications.inOrganization;
+import static com.taskinspect.tasks.TaskSpecifications.notAssignedTo;
+import static com.taskinspect.tasks.TaskSpecifications.notInStatus;
+import static com.taskinspect.tasks.TaskSpecifications.openFor;
 
 import com.taskinspect.common.error.ApiException;
 import com.taskinspect.common.error.ErrorCode;
@@ -14,6 +18,7 @@ import com.taskinspect.tasks.dto.CreateTaskRequest;
 import com.taskinspect.tasks.dto.UpdateTaskRequest;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import com.taskinspect.users.RoleName;
 import com.taskinspect.users.User;
@@ -33,9 +38,16 @@ public class TaskService {
     static final String INVALID_REVIEWER = "INVALID_REVIEWER";
     static final String TASK_NOT_FOUND = "TASK_NOT_FOUND";
     static final String TASK_NOT_EDITABLE = "TASK_NOT_EDITABLE";
+    static final String NOT_A_MAIN_TASK = "NOT_A_MAIN_TASK";
+    static final String TASK_ID_CONFLICT = "TASK_ID_CONFLICT";
+    static final String MAIN_TASK_CLOSED = "MAIN_TASK_CLOSED";
+
+    /** A main task gets new sub-tasks while its manager is working on it (also after a reject or correction request). */
+    private static final Set<TaskStatus> OPEN_FOR_SUB_TASKS = EnumSet.of(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS,
+            TaskStatus.REJECTED, TaskStatus.CORRECTION_REQUESTED);
 
     /** A task's details can change only until the worker starts it. */
-    private static final Set<TaskStatus> EDITABLE = EnumSet.of(TaskStatus.DRAFT, TaskStatus.ASSIGNED);
+    private static final Set<TaskStatus> EDITABLE = EnumSet.of(TaskStatus.DRAFT, TaskStatus.OPEN, TaskStatus.ASSIGNED);
 
     private final TaskRepository taskRepository;
     private final UserService userService;
@@ -49,7 +61,8 @@ public class TaskService {
 
     /**
      * Creates a draft task in the creator's organization. The reviewer must be
-     * an active manager of the same organization; by default it is the creator.
+     * an active manager of the same organization (an active administrator for
+     * an administrator's main task); by default it is the creator.
      */
     @Transactional
     public Task create(CurrentUser caller, CreateTaskRequest request) {
@@ -58,6 +71,66 @@ public class TaskService {
                 request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
         transitions.recordCreated(task, creator);
         return task;
+    }
+
+    /**
+     * Creates a draft task with the ID the app gave it offline (sync push
+     * "Task CREATE"). Sending it again returns the task already made; an ID
+     * that belongs to someone else's task is refused.
+     */
+    @Transactional
+    public Task createWithId(CurrentUser caller, UUID id, CreateTaskRequest request) {
+        Optional<Task> existing = taskRepository.findById(id);
+        if (existing.isPresent()) {
+            if (!existing.get().getCreatedBy().getId().equals(caller.id())) {
+                throw new ApiException(HttpStatus.CONFLICT, TASK_ID_CONFLICT, "This task ID is already used");
+            }
+            return existing.get();
+        }
+        User creator = userService.requireCaller(caller);
+        Task task = taskRepository.save(new Task(id, creator, request.title().trim(), clean(request.description()),
+                request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
+        transitions.recordCreated(task, creator);
+        return task;
+    }
+
+    /**
+     * The manager a main task is assigned to creates a draft sub-task of it
+     * (docs/architecture.md, "Tasks for Managers and Sub-tasks"). The
+     * sub-task is a normal task of that manager: they review it by default,
+     * and assign or publish it as usual.
+     */
+    @Transactional
+    public Task createSubTask(CurrentUser caller, UUID mainTaskId, CreateTaskRequest request) {
+        // Waits for a submit of the main task running at the same time, so no sub-task is added after its check.
+        lockForUpdate(mainTaskId);
+        Task mainTask = get(caller, mainTaskId);
+        if (!mainTask.isMainTask()) {
+            throw new ApiException(HttpStatus.CONFLICT, NOT_A_MAIN_TASK,
+                    "Sub-tasks can only be added to a main task from an administrator");
+        }
+        // A main task that is not assigned yet has no manager, so nobody may add sub-tasks (403).
+        if (mainTask.getAssignee() == null || !mainTask.getAssignee().getId().equals(caller.id())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    "Only the manager the main task is assigned to can add sub-tasks");
+        }
+        if (!OPEN_FOR_SUB_TASKS.contains(mainTask.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, MAIN_TASK_CLOSED,
+                    "Sub-tasks can't be added while the main task is " + mainTask.getStatus());
+        }
+        User creator = userService.requireCaller(caller);
+        Task subTask = new Task(creator, request.title().trim(), clean(request.description()),
+                request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator));
+        subTask.makeSubTaskOf(mainTask);
+        taskRepository.save(subTask);
+        transitions.recordCreated(subTask, creator);
+        return subTask;
+    }
+
+    /** The sub-tasks of a main task the caller can see, oldest first. */
+    @Transactional(readOnly = true)
+    public List<Task> listSubTasks(CurrentUser caller, UUID mainTaskId) {
+        return taskRepository.findAllByParentTaskIdOrderByCreatedAtAscIdAsc(get(caller, mainTaskId).getId());
     }
 
     /**
@@ -96,6 +169,18 @@ public class TaskService {
         taskRepository.markChanged(id, Instant.now());
     }
 
+    /**
+     * Locks the task's row for the rest of the transaction, so a submit and
+     * a change of its answers or evidence never run at the same time (one
+     * waits for the other and then sees its result). Call it first in the
+     * transaction, before the task is loaded, so the checks see the latest
+     * state. Unknown IDs are ignored (the checks that follow answer 404).
+     */
+    @Transactional
+    public void lockForUpdate(UUID id) {
+        taskRepository.findForUpdate(id);
+    }
+
     /** A task the caller works on: only its assigned worker gets it. */
     @Transactional(readOnly = true)
     public Task requireAssignee(CurrentUser caller, UUID id) {
@@ -109,7 +194,8 @@ public class TaskService {
 
     /**
      * A task the caller may change (details or requirements): only the
-     * manager who created it, and only before work starts.
+     * manager (or administrator, for a main task) who created it, and only
+     * before work starts.
      */
     @Transactional(readOnly = true)
     public Task requireEditable(CurrentUser caller, UUID id) {
@@ -126,7 +212,12 @@ public class TaskService {
     }
 
     private User reviewer(UUID reviewerId, User creator) {
-        return reviewerId == null ? null
+        if (reviewerId == null) {
+            return null;
+        }
+        return creator.hasRole(RoleName.ADMINISTRATOR)
+                ? userService.requireActiveWithRole(reviewerId, creator.getOrganization().getId(),
+                        RoleName.ADMINISTRATOR, INVALID_REVIEWER, "The reviewer of a main task must be an active administrator")
                 : userService.requireActiveWithRole(reviewerId, creator.getOrganization().getId(),
                         RoleName.MANAGER, INVALID_REVIEWER, "The reviewer must be an active manager");
     }
@@ -138,8 +229,8 @@ public class TaskService {
 
     /**
      * Tasks the caller may see, filtered and paged. Administrators and
-     * managers see every task of their organization; workers see only the
-     * tasks assigned to them.
+     * managers see every task of their organization; workers see the tasks
+     * assigned to them and the open tasks they may take.
      */
     @Transactional(readOnly = true)
     public Page<Task> list(CurrentUser caller, TaskFilter filter, Pageable pageable) {
@@ -155,9 +246,40 @@ public class TaskService {
     }
 
     private static Specification<Task> visibleTo(User user) {
-        return canSeeAllTasks(user)
-                ? inOrganization(user.getOrganization().getId())
-                : Specification.allOf(inOrganization(user.getOrganization().getId()), assignedTo(user.getId()));
+        if (canSeeAllTasks(user)) {
+            return inOrganization(user.getOrganization().getId());
+        }
+        Specification<Task> mine = assignedTo(user.getId());
+        return Specification.allOf(inOrganization(user.getOrganization().getId()),
+                user.hasRole(RoleName.WORKER) ? mine.or(openFor(activeTeamManagerId(user))) : mine);
+    }
+
+    /**
+     * The tasks of the caller's team members (not the caller's own), shown
+     * to them as tiles (docs/architecture.md, "What a Worker Sees").
+     * Cancelled tasks are left out; tasks of deactivated members stay (the
+     * work still exists). A caller without a team, or whose team manager
+     * was deactivated, gets none.
+     */
+    @Transactional(readOnly = true)
+    public Page<Task> listTeam(CurrentUser caller, TaskStatus status, Pageable pageable) {
+        User user = userService.requireCaller(caller);
+        UUID teamManagerId = activeTeamManagerId(user);
+        return teamManagerId == null ? Page.empty(pageable)
+                : taskRepository.findAll(Specification.allOf(teamTiles(user, teamManagerId), hasStatus(status)), pageable);
+    }
+
+    /** Every tile of the caller's team (same rules as {@link #listTeam}), e.g. for the sync pull. */
+    @Transactional(readOnly = true)
+    public List<Task> listTeamAll(CurrentUser caller) {
+        User user = userService.requireCaller(caller);
+        UUID teamManagerId = activeTeamManagerId(user);
+        return teamManagerId == null ? List.of() : taskRepository.findAll(teamTiles(user, teamManagerId));
+    }
+
+    private static Specification<Task> teamTiles(User user, UUID teamManagerId) {
+        return Specification.allOf(inOrganization(user.getOrganization().getId()), assignedToTeamOf(teamManagerId),
+                notAssignedTo(user.getId()), notInStatus(TaskStatus.CANCELLED));
     }
 
     /** One task the caller may see; 404 for tasks that don't exist or aren't visible. */
@@ -165,8 +287,29 @@ public class TaskService {
     public Task get(CurrentUser caller, UUID id) {
         User user = userService.requireCaller(caller);
         return taskRepository.findByIdAndOrganizationId(id, user.getOrganization().getId())
-                .filter(task -> canSeeAllTasks(user) || isAssignee(task, user))
+                .filter(task -> canSeeAllTasks(user) || isAssignee(task, user)
+                        || task.getStatus() == TaskStatus.OPEN && mayTake(task.getOpenScope(), task.getCreatedBy(), user))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, TASK_NOT_FOUND, "Task not found"));
+    }
+
+    /**
+     * Whether a task open to {@code scope}, published by {@code publisher},
+     * is open to the user: a worker, and the scope is everyone or the
+     * worker's team (docs/architecture.md, "Open Tasks"). Same rule as
+     * {@link TaskSpecifications#openFor}.
+     */
+    static boolean mayTake(OpenScope scope, User publisher, User user) {
+        if (!user.hasRole(RoleName.WORKER)) {
+            return false;
+        }
+        return scope == OpenScope.EVERYONE
+                || scope == OpenScope.TEAM && publisher.getId().equals(activeTeamManagerId(user));
+    }
+
+    /** The worker's team manager, or {@code null} without a team or when that manager was deactivated (as in {@link #listTeam}). */
+    private static UUID activeTeamManagerId(User user) {
+        User teamManager = user.getTeamManager();
+        return teamManager == null || !teamManager.isActive() ? null : teamManager.getId();
     }
 
     private static boolean isAssignee(Task task, User user) {

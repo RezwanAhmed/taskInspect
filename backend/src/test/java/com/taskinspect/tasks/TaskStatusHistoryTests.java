@@ -2,6 +2,8 @@ package com.taskinspect.tasks;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.hamcrest.Matchers.contains;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
@@ -48,6 +50,9 @@ class TaskStatusHistoryTests {
     private TaskStatusChangeRepository historyRepository;
 
     @Autowired
+    private TaskTransitionService transitions;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -92,6 +97,75 @@ class TaskStatusHistoryTests {
                         tuple(TaskStatus.DRAFT, TaskStatus.ASSIGNED, manager.getId()),
                         tuple(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, worker.getId()));
         assertThat(history).allSatisfy(change -> assertThat(change.getChangedAt()).isNotNull());
+    }
+
+    @Test
+    void theHistoryTimelineShowsEveryStepWithWhoAndWhy() throws Exception {
+        String taskId = JsonPath.read(post(manager, "/api/tasks", """
+                {"title": "Kitchen", "priority": "HIGH", "dueDate": "2026-10-02T09:00:00Z"}""")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        String requirementId = JsonPath.read(post(manager, "/api/tasks/" + taskId + "/requirements",
+                "{\"title\": \"Ok?\", \"type\": \"YES_NO\"}").andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        post(manager, "/api/tasks/" + taskId + "/assign", "{\"assigneeId\": \"" + worker.getId() + "\"}")
+                .andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/start", "").andExpect(status().isOk());
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/tasks/" + taskId + "/requirements/" + requirementId
+                        + "/response")
+                        .header("Authorization", "Bearer " + jwtService.issueAccessToken(worker).value())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"booleanValue\": true}"))
+                .andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/submit", "").andExpect(status().isOk());
+        post(manager, "/api/tasks/" + taskId + "/reject", "{\"reason\": \"Wrong kitchen\"}")
+                .andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/start", "").andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/submit", "").andExpect(status().isOk());
+        post(manager, "/api/tasks/" + taskId + "/approve", "").andExpect(status().isOk());
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/tasks/" + taskId + "/history")
+                        .header("Authorization", "Bearer " + jwtService.issueAccessToken(worker).value()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].event").value(contains("CREATED", "ASSIGNED",
+                        "STARTED", "SUBMITTED", "REJECTED", "RESTARTED", "RESUBMITTED", "APPROVED")))
+                .andExpect(jsonPath("$[0].by.fullName").value("Mia Manager"))
+                .andExpect(jsonPath("$[2].by.fullName").value("Wendy Worker"))
+                .andExpect(jsonPath("$[4].reason").value("Wrong kitchen"))
+                .andExpect(jsonPath("$[4].fromStatus").value("SUBMITTED"))
+                .andExpect(jsonPath("$[4].toStatus").value("REJECTED"))
+                .andExpect(jsonPath("$[7].at").isNotEmpty());
+    }
+
+    @Test
+    void aCorrectionCycleAndACancellationAreNamedInTheTimeline() throws Exception {
+        String taskId = JsonPath.read(post(manager, "/api/tasks", """
+                {"title": "Kitchen", "priority": "HIGH", "dueDate": "2026-10-02T09:00:00Z"}""")
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        String requirementId = JsonPath.read(post(manager, "/api/tasks/" + taskId + "/requirements",
+                "{\"title\": \"Ok?\", \"type\": \"YES_NO\"}").andReturn().getResponse().getContentAsString(),
+                "$.id");
+        post(manager, "/api/tasks/" + taskId + "/assign", "{\"assigneeId\": \"" + worker.getId() + "\"}")
+                .andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/start", "").andExpect(status().isOk());
+        mockMvc.perform(MockMvcRequestBuilders.put("/api/tasks/" + taskId + "/requirements/" + requirementId
+                        + "/response")
+                        .header("Authorization", "Bearer " + jwtService.issueAccessToken(worker).value())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"booleanValue\": true}"))
+                .andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/submit", "").andExpect(status().isOk());
+        post(manager, "/api/tasks/" + taskId + "/request-correction", "{\"requirements\": [{\"requirementId\": \""
+                + requirementId + "\", \"comment\": \"Check again\"}]}").andExpect(status().isOk());
+        post(worker, "/api/tasks/" + taskId + "/start", "").andExpect(status().isOk());
+        Task task = taskRepository.findById(UUID.fromString(taskId)).orElseThrow();
+        transitions.apply(task, TaskAction.CANCEL, manager, "No longer needed");
+        taskRepository.save(task);
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/tasks/" + taskId + "/history")
+                        .header("Authorization", "Bearer " + jwtService.issueAccessToken(manager).value()))
+                .andExpect(jsonPath("$[*].event").value(contains("CREATED", "ASSIGNED", "STARTED", "SUBMITTED",
+                        "CORRECTION_REQUESTED", "RESTARTED", "CANCELLED")))
+                .andExpect(jsonPath("$[4].reason").value("1 requirement to correct"))
+                .andExpect(jsonPath("$[6].reason").value("No longer needed"))
+                .andExpect(jsonPath("$[6].by.fullName").value("Mia Manager"));
     }
 
     @Test

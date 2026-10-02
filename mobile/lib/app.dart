@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
+import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/core/theme/app_theme.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 
@@ -40,8 +41,12 @@ class _TaskInspectAppState extends State<TaskInspectApp> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: _authBloc,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: _authBloc),
+        // Created when a screen first shows the sync status.
+        BlocProvider(create: (_) => getIt<SyncStatusCubit>()..start()),
+      ],
       child: MaterialApp.router(
         title: 'TaskInspect',
         theme: AppTheme.light,

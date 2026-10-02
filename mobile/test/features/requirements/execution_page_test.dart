@@ -52,7 +52,8 @@ void main() {
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
     expect(find.text('Optional'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Next')).onPressed, isNull);
+    expect(find.text('Next'), findsNothing, reason: 'the last requirement offers Submit instead');
+    expect(find.byKey(const Key('submit-task')), findsOneWidget);
 
     await tester.tap(find.text('Previous'));
     await tester.pumpAndSettle();

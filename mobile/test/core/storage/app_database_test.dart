@@ -32,8 +32,8 @@ void main() {
     expect(count.read<int>('c'), 0);
   });
 
-  test('is at schema version 7', () {
-    expect(database.schemaVersion, 7);
+  test('is at schema version 10', () {
+    expect(database.schemaVersion, 10);
   });
 
   test('a version 1 database (no tables) is upgraded with all tables', () async {
@@ -52,10 +52,12 @@ void main() {
       'local_responses',
       'local_sync_operations',
       'local_sync_state',
+      'local_task_reviews',
       'local_tasks',
+      'local_team_tasks',
     ]);
     final version = await old.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 7);
+    expect(version.read<int>('user_version'), 10);
   });
 
   test('a version 4 database gets the evidence file_name column', () async {
@@ -100,12 +102,75 @@ void main() {
   });
 
   test('a version 6 database gets the sync state table', () async {
-    final old = AppDatabase(NativeDatabase.memory(setup: (raw) => raw.execute('PRAGMA user_version = 6')));
+    // Like a real version 6 database: it has the evidence table.
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) {
+      raw
+        ..execute('CREATE TABLE local_evidence (id TEXT NOT NULL PRIMARY KEY, task_id TEXT NOT NULL, '
+            'requirement_id TEXT NOT NULL, local_path TEXT NOT NULL, mime_type TEXT NOT NULL, '
+            'size_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL, file_name TEXT, '
+            "upload_status TEXT NOT NULL DEFAULT 'PENDING')")
+        ..execute('PRAGMA user_version = 6');
+    }));
     addTearDown(old.close);
 
     await old.into(old.localSyncState).insert(LocalSyncStateCompanion.insert(key: 'pullCursor', value: 'c1'));
 
     expect((await old.select(old.localSyncState).getSingle()).value, 'c1');
+  });
+
+  test('a version 7 database gets the upload queue columns and keeps its evidence', () async {
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) {
+      raw
+        ..execute('CREATE TABLE local_evidence (id TEXT NOT NULL PRIMARY KEY, task_id TEXT NOT NULL, '
+            'requirement_id TEXT NOT NULL, local_path TEXT NOT NULL, mime_type TEXT NOT NULL, '
+            'size_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL, file_name TEXT, '
+            "upload_status TEXT NOT NULL DEFAULT 'PENDING')")
+        ..execute("INSERT INTO local_evidence VALUES ('e1', 't1', 'r1', '/x.jpg', 'image/jpeg', 5, 0, NULL, 'PENDING')")
+        // Like a real version 7 database: it has the sync state table.
+        ..execute('CREATE TABLE local_sync_state (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)')
+        ..execute('PRAGMA user_version = 7');
+    }));
+    addTearDown(old.close);
+
+    final kept = await old.customSelect('SELECT id, upload_retry_count, upload_error FROM local_evidence').getSingle();
+
+    expect(kept.read<String>('id'), 'e1');
+    expect(kept.read<int>('upload_retry_count'), 0);
+    expect(kept.read<String?>('upload_error'), isNull);
+  });
+
+  test('a version 8 database gets the review table and loads everything again at the next pull', () async {
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) {
+      raw
+        ..execute('CREATE TABLE local_evidence (id TEXT NOT NULL PRIMARY KEY, task_id TEXT NOT NULL, '
+            'requirement_id TEXT NOT NULL, local_path TEXT NOT NULL, mime_type TEXT NOT NULL, '
+            'size_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL, file_name TEXT, '
+            "upload_status TEXT NOT NULL DEFAULT 'PENDING', upload_retry_count INTEGER NOT NULL DEFAULT 0, "
+            'upload_error TEXT)')
+        ..execute('CREATE TABLE local_sync_state (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)')
+        ..execute("INSERT INTO local_sync_state VALUES ('pullCursor', 'c1'), ('ownerId', 'u1')")
+        ..execute('PRAGMA user_version = 8');
+    }));
+    addTearDown(old.close);
+
+    final keys = await old.select(old.localSyncState).map((row) => row.key).get();
+
+    expect(keys, ['ownerId'], reason: 'the cursor is gone, the owner stays');
+    expect(await old.select(old.localTaskReviews).get(), isEmpty);
+  });
+
+  test('a version 9 database gets the team tile table and keeps its cursor', () async {
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) {
+      raw
+        ..execute('CREATE TABLE local_sync_state (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)')
+        ..execute("INSERT INTO local_sync_state VALUES ('pullCursor', 'c1')")
+        ..execute('PRAGMA user_version = 9');
+    }));
+    addTearDown(old.close);
+
+    expect(await old.select(old.localTeamTasks).get(), isEmpty);
+    // No team version is stored yet, so the next pull loads everything (SyncManager).
+    expect(await old.select(old.localSyncState).map((row) => row.key).get(), ['pullCursor']);
   });
 
   test('clearUserData removes every row', () async {

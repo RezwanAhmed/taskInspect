@@ -2375,6 +2375,29 @@ class $LocalEvidenceTable extends LocalEvidence
     requiredDuringInsert: false,
     defaultValue: const Constant('PENDING'),
   );
+  static const VerificationMeta _uploadRetryCountMeta = const VerificationMeta(
+    'uploadRetryCount',
+  );
+  @override
+  late final GeneratedColumn<int> uploadRetryCount = GeneratedColumn<int>(
+    'upload_retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _uploadErrorMeta = const VerificationMeta(
+    'uploadError',
+  );
+  @override
+  late final GeneratedColumn<String> uploadError = GeneratedColumn<String>(
+    'upload_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2386,6 +2409,8 @@ class $LocalEvidenceTable extends LocalEvidence
     createdAt,
     fileName,
     uploadStatus,
+    uploadRetryCount,
+    uploadError,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2470,6 +2495,24 @@ class $LocalEvidenceTable extends LocalEvidence
         ),
       );
     }
+    if (data.containsKey('upload_retry_count')) {
+      context.handle(
+        _uploadRetryCountMeta,
+        uploadRetryCount.isAcceptableOrUnknown(
+          data['upload_retry_count']!,
+          _uploadRetryCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('upload_error')) {
+      context.handle(
+        _uploadErrorMeta,
+        uploadError.isAcceptableOrUnknown(
+          data['upload_error']!,
+          _uploadErrorMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -2515,6 +2558,14 @@ class $LocalEvidenceTable extends LocalEvidence
         DriftSqlType.string,
         data['${effectivePrefix}upload_status'],
       )!,
+      uploadRetryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}upload_retry_count'],
+      )!,
+      uploadError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}upload_error'],
+      ),
     );
   }
 
@@ -2536,8 +2587,14 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
   /// Original name of a picked document; `null` for photos.
   final String? fileName;
 
-  /// PENDING until the file is uploaded, then UPLOADED.
+  /// The file's upload (task 6.12): PENDING -> UPLOADING -> UPLOADED, or
+  /// FAILED with [uploadError] (retried like the sync queue).
   final String uploadStatus;
+  final int uploadRetryCount;
+
+  /// Why the last upload failed: NETWORK_ERROR / SERVER_ERROR (retried
+  /// automatically), FILE_MISSING or the server's error code.
+  final String? uploadError;
   const EvidenceRow({
     required this.id,
     required this.taskId,
@@ -2548,6 +2605,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     required this.createdAt,
     this.fileName,
     required this.uploadStatus,
+    required this.uploadRetryCount,
+    this.uploadError,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2563,6 +2622,10 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       map['file_name'] = Variable<String>(fileName);
     }
     map['upload_status'] = Variable<String>(uploadStatus);
+    map['upload_retry_count'] = Variable<int>(uploadRetryCount);
+    if (!nullToAbsent || uploadError != null) {
+      map['upload_error'] = Variable<String>(uploadError);
+    }
     return map;
   }
 
@@ -2579,6 +2642,10 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ? const Value.absent()
           : Value(fileName),
       uploadStatus: Value(uploadStatus),
+      uploadRetryCount: Value(uploadRetryCount),
+      uploadError: uploadError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(uploadError),
     );
   }
 
@@ -2597,6 +2664,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       fileName: serializer.fromJson<String?>(json['fileName']),
       uploadStatus: serializer.fromJson<String>(json['uploadStatus']),
+      uploadRetryCount: serializer.fromJson<int>(json['uploadRetryCount']),
+      uploadError: serializer.fromJson<String?>(json['uploadError']),
     );
   }
   @override
@@ -2612,6 +2681,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'fileName': serializer.toJson<String?>(fileName),
       'uploadStatus': serializer.toJson<String>(uploadStatus),
+      'uploadRetryCount': serializer.toJson<int>(uploadRetryCount),
+      'uploadError': serializer.toJson<String?>(uploadError),
     };
   }
 
@@ -2625,6 +2696,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     DateTime? createdAt,
     Value<String?> fileName = const Value.absent(),
     String? uploadStatus,
+    int? uploadRetryCount,
+    Value<String?> uploadError = const Value.absent(),
   }) => EvidenceRow(
     id: id ?? this.id,
     taskId: taskId ?? this.taskId,
@@ -2635,6 +2708,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     createdAt: createdAt ?? this.createdAt,
     fileName: fileName.present ? fileName.value : this.fileName,
     uploadStatus: uploadStatus ?? this.uploadStatus,
+    uploadRetryCount: uploadRetryCount ?? this.uploadRetryCount,
+    uploadError: uploadError.present ? uploadError.value : this.uploadError,
   );
   EvidenceRow copyWithCompanion(LocalEvidenceCompanion data) {
     return EvidenceRow(
@@ -2651,6 +2726,12 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
       uploadStatus: data.uploadStatus.present
           ? data.uploadStatus.value
           : this.uploadStatus,
+      uploadRetryCount: data.uploadRetryCount.present
+          ? data.uploadRetryCount.value
+          : this.uploadRetryCount,
+      uploadError: data.uploadError.present
+          ? data.uploadError.value
+          : this.uploadError,
     );
   }
 
@@ -2665,7 +2746,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           ..write('sizeBytes: $sizeBytes, ')
           ..write('createdAt: $createdAt, ')
           ..write('fileName: $fileName, ')
-          ..write('uploadStatus: $uploadStatus')
+          ..write('uploadStatus: $uploadStatus, ')
+          ..write('uploadRetryCount: $uploadRetryCount, ')
+          ..write('uploadError: $uploadError')
           ..write(')'))
         .toString();
   }
@@ -2681,6 +2764,8 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
     createdAt,
     fileName,
     uploadStatus,
+    uploadRetryCount,
+    uploadError,
   );
   @override
   bool operator ==(Object other) =>
@@ -2694,7 +2779,9 @@ class EvidenceRow extends DataClass implements Insertable<EvidenceRow> {
           other.sizeBytes == this.sizeBytes &&
           other.createdAt == this.createdAt &&
           other.fileName == this.fileName &&
-          other.uploadStatus == this.uploadStatus);
+          other.uploadStatus == this.uploadStatus &&
+          other.uploadRetryCount == this.uploadRetryCount &&
+          other.uploadError == this.uploadError);
 }
 
 class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
@@ -2707,6 +2794,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
   final Value<DateTime> createdAt;
   final Value<String?> fileName;
   final Value<String> uploadStatus;
+  final Value<int> uploadRetryCount;
+  final Value<String?> uploadError;
   final Value<int> rowid;
   const LocalEvidenceCompanion({
     this.id = const Value.absent(),
@@ -2718,6 +2807,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     this.createdAt = const Value.absent(),
     this.fileName = const Value.absent(),
     this.uploadStatus = const Value.absent(),
+    this.uploadRetryCount = const Value.absent(),
+    this.uploadError = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   LocalEvidenceCompanion.insert({
@@ -2730,6 +2821,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     required DateTime createdAt,
     this.fileName = const Value.absent(),
     this.uploadStatus = const Value.absent(),
+    this.uploadRetryCount = const Value.absent(),
+    this.uploadError = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        taskId = Value(taskId),
@@ -2748,6 +2841,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     Expression<DateTime>? createdAt,
     Expression<String>? fileName,
     Expression<String>? uploadStatus,
+    Expression<int>? uploadRetryCount,
+    Expression<String>? uploadError,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2760,6 +2855,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
       if (createdAt != null) 'created_at': createdAt,
       if (fileName != null) 'file_name': fileName,
       if (uploadStatus != null) 'upload_status': uploadStatus,
+      if (uploadRetryCount != null) 'upload_retry_count': uploadRetryCount,
+      if (uploadError != null) 'upload_error': uploadError,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2774,6 +2871,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     Value<DateTime>? createdAt,
     Value<String?>? fileName,
     Value<String>? uploadStatus,
+    Value<int>? uploadRetryCount,
+    Value<String?>? uploadError,
     Value<int>? rowid,
   }) {
     return LocalEvidenceCompanion(
@@ -2786,6 +2885,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
       createdAt: createdAt ?? this.createdAt,
       fileName: fileName ?? this.fileName,
       uploadStatus: uploadStatus ?? this.uploadStatus,
+      uploadRetryCount: uploadRetryCount ?? this.uploadRetryCount,
+      uploadError: uploadError ?? this.uploadError,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2820,6 +2921,12 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
     if (uploadStatus.present) {
       map['upload_status'] = Variable<String>(uploadStatus.value);
     }
+    if (uploadRetryCount.present) {
+      map['upload_retry_count'] = Variable<int>(uploadRetryCount.value);
+    }
+    if (uploadError.present) {
+      map['upload_error'] = Variable<String>(uploadError.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2838,6 +2945,8 @@ class LocalEvidenceCompanion extends UpdateCompanion<EvidenceRow> {
           ..write('createdAt: $createdAt, ')
           ..write('fileName: $fileName, ')
           ..write('uploadStatus: $uploadStatus, ')
+          ..write('uploadRetryCount: $uploadRetryCount, ')
+          ..write('uploadError: $uploadError, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3673,6 +3782,954 @@ class LocalSyncStateCompanion extends UpdateCompanion<SyncStateRow> {
   }
 }
 
+class $LocalTaskReviewsTable extends LocalTaskReviews
+    with TableInfo<$LocalTaskReviewsTable, TaskReviewRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalTaskReviewsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_tasks (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _resultMeta = const VerificationMeta('result');
+  @override
+  late final GeneratedColumn<String> result = GeneratedColumn<String>(
+    'result',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reviewerNameMeta = const VerificationMeta(
+    'reviewerName',
+  );
+  @override
+  late final GeneratedColumn<String> reviewerName = GeneratedColumn<String>(
+    'reviewer_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _markedRequirementsMeta =
+      const VerificationMeta('markedRequirements');
+  @override
+  late final GeneratedColumn<String> markedRequirements =
+      GeneratedColumn<String>(
+        'marked_requirements',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    taskId,
+    result,
+    reason,
+    reviewerName,
+    createdAt,
+    markedRequirements,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_task_reviews';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TaskReviewRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('result')) {
+      context.handle(
+        _resultMeta,
+        result.isAcceptableOrUnknown(data['result']!, _resultMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_resultMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    }
+    if (data.containsKey('reviewer_name')) {
+      context.handle(
+        _reviewerNameMeta,
+        reviewerName.isAcceptableOrUnknown(
+          data['reviewer_name']!,
+          _reviewerNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_reviewerNameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('marked_requirements')) {
+      context.handle(
+        _markedRequirementsMeta,
+        markedRequirements.isAcceptableOrUnknown(
+          data['marked_requirements']!,
+          _markedRequirementsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {taskId};
+  @override
+  TaskReviewRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TaskReviewRow(
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      result: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}result'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      ),
+      reviewerName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reviewer_name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      markedRequirements: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}marked_requirements'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalTaskReviewsTable createAlias(String alias) {
+    return $LocalTaskReviewsTable(attachedDatabase, alias);
+  }
+}
+
+class TaskReviewRow extends DataClass implements Insertable<TaskReviewRow> {
+  final String taskId;
+  final String result;
+  final String? reason;
+  final String reviewerName;
+  final DateTime createdAt;
+
+  /// Marked requirements as a JSON object: requirement ID -> comment.
+  final String markedRequirements;
+  const TaskReviewRow({
+    required this.taskId,
+    required this.result,
+    this.reason,
+    required this.reviewerName,
+    required this.createdAt,
+    required this.markedRequirements,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['task_id'] = Variable<String>(taskId);
+    map['result'] = Variable<String>(result);
+    if (!nullToAbsent || reason != null) {
+      map['reason'] = Variable<String>(reason);
+    }
+    map['reviewer_name'] = Variable<String>(reviewerName);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['marked_requirements'] = Variable<String>(markedRequirements);
+    return map;
+  }
+
+  LocalTaskReviewsCompanion toCompanion(bool nullToAbsent) {
+    return LocalTaskReviewsCompanion(
+      taskId: Value(taskId),
+      result: Value(result),
+      reason: reason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reason),
+      reviewerName: Value(reviewerName),
+      createdAt: Value(createdAt),
+      markedRequirements: Value(markedRequirements),
+    );
+  }
+
+  factory TaskReviewRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TaskReviewRow(
+      taskId: serializer.fromJson<String>(json['taskId']),
+      result: serializer.fromJson<String>(json['result']),
+      reason: serializer.fromJson<String?>(json['reason']),
+      reviewerName: serializer.fromJson<String>(json['reviewerName']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      markedRequirements: serializer.fromJson<String>(
+        json['markedRequirements'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'taskId': serializer.toJson<String>(taskId),
+      'result': serializer.toJson<String>(result),
+      'reason': serializer.toJson<String?>(reason),
+      'reviewerName': serializer.toJson<String>(reviewerName),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'markedRequirements': serializer.toJson<String>(markedRequirements),
+    };
+  }
+
+  TaskReviewRow copyWith({
+    String? taskId,
+    String? result,
+    Value<String?> reason = const Value.absent(),
+    String? reviewerName,
+    DateTime? createdAt,
+    String? markedRequirements,
+  }) => TaskReviewRow(
+    taskId: taskId ?? this.taskId,
+    result: result ?? this.result,
+    reason: reason.present ? reason.value : this.reason,
+    reviewerName: reviewerName ?? this.reviewerName,
+    createdAt: createdAt ?? this.createdAt,
+    markedRequirements: markedRequirements ?? this.markedRequirements,
+  );
+  TaskReviewRow copyWithCompanion(LocalTaskReviewsCompanion data) {
+    return TaskReviewRow(
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      result: data.result.present ? data.result.value : this.result,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      reviewerName: data.reviewerName.present
+          ? data.reviewerName.value
+          : this.reviewerName,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      markedRequirements: data.markedRequirements.present
+          ? data.markedRequirements.value
+          : this.markedRequirements,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TaskReviewRow(')
+          ..write('taskId: $taskId, ')
+          ..write('result: $result, ')
+          ..write('reason: $reason, ')
+          ..write('reviewerName: $reviewerName, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('markedRequirements: $markedRequirements')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    taskId,
+    result,
+    reason,
+    reviewerName,
+    createdAt,
+    markedRequirements,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TaskReviewRow &&
+          other.taskId == this.taskId &&
+          other.result == this.result &&
+          other.reason == this.reason &&
+          other.reviewerName == this.reviewerName &&
+          other.createdAt == this.createdAt &&
+          other.markedRequirements == this.markedRequirements);
+}
+
+class LocalTaskReviewsCompanion extends UpdateCompanion<TaskReviewRow> {
+  final Value<String> taskId;
+  final Value<String> result;
+  final Value<String?> reason;
+  final Value<String> reviewerName;
+  final Value<DateTime> createdAt;
+  final Value<String> markedRequirements;
+  final Value<int> rowid;
+  const LocalTaskReviewsCompanion({
+    this.taskId = const Value.absent(),
+    this.result = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.reviewerName = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.markedRequirements = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalTaskReviewsCompanion.insert({
+    required String taskId,
+    required String result,
+    this.reason = const Value.absent(),
+    required String reviewerName,
+    required DateTime createdAt,
+    this.markedRequirements = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : taskId = Value(taskId),
+       result = Value(result),
+       reviewerName = Value(reviewerName),
+       createdAt = Value(createdAt);
+  static Insertable<TaskReviewRow> custom({
+    Expression<String>? taskId,
+    Expression<String>? result,
+    Expression<String>? reason,
+    Expression<String>? reviewerName,
+    Expression<DateTime>? createdAt,
+    Expression<String>? markedRequirements,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (taskId != null) 'task_id': taskId,
+      if (result != null) 'result': result,
+      if (reason != null) 'reason': reason,
+      if (reviewerName != null) 'reviewer_name': reviewerName,
+      if (createdAt != null) 'created_at': createdAt,
+      if (markedRequirements != null) 'marked_requirements': markedRequirements,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalTaskReviewsCompanion copyWith({
+    Value<String>? taskId,
+    Value<String>? result,
+    Value<String?>? reason,
+    Value<String>? reviewerName,
+    Value<DateTime>? createdAt,
+    Value<String>? markedRequirements,
+    Value<int>? rowid,
+  }) {
+    return LocalTaskReviewsCompanion(
+      taskId: taskId ?? this.taskId,
+      result: result ?? this.result,
+      reason: reason ?? this.reason,
+      reviewerName: reviewerName ?? this.reviewerName,
+      createdAt: createdAt ?? this.createdAt,
+      markedRequirements: markedRequirements ?? this.markedRequirements,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (result.present) {
+      map['result'] = Variable<String>(result.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (reviewerName.present) {
+      map['reviewer_name'] = Variable<String>(reviewerName.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (markedRequirements.present) {
+      map['marked_requirements'] = Variable<String>(markedRequirements.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalTaskReviewsCompanion(')
+          ..write('taskId: $taskId, ')
+          ..write('result: $result, ')
+          ..write('reason: $reason, ')
+          ..write('reviewerName: $reviewerName, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('markedRequirements: $markedRequirements, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LocalTeamTasksTable extends LocalTeamTasks
+    with TableInfo<$LocalTeamTasksTable, TeamTaskRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalTeamTasksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _priorityMeta = const VerificationMeta(
+    'priority',
+  );
+  @override
+  late final GeneratedColumn<String> priority = GeneratedColumn<String>(
+    'priority',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dueDateMeta = const VerificationMeta(
+    'dueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+    'due_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _assigneeIdMeta = const VerificationMeta(
+    'assigneeId',
+  );
+  @override
+  late final GeneratedColumn<String> assigneeId = GeneratedColumn<String>(
+    'assignee_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _assigneeNameMeta = const VerificationMeta(
+    'assigneeName',
+  );
+  @override
+  late final GeneratedColumn<String> assigneeName = GeneratedColumn<String>(
+    'assignee_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    priority,
+    status,
+    dueDate,
+    assigneeId,
+    assigneeName,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_team_tasks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TeamTaskRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('priority')) {
+      context.handle(
+        _priorityMeta,
+        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_priorityMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('due_date')) {
+      context.handle(
+        _dueDateMeta,
+        dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dueDateMeta);
+    }
+    if (data.containsKey('assignee_id')) {
+      context.handle(
+        _assigneeIdMeta,
+        assigneeId.isAcceptableOrUnknown(data['assignee_id']!, _assigneeIdMeta),
+      );
+    }
+    if (data.containsKey('assignee_name')) {
+      context.handle(
+        _assigneeNameMeta,
+        assigneeName.isAcceptableOrUnknown(
+          data['assignee_name']!,
+          _assigneeNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TeamTaskRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TeamTaskRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      priority: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}priority'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date'],
+      )!,
+      assigneeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}assignee_id'],
+      ),
+      assigneeName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}assignee_name'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalTeamTasksTable createAlias(String alias) {
+    return $LocalTeamTasksTable(attachedDatabase, alias);
+  }
+}
+
+class TeamTaskRow extends DataClass implements Insertable<TeamTaskRow> {
+  final String id;
+  final String title;
+  final String priority;
+  final String status;
+  final DateTime dueDate;
+  final String? assigneeId;
+  final String? assigneeName;
+  final DateTime updatedAt;
+  const TeamTaskRow({
+    required this.id,
+    required this.title,
+    required this.priority,
+    required this.status,
+    required this.dueDate,
+    this.assigneeId,
+    this.assigneeName,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    map['priority'] = Variable<String>(priority);
+    map['status'] = Variable<String>(status);
+    map['due_date'] = Variable<DateTime>(dueDate);
+    if (!nullToAbsent || assigneeId != null) {
+      map['assignee_id'] = Variable<String>(assigneeId);
+    }
+    if (!nullToAbsent || assigneeName != null) {
+      map['assignee_name'] = Variable<String>(assigneeName);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalTeamTasksCompanion toCompanion(bool nullToAbsent) {
+    return LocalTeamTasksCompanion(
+      id: Value(id),
+      title: Value(title),
+      priority: Value(priority),
+      status: Value(status),
+      dueDate: Value(dueDate),
+      assigneeId: assigneeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assigneeId),
+      assigneeName: assigneeName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assigneeName),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory TeamTaskRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TeamTaskRow(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      priority: serializer.fromJson<String>(json['priority']),
+      status: serializer.fromJson<String>(json['status']),
+      dueDate: serializer.fromJson<DateTime>(json['dueDate']),
+      assigneeId: serializer.fromJson<String?>(json['assigneeId']),
+      assigneeName: serializer.fromJson<String?>(json['assigneeName']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'priority': serializer.toJson<String>(priority),
+      'status': serializer.toJson<String>(status),
+      'dueDate': serializer.toJson<DateTime>(dueDate),
+      'assigneeId': serializer.toJson<String?>(assigneeId),
+      'assigneeName': serializer.toJson<String?>(assigneeName),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  TeamTaskRow copyWith({
+    String? id,
+    String? title,
+    String? priority,
+    String? status,
+    DateTime? dueDate,
+    Value<String?> assigneeId = const Value.absent(),
+    Value<String?> assigneeName = const Value.absent(),
+    DateTime? updatedAt,
+  }) => TeamTaskRow(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    priority: priority ?? this.priority,
+    status: status ?? this.status,
+    dueDate: dueDate ?? this.dueDate,
+    assigneeId: assigneeId.present ? assigneeId.value : this.assigneeId,
+    assigneeName: assigneeName.present ? assigneeName.value : this.assigneeName,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  TeamTaskRow copyWithCompanion(LocalTeamTasksCompanion data) {
+    return TeamTaskRow(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      status: data.status.present ? data.status.value : this.status,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      assigneeId: data.assigneeId.present
+          ? data.assigneeId.value
+          : this.assigneeId,
+      assigneeName: data.assigneeName.present
+          ? data.assigneeName.value
+          : this.assigneeName,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TeamTaskRow(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('priority: $priority, ')
+          ..write('status: $status, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('assigneeId: $assigneeId, ')
+          ..write('assigneeName: $assigneeName, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    priority,
+    status,
+    dueDate,
+    assigneeId,
+    assigneeName,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TeamTaskRow &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.priority == this.priority &&
+          other.status == this.status &&
+          other.dueDate == this.dueDate &&
+          other.assigneeId == this.assigneeId &&
+          other.assigneeName == this.assigneeName &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalTeamTasksCompanion extends UpdateCompanion<TeamTaskRow> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<String> priority;
+  final Value<String> status;
+  final Value<DateTime> dueDate;
+  final Value<String?> assigneeId;
+  final Value<String?> assigneeName;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalTeamTasksCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.status = const Value.absent(),
+    this.dueDate = const Value.absent(),
+    this.assigneeId = const Value.absent(),
+    this.assigneeName = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalTeamTasksCompanion.insert({
+    required String id,
+    required String title,
+    required String priority,
+    required String status,
+    required DateTime dueDate,
+    this.assigneeId = const Value.absent(),
+    this.assigneeName = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       title = Value(title),
+       priority = Value(priority),
+       status = Value(status),
+       dueDate = Value(dueDate),
+       updatedAt = Value(updatedAt);
+  static Insertable<TeamTaskRow> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<String>? priority,
+    Expression<String>? status,
+    Expression<DateTime>? dueDate,
+    Expression<String>? assigneeId,
+    Expression<String>? assigneeName,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (priority != null) 'priority': priority,
+      if (status != null) 'status': status,
+      if (dueDate != null) 'due_date': dueDate,
+      if (assigneeId != null) 'assignee_id': assigneeId,
+      if (assigneeName != null) 'assignee_name': assigneeName,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalTeamTasksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<String>? priority,
+    Value<String>? status,
+    Value<DateTime>? dueDate,
+    Value<String?>? assigneeId,
+    Value<String?>? assigneeName,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalTeamTasksCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      dueDate: dueDate ?? this.dueDate,
+      assigneeId: assigneeId ?? this.assigneeId,
+      assigneeName: assigneeName ?? this.assigneeName,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (priority.present) {
+      map['priority'] = Variable<String>(priority.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
+    if (assigneeId.present) {
+      map['assignee_id'] = Variable<String>(assigneeId.value);
+    }
+    if (assigneeName.present) {
+      map['assignee_name'] = Variable<String>(assigneeName.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalTeamTasksCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('priority: $priority, ')
+          ..write('status: $status, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('assigneeId: $assigneeId, ')
+          ..write('assigneeName: $assigneeName, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3686,6 +4743,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalSyncOperationsTable localSyncOperations =
       $LocalSyncOperationsTable(this);
   late final $LocalSyncStateTable localSyncState = $LocalSyncStateTable(this);
+  late final $LocalTaskReviewsTable localTaskReviews = $LocalTaskReviewsTable(
+    this,
+  );
+  late final $LocalTeamTasksTable localTeamTasks = $LocalTeamTasksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3698,6 +4759,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localEvidence,
     localSyncOperations,
     localSyncState,
+    localTaskReviews,
+    localTeamTasks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3744,6 +4807,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('local_evidence', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_tasks',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_task_reviews', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -3839,6 +4909,26 @@ final class $$LocalTasksTableReferences
     ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_localEvidenceRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalTaskReviewsTable, List<TaskReviewRow>>
+  _localTaskReviewsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localTaskReviews,
+    aliasName: 'local_tasks__id__local_task_reviews__task_id',
+  );
+
+  $$LocalTaskReviewsTableProcessedTableManager get localTaskReviewsRefs {
+    final manager = $$LocalTaskReviewsTableTableManager(
+      $_db,
+      $_db.localTaskReviews,
+    ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _localTaskReviewsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -3990,6 +5080,31 @@ class $$LocalTasksTableFilterComposer
           }) => $$LocalEvidenceTableFilterComposer(
             $db: $db,
             $table: $db.localEvidence,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localTaskReviewsRefs(
+    Expression<bool> Function($$LocalTaskReviewsTableFilterComposer f) f,
+  ) {
+    final $$LocalTaskReviewsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localTaskReviews,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTaskReviewsTableFilterComposer(
+            $db: $db,
+            $table: $db.localTaskReviews,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -4220,6 +5335,31 @@ class $$LocalTasksTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> localTaskReviewsRefs<T extends Object>(
+    Expression<T> Function($$LocalTaskReviewsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalTaskReviewsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.localTaskReviews,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTaskReviewsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTaskReviews,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalTasksTableTableManager
@@ -4239,6 +5379,7 @@ class $$LocalTasksTableTableManager
             bool localRequirementsRefs,
             bool localResponsesRefs,
             bool localEvidenceRefs,
+            bool localTaskReviewsRefs,
           })
         > {
   $$LocalTasksTableTableManager(_$AppDatabase db, $LocalTasksTable table)
@@ -4333,6 +5474,7 @@ class $$LocalTasksTableTableManager
                 localRequirementsRefs = false,
                 localResponsesRefs = false,
                 localEvidenceRefs = false,
+                localTaskReviewsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -4340,6 +5482,7 @@ class $$LocalTasksTableTableManager
                     if (localRequirementsRefs) db.localRequirements,
                     if (localResponsesRefs) db.localResponses,
                     if (localEvidenceRefs) db.localEvidence,
+                    if (localTaskReviewsRefs) db.localTaskReviews,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -4407,6 +5550,27 @@ class $$LocalTasksTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (localTaskReviewsRefs)
+                        await $_getPrefetchedData<
+                          TaskRow,
+                          $LocalTasksTable,
+                          TaskReviewRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTasksTableReferences
+                              ._localTaskReviewsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTasksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localTaskReviewsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.taskId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -4431,6 +5595,7 @@ typedef $$LocalTasksTableProcessedTableManager =
         bool localRequirementsRefs,
         bool localResponsesRefs,
         bool localEvidenceRefs,
+        bool localTaskReviewsRefs,
       })
     >;
 typedef $$LocalRequirementsTableCreateCompanionBuilder =
@@ -5944,6 +7109,8 @@ typedef $$LocalEvidenceTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<String?> fileName,
       Value<String> uploadStatus,
+      Value<int> uploadRetryCount,
+      Value<String?> uploadError,
       Value<int> rowid,
     });
 typedef $$LocalEvidenceTableUpdateCompanionBuilder =
@@ -5957,6 +7124,8 @@ typedef $$LocalEvidenceTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<String?> fileName,
       Value<String> uploadStatus,
+      Value<int> uploadRetryCount,
+      Value<String?> uploadError,
       Value<int> rowid,
     });
 
@@ -6045,6 +7214,16 @@ class $$LocalEvidenceTableFilterComposer
 
   ColumnFilters<String> get uploadStatus => $composableBuilder(
     column: $table.uploadStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get uploadRetryCount => $composableBuilder(
+    column: $table.uploadRetryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uploadError => $composableBuilder(
+    column: $table.uploadError,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6139,6 +7318,16 @@ class $$LocalEvidenceTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get uploadRetryCount => $composableBuilder(
+    column: $table.uploadRetryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get uploadError => $composableBuilder(
+    column: $table.uploadError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$LocalTasksTableOrderingComposer get taskId {
     final $$LocalTasksTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -6215,6 +7404,16 @@ class $$LocalEvidenceTableAnnotationComposer
 
   GeneratedColumn<String> get uploadStatus => $composableBuilder(
     column: $table.uploadStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get uploadRetryCount => $composableBuilder(
+    column: $table.uploadRetryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get uploadError => $composableBuilder(
+    column: $table.uploadError,
     builder: (column) => column,
   );
 
@@ -6303,6 +7502,8 @@ class $$LocalEvidenceTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<String?> fileName = const Value.absent(),
                 Value<String> uploadStatus = const Value.absent(),
+                Value<int> uploadRetryCount = const Value.absent(),
+                Value<String?> uploadError = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEvidenceCompanion(
                 id: id,
@@ -6314,6 +7515,8 @@ class $$LocalEvidenceTableTableManager
                 createdAt: createdAt,
                 fileName: fileName,
                 uploadStatus: uploadStatus,
+                uploadRetryCount: uploadRetryCount,
+                uploadError: uploadError,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6327,6 +7530,8 @@ class $$LocalEvidenceTableTableManager
                 required DateTime createdAt,
                 Value<String?> fileName = const Value.absent(),
                 Value<String> uploadStatus = const Value.absent(),
+                Value<int> uploadRetryCount = const Value.absent(),
+                Value<String?> uploadError = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalEvidenceCompanion.insert(
                 id: id,
@@ -6338,6 +7543,8 @@ class $$LocalEvidenceTableTableManager
                 createdAt: createdAt,
                 fileName: fileName,
                 uploadStatus: uploadStatus,
+                uploadRetryCount: uploadRetryCount,
+                uploadError: uploadError,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -6891,6 +8098,623 @@ typedef $$LocalSyncStateTableProcessedTableManager =
       SyncStateRow,
       PrefetchHooks Function()
     >;
+typedef $$LocalTaskReviewsTableCreateCompanionBuilder =
+    LocalTaskReviewsCompanion Function({
+      required String taskId,
+      required String result,
+      Value<String?> reason,
+      required String reviewerName,
+      required DateTime createdAt,
+      Value<String> markedRequirements,
+      Value<int> rowid,
+    });
+typedef $$LocalTaskReviewsTableUpdateCompanionBuilder =
+    LocalTaskReviewsCompanion Function({
+      Value<String> taskId,
+      Value<String> result,
+      Value<String?> reason,
+      Value<String> reviewerName,
+      Value<DateTime> createdAt,
+      Value<String> markedRequirements,
+      Value<int> rowid,
+    });
+
+final class $$LocalTaskReviewsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $LocalTaskReviewsTable, TaskReviewRow> {
+  $$LocalTaskReviewsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalTasksTable _taskIdTable(_$AppDatabase db) =>
+      db.localTasks.createAlias('local_task_reviews__task_id__local_tasks__id');
+
+  $$LocalTasksTableProcessedTableManager get taskId {
+    final $_column = $_itemColumn<String>('task_id')!;
+
+    final manager = $$LocalTasksTableTableManager(
+      $_db,
+      $_db.localTasks,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_taskIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$LocalTaskReviewsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalTaskReviewsTable> {
+  $$LocalTaskReviewsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get result => $composableBuilder(
+    column: $table.result,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reviewerName => $composableBuilder(
+    column: $table.reviewerName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get markedRequirements => $composableBuilder(
+    column: $table.markedRequirements,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LocalTasksTableFilterComposer get taskId {
+    final $$LocalTasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableFilterComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalTaskReviewsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalTaskReviewsTable> {
+  $$LocalTaskReviewsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get result => $composableBuilder(
+    column: $table.result,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reviewerName => $composableBuilder(
+    column: $table.reviewerName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get markedRequirements => $composableBuilder(
+    column: $table.markedRequirements,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LocalTasksTableOrderingComposer get taskId {
+    final $$LocalTasksTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableOrderingComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalTaskReviewsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalTaskReviewsTable> {
+  $$LocalTaskReviewsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get result =>
+      $composableBuilder(column: $table.result, builder: (column) => column);
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get reviewerName => $composableBuilder(
+    column: $table.reviewerName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get markedRequirements => $composableBuilder(
+    column: $table.markedRequirements,
+    builder: (column) => column,
+  );
+
+  $$LocalTasksTableAnnotationComposer get taskId {
+    final $$LocalTasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.localTasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalTaskReviewsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalTaskReviewsTable,
+          TaskReviewRow,
+          $$LocalTaskReviewsTableFilterComposer,
+          $$LocalTaskReviewsTableOrderingComposer,
+          $$LocalTaskReviewsTableAnnotationComposer,
+          $$LocalTaskReviewsTableCreateCompanionBuilder,
+          $$LocalTaskReviewsTableUpdateCompanionBuilder,
+          (TaskReviewRow, $$LocalTaskReviewsTableReferences),
+          TaskReviewRow,
+          PrefetchHooks Function({bool taskId})
+        > {
+  $$LocalTaskReviewsTableTableManager(
+    _$AppDatabase db,
+    $LocalTaskReviewsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalTaskReviewsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalTaskReviewsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalTaskReviewsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> taskId = const Value.absent(),
+                Value<String> result = const Value.absent(),
+                Value<String?> reason = const Value.absent(),
+                Value<String> reviewerName = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<String> markedRequirements = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTaskReviewsCompanion(
+                taskId: taskId,
+                result: result,
+                reason: reason,
+                reviewerName: reviewerName,
+                createdAt: createdAt,
+                markedRequirements: markedRequirements,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String taskId,
+                required String result,
+                Value<String?> reason = const Value.absent(),
+                required String reviewerName,
+                required DateTime createdAt,
+                Value<String> markedRequirements = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTaskReviewsCompanion.insert(
+                taskId: taskId,
+                result: result,
+                reason: reason,
+                reviewerName: reviewerName,
+                createdAt: createdAt,
+                markedRequirements: markedRequirements,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalTaskReviewsTable, TaskReviewRow>(table),
+                  $$LocalTaskReviewsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({taskId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (taskId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.taskId,
+                        referencedTable: $$LocalTaskReviewsTableReferences
+                            ._taskIdTable(db),
+                        referencedColumn: $$LocalTaskReviewsTableReferences
+                            ._taskIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$LocalTaskReviewsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalTaskReviewsTable,
+      TaskReviewRow,
+      $$LocalTaskReviewsTableFilterComposer,
+      $$LocalTaskReviewsTableOrderingComposer,
+      $$LocalTaskReviewsTableAnnotationComposer,
+      $$LocalTaskReviewsTableCreateCompanionBuilder,
+      $$LocalTaskReviewsTableUpdateCompanionBuilder,
+      (TaskReviewRow, $$LocalTaskReviewsTableReferences),
+      TaskReviewRow,
+      PrefetchHooks Function({bool taskId})
+    >;
+typedef $$LocalTeamTasksTableCreateCompanionBuilder =
+    LocalTeamTasksCompanion Function({
+      required String id,
+      required String title,
+      required String priority,
+      required String status,
+      required DateTime dueDate,
+      Value<String?> assigneeId,
+      Value<String?> assigneeName,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalTeamTasksTableUpdateCompanionBuilder =
+    LocalTeamTasksCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<String> priority,
+      Value<String> status,
+      Value<DateTime> dueDate,
+      Value<String?> assigneeId,
+      Value<String?> assigneeName,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalTeamTasksTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalTeamTasksTable> {
+  $$LocalTeamTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assigneeId => $composableBuilder(
+    column: $table.assigneeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assigneeName => $composableBuilder(
+    column: $table.assigneeName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalTeamTasksTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalTeamTasksTable> {
+  $$LocalTeamTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assigneeId => $composableBuilder(
+    column: $table.assigneeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assigneeName => $composableBuilder(
+    column: $table.assigneeName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalTeamTasksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalTeamTasksTable> {
+  $$LocalTeamTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<String> get assigneeId => $composableBuilder(
+    column: $table.assigneeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get assigneeName => $composableBuilder(
+    column: $table.assigneeName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LocalTeamTasksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalTeamTasksTable,
+          TeamTaskRow,
+          $$LocalTeamTasksTableFilterComposer,
+          $$LocalTeamTasksTableOrderingComposer,
+          $$LocalTeamTasksTableAnnotationComposer,
+          $$LocalTeamTasksTableCreateCompanionBuilder,
+          $$LocalTeamTasksTableUpdateCompanionBuilder,
+          (
+            TeamTaskRow,
+            BaseReferences<_$AppDatabase, $LocalTeamTasksTable, TeamTaskRow>,
+          ),
+          TeamTaskRow,
+          PrefetchHooks Function()
+        > {
+  $$LocalTeamTasksTableTableManager(
+    _$AppDatabase db,
+    $LocalTeamTasksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalTeamTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalTeamTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalTeamTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> priority = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> dueDate = const Value.absent(),
+                Value<String?> assigneeId = const Value.absent(),
+                Value<String?> assigneeName = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTeamTasksCompanion(
+                id: id,
+                title: title,
+                priority: priority,
+                status: status,
+                dueDate: dueDate,
+                assigneeId: assigneeId,
+                assigneeName: assigneeName,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String title,
+                required String priority,
+                required String status,
+                required DateTime dueDate,
+                Value<String?> assigneeId = const Value.absent(),
+                Value<String?> assigneeName = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTeamTasksCompanion.insert(
+                id: id,
+                title: title,
+                priority: priority,
+                status: status,
+                dueDate: dueDate,
+                assigneeId: assigneeId,
+                assigneeName: assigneeName,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalTeamTasksTable, TeamTaskRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LocalTeamTasksTable,
+                    TeamTaskRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalTeamTasksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalTeamTasksTable,
+      TeamTaskRow,
+      $$LocalTeamTasksTableFilterComposer,
+      $$LocalTeamTasksTableOrderingComposer,
+      $$LocalTeamTasksTableAnnotationComposer,
+      $$LocalTeamTasksTableCreateCompanionBuilder,
+      $$LocalTeamTasksTableUpdateCompanionBuilder,
+      (
+        TeamTaskRow,
+        BaseReferences<_$AppDatabase, $LocalTeamTasksTable, TeamTaskRow>,
+      ),
+      TeamTaskRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6912,4 +8736,8 @@ class $AppDatabaseManager {
       $$LocalSyncOperationsTableTableManager(_db, _db.localSyncOperations);
   $$LocalSyncStateTableTableManager get localSyncState =>
       $$LocalSyncStateTableTableManager(_db, _db.localSyncState);
+  $$LocalTaskReviewsTableTableManager get localTaskReviews =>
+      $$LocalTaskReviewsTableTableManager(_db, _db.localTaskReviews);
+  $$LocalTeamTasksTableTableManager get localTeamTasks =>
+      $$LocalTeamTasksTableTableManager(_db, _db.localTeamTasks);
 }
