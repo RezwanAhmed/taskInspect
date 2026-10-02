@@ -3,6 +3,7 @@ package com.taskinspect.requirements;
 import com.taskinspect.common.config.OpenApiConfig;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.common.security.Roles;
+import com.taskinspect.requirements.dto.RequirementOrderRequest;
 import com.taskinspect.requirements.dto.RequirementRequest;
 import com.taskinspect.requirements.dto.RequirementResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -55,6 +56,17 @@ public class RequirementController {
         Requirement requirement = requirementService.create(CurrentUser.from(jwt), taskId, request);
         return ResponseEntity.created(URI.create("/api/tasks/" + taskId + "/requirements/" + requirement.getId()))
                 .body(RequirementResponse.from(requirement));
+    }
+
+    @PutMapping("/order")
+    @PreAuthorize(Roles.MANAGER)
+    @Operation(summary = "Change the order of the requirements", description = "Every requirement of the task "
+            + "exactly once, in the new order (400 INVALID_ORDER otherwise). Only the manager who created the task, "
+            + "while it is DRAFT, OPEN or ASSIGNED.")
+    public List<RequirementResponse> reorder(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID taskId,
+            @Valid @RequestBody RequirementOrderRequest request) {
+        return requirementService.reorder(CurrentUser.from(jwt), taskId, request.requirementIds()).stream()
+                .map(RequirementResponse::from).toList();
     }
 
     @PutMapping("/{requirementId}")

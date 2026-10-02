@@ -3,6 +3,7 @@ package com.taskinspect.sync;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -275,6 +276,64 @@ class SyncPushTests {
                 .andExpect(jsonPath("$.results[0].code").value("INVALID_PAYLOAD"));
         push(manager, operation(id, "Task", id, "CREATE", "{\"priority\": \"HIGH\"}"))
                 .andExpect(jsonPath("$.results[0].code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void aManagerEditsRequirementsOffline() throws Exception {
+        UUID id = UUID.randomUUID();
+        String body = "{\"title\": \"Fridge temperature\", \"type\": \"NUMBER\", \"unit\": \"°C\"}";
+
+        push(manager, operation(task.getId(), "Requirement", id, "CREATE", body))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        push(manager, operation(task.getId(), "Requirement", id, "CREATE", body))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        assertThat(requirementRepository.findAllByTaskIdOrderByPosition(task.getId()))
+                .extracting(Requirement::getId).containsExactly(yesNo.getId(), photo.getId(), id);
+
+        push(manager, operation(task.getId(), "Requirement", id, "UPDATE",
+                "{\"title\": \"Freezer temperature\", \"type\": \"NUMBER\", \"unit\": \"°C\"}"))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        push(manager, operation(task.getId(), "RequirementOrder", task.getId(), "UPDATE",
+                "{\"requirementIds\": [\"%s\", \"%s\", \"%s\"]}".formatted(id, photo.getId(), yesNo.getId())))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        assertThat(requirementRepository.findAllByTaskIdOrderByPosition(task.getId()))
+                .extracting(Requirement::getTitle).first().isEqualTo("Freezer temperature");
+
+        push(manager, operation(task.getId(), "Requirement", photo.getId(), "DELETE", "{}"))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        assertThat(requirementRepository.findAllByTaskIdOrderByPosition(task.getId()))
+                .extracting(Requirement::getId).containsExactly(id, yesNo.getId());
+    }
+
+    @Test
+    void requirementChangesAreManagersWorkAndOrdersMustBeComplete() throws Exception {
+        UUID id = UUID.randomUUID();
+        push(worker, operation(task.getId(), "Requirement", id, "CREATE", "{\"title\": \"A\", \"type\": \"TEXT\"}"))
+                .andExpect(jsonPath("$.results[0].code").value("FORBIDDEN"));
+        push(manager, operation(task.getId(), "RequirementOrder", task.getId(), "UPDATE",
+                "{\"requirementIds\": [\"%s\"]}".formatted(yesNo.getId())))
+                .andExpect(jsonPath("$.results[0].code").value("INVALID_ORDER"));
+
+        // The ID of another task's requirement can't be taken.
+        Task other = assignedTask("Hall");
+        Requirement othersRequirement = requirementRepository.findAllByTaskIdOrderByPosition(other.getId()).get(0);
+        push(manager, operation(task.getId(), "Requirement", othersRequirement.getId(), "CREATE",
+                "{\"title\": \"A\", \"type\": \"TEXT\"}"))
+                .andExpect(jsonPath("$.results[0].code").value("REQUIREMENT_ID_CONFLICT"));
+        // Deleting one the server never got counts as done, so later changes go on.
+        push(manager, operation(task.getId(), "Requirement", UUID.randomUUID(), "DELETE", "{}"))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+
+        mockMvc.perform(as(manager, put("/api/tasks/{id}/requirements/order", task.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requirementIds\": [\"%s\", \"%s\"]}".formatted(photo.getId(), yesNo.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(photo.getId().toString()))
+                .andExpect(jsonPath("$[1].position").value(1));
+        mockMvc.perform(as(worker, put("/api/tasks/{id}/requirements/order", task.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requirementIds\": []}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

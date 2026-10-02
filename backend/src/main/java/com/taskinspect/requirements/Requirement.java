@@ -7,14 +7,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.domain.Persistable;
 
 /**
  * One item of a task that the worker must complete, e.g. "Is the fire
@@ -30,11 +32,15 @@ import org.hibernate.annotations.UpdateTimestamp;
  */
 @Entity
 @Table(name = "task_requirements")
-public class Requirement {
+public class Requirement implements Persistable<UUID> {
 
+    /** Set when the requirement is made: one added offline brings the ID the app gave it. */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    /** Until it is first saved; tells Spring Data to insert it although it has an ID. */
+    @Transient
+    private boolean isNew = true;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "task_id", nullable = false, updatable = false)
@@ -77,6 +83,13 @@ public class Requirement {
 
     public Requirement(Task task, String title, String description, RequirementType type, boolean required,
             int position, String unit, List<String> optionLabels) {
+        this(UUID.randomUUID(), task, title, description, type, required, position, unit, optionLabels);
+    }
+
+    /** A requirement with the ID a device gave it (added offline). */
+    public Requirement(UUID id, Task task, String title, String description, RequirementType type, boolean required,
+            int position, String unit, List<String> optionLabels) {
+        this.id = id;
         this.task = task;
         this.position = position;
         update(title, description, type, required, unit, optionLabels);
@@ -102,8 +115,20 @@ public class Requirement {
         this.position = position;
     }
 
+    @Override
     public UUID getId() {
         return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markStored() {
+        this.isNew = false;
     }
 
     public Task getTask() {

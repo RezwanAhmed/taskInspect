@@ -5,8 +5,12 @@ import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.requirements.dto.RequirementRequest;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskService;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +24,8 @@ public class RequirementService {
 
     static final String REQUIREMENT_NOT_FOUND = "REQUIREMENT_NOT_FOUND";
     static final String INVALID_REQUIREMENT = "INVALID_REQUIREMENT";
+    static final String REQUIREMENT_ID_CONFLICT = "REQUIREMENT_ID_CONFLICT";
+    static final String INVALID_ORDER = "INVALID_ORDER";
 
     private final RequirementRepository requirementRepository;
     private final TaskService taskService;
@@ -72,10 +78,33 @@ public class RequirementService {
     /** Adds a requirement at the end of the task's list. */
     @Transactional
     public Requirement create(CurrentUser caller, UUID taskId, RequirementRequest request) {
+        return create(caller, taskId, UUID.randomUUID(), request);
+    }
+
+    /**
+     * Adds a requirement with the ID the app gave it offline (sync push
+     * "Requirement CREATE"). Sending it again returns the one already made;
+     * an ID used for another task's requirement is refused.
+     */
+    @Transactional
+    public Requirement createWithId(CurrentUser caller, UUID taskId, UUID id, RequirementRequest request) {
+        Task task = taskService.requireEditable(caller, taskId);
+        Optional<Requirement> existing = requirementRepository.findById(id);
+        if (existing.isPresent()) {
+            if (!existing.get().getTask().getId().equals(task.getId())) {
+                throw new ApiException(HttpStatus.CONFLICT, REQUIREMENT_ID_CONFLICT,
+                        "This requirement ID is already used");
+            }
+            return existing.get();
+        }
+        return create(caller, taskId, id, request);
+    }
+
+    private Requirement create(CurrentUser caller, UUID taskId, UUID id, RequirementRequest request) {
         Task task = taskService.requireEditable(caller, taskId);
         validate(request);
         int position = (int) requirementRepository.countByTaskId(task.getId());
-        Requirement requirement = requirementRepository.save(new Requirement(task, request.title().trim(),
+        Requirement requirement = requirementRepository.save(new Requirement(id, task, request.title().trim(),
                 clean(request.description()), request.type(), isRequired(request), position, clean(request.unit()),
                 trimmed(request.options())));
         taskService.markChanged(task.getId());
@@ -98,13 +127,54 @@ public class RequirementService {
     @Transactional
     public void delete(CurrentUser caller, UUID taskId, UUID requirementId) {
         Task task = taskService.requireEditable(caller, taskId);
-        requirementRepository.delete(find(task, requirementId));
+        remove(task, find(task, requirementId));
+    }
+
+    /**
+     * Like {@link #delete}, but a requirement the task doesn't have counts as
+     * deleted already (sync push "Requirement DELETE": nothing to undo, and
+     * the task's later changes must not wait for it).
+     */
+    @Transactional
+    public void deleteIfPresent(CurrentUser caller, UUID taskId, UUID requirementId) {
+        Task task = taskService.requireEditable(caller, taskId);
+        Optional<Requirement> requirement = requirementRepository.findById(requirementId)
+                .filter(found -> found.getTask().getId().equals(task.getId()));
+        if (requirement.isPresent()) {
+            remove(task, requirement.get());
+        }
+    }
+
+    private void remove(Task task, Requirement requirement) {
+        requirementRepository.delete(requirement);
         requirementRepository.flush();
         List<Requirement> remaining = requirementRepository.findAllByTaskIdOrderByPosition(task.getId());
         for (int i = 0; i < remaining.size(); i++) {
             remaining.get(i).moveTo(i);
         }
         taskService.markChanged(task.getId());
+    }
+
+    /**
+     * Puts the task's requirements in the given order: [requirementIds] must
+     * name each of them exactly once (400 INVALID_ORDER otherwise).
+     */
+    @Transactional
+    public List<Requirement> reorder(CurrentUser caller, UUID taskId, List<UUID> requirementIds) {
+        Task task = taskService.requireEditable(caller, taskId);
+        List<Requirement> requirements = requirementRepository.findAllByTaskIdOrderByPosition(task.getId());
+        Map<UUID, Requirement> byId = requirements.stream()
+                .collect(Collectors.toMap(Requirement::getId, requirement -> requirement));
+        if (requirementIds.size() != requirements.size() || !byId.keySet().equals(new HashSet<>(requirementIds))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, INVALID_ORDER,
+                    "The order must list each requirement of the task exactly once");
+        }
+        for (int i = 0; i < requirementIds.size(); i++) {
+            byId.get(requirementIds.get(i)).moveTo(i);
+        }
+        requirementRepository.flush();
+        taskService.markChanged(task.getId());
+        return requirementRepository.findAllByTaskIdOrderByPosition(task.getId());
     }
 
     private Requirement find(Task task, UUID requirementId) {

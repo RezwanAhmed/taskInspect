@@ -5,6 +5,9 @@ import com.taskinspect.common.error.ErrorCode;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.evidence.EvidenceService;
 import com.taskinspect.evidence.dto.RegisterEvidenceRequest;
+import com.taskinspect.requirements.RequirementService;
+import com.taskinspect.requirements.dto.RequirementOrderRequest;
+import com.taskinspect.requirements.dto.RequirementRequest;
 import com.taskinspect.responses.ResponseService;
 import com.taskinspect.responses.dto.SaveResponseRequest;
 import com.taskinspect.reviews.SubmissionService;
@@ -56,18 +59,21 @@ public class SyncService {
     private final ResponseService responseService;
     private final EvidenceService evidenceService;
     private final SubmissionService submissionService;
+    private final RequirementService requirementService;
     private final ObjectMapper objectMapper;
     private final Validator validator;
     private final TransactionTemplate transactions;
 
     public SyncService(SyncRecordRepository syncRecordRepository, TaskService taskService,
             ResponseService responseService, EvidenceService evidenceService, SubmissionService submissionService,
-            ObjectMapper objectMapper, Validator validator, PlatformTransactionManager transactionManager) {
+            RequirementService requirementService, ObjectMapper objectMapper, Validator validator,
+            PlatformTransactionManager transactionManager) {
         this.syncRecordRepository = syncRecordRepository;
         this.taskService = taskService;
         this.responseService = responseService;
         this.evidenceService = evidenceService;
         this.submissionService = submissionService;
+        this.requirementService = requirementService;
         this.objectMapper = objectMapper;
         this.validator = validator;
         this.transactions = new TransactionTemplate(transactionManager);
@@ -129,7 +135,8 @@ public class SyncService {
         String kind = operation.entityType() + " " + operation.operation();
         Set<RoleName> roles = switch (kind) {
             case "Task START", "Task SUBMIT" -> Set.of(RoleName.WORKER, RoleName.MANAGER);
-            case "Task CREATE", "Task UPDATE" -> Set.of(RoleName.MANAGER);
+            case "Task CREATE", "Task UPDATE", "Requirement CREATE", "Requirement UPDATE", "Requirement DELETE",
+                    "RequirementOrder UPDATE" -> Set.of(RoleName.MANAGER);
             default -> Set.of(RoleName.WORKER);
         };
         if (roles.stream().noneMatch(role -> caller.hasRole(role.name()))) {
@@ -155,6 +162,16 @@ public class SyncService {
             case "Task UPDATE" -> {
                 requireTaskEntity(operation);
                 taskService.update(caller, taskId, payload(operation, UpdateTaskRequest.class));
+            }
+            case "Requirement CREATE" -> requirementService.createWithId(caller, taskId, operation.entityId(),
+                    payload(operation, RequirementRequest.class));
+            case "Requirement UPDATE" -> requirementService.update(caller, taskId, operation.entityId(),
+                    payload(operation, RequirementRequest.class));
+            case "Requirement DELETE" -> requirementService.deleteIfPresent(caller, taskId, operation.entityId());
+            case "RequirementOrder UPDATE" -> {
+                requireTaskEntity(operation);
+                requirementService.reorder(caller, taskId,
+                        payload(operation, RequirementOrderRequest.class).requirementIds());
             }
             case "Task START" -> start(caller, operation);
             case "Task SUBMIT" -> submit(caller, operation);

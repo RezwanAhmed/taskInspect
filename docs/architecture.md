@@ -663,6 +663,7 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/teams` | Any logged-in user: every active manager's team in numbers (active members; tasks not approved or cancelled, also those of deactivated members) | `401` |
 | `PUT /api/tasks/{id}` | The manager (or administrator, main task) who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
+| `PUT /api/tasks/{id}/requirements/order` (`{"requirementIds": […]}`) | The manager who created the task, while DRAFT / OPEN / ASSIGNED; every requirement exactly once (`400 INVALID_ORDER`) | `403` |
 | `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/assign` | The manager who created the task (to a worker); the administrator who created a main task (to a manager) | `403` |
 | `POST /api/tasks/{id}/publish` (`{"scope": "TEAM" \| "EVERYONE"}`) | The manager who created the task, while DRAFT | `403` |
@@ -763,10 +764,12 @@ stateDiagram-v2
 
 Operations the server accepts: `TaskResponse UPDATE`, `Evidence CREATE` /
 `DELETE` and `Task START` / `SUBMIT` (workers; start and submit also the
-manager of a main task), and `Task CREATE` / `UPDATE` (managers: drafts
-made offline). A `Task CREATE` carries the task ID the app gave the
-draft; sending it again changes nothing, and an ID of someone else's
-task is refused (`409 TASK_ID_CONFLICT`).
+manager of a main task), and `Task CREATE` / `UPDATE`, `Requirement
+CREATE` / `UPDATE` / `DELETE` and `RequirementOrder UPDATE` (managers:
+drafts made offline). A `CREATE` carries the ID the app gave the task
+or requirement; sending it again changes nothing, and an ID that belongs
+to something else is refused (`409 TASK_ID_CONFLICT` /
+`REQUIREMENT_ID_CONFLICT`).
 
 The queue is stored in the database, not in memory, so nothing is lost
 when the app is closed or the phone restarts. Its contents can be shown
