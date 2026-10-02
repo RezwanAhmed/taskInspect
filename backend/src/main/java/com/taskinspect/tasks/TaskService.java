@@ -37,6 +37,12 @@ public class TaskService {
     static final String INVALID_REVIEWER = "INVALID_REVIEWER";
     static final String TASK_NOT_FOUND = "TASK_NOT_FOUND";
     static final String TASK_NOT_EDITABLE = "TASK_NOT_EDITABLE";
+    static final String NOT_A_MAIN_TASK = "NOT_A_MAIN_TASK";
+    static final String MAIN_TASK_CLOSED = "MAIN_TASK_CLOSED";
+
+    /** A main task gets new sub-tasks while its manager is working on it (also after a reject or correction request). */
+    private static final Set<TaskStatus> OPEN_FOR_SUB_TASKS = EnumSet.of(TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS,
+            TaskStatus.REJECTED, TaskStatus.CORRECTION_REQUESTED);
 
     /** A task's details can change only until the worker starts it. */
     private static final Set<TaskStatus> EDITABLE = EnumSet.of(TaskStatus.DRAFT, TaskStatus.OPEN, TaskStatus.ASSIGNED);
@@ -63,6 +69,43 @@ public class TaskService {
                 request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
         transitions.recordCreated(task, creator);
         return task;
+    }
+
+    /**
+     * The manager a main task is assigned to creates a draft sub-task of it
+     * (docs/architecture.md, "Tasks for Managers and Sub-tasks"). The
+     * sub-task is a normal task of that manager: they review it by default,
+     * and assign or publish it as usual.
+     */
+    @Transactional
+    public Task createSubTask(CurrentUser caller, UUID mainTaskId, CreateTaskRequest request) {
+        Task mainTask = get(caller, mainTaskId);
+        if (!mainTask.isMainTask()) {
+            throw new ApiException(HttpStatus.CONFLICT, NOT_A_MAIN_TASK,
+                    "Sub-tasks can only be added to a main task from an administrator");
+        }
+        // A main task that is not assigned yet has no manager, so nobody may add sub-tasks (403).
+        if (mainTask.getAssignee() == null || !mainTask.getAssignee().getId().equals(caller.id())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    "Only the manager the main task is assigned to can add sub-tasks");
+        }
+        if (!OPEN_FOR_SUB_TASKS.contains(mainTask.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, MAIN_TASK_CLOSED,
+                    "Sub-tasks can't be added while the main task is " + mainTask.getStatus());
+        }
+        User creator = userService.requireCaller(caller);
+        Task subTask = new Task(creator, request.title().trim(), clean(request.description()),
+                request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator));
+        subTask.makeSubTaskOf(mainTask);
+        taskRepository.save(subTask);
+        transitions.recordCreated(subTask, creator);
+        return subTask;
+    }
+
+    /** The sub-tasks of a main task the caller can see, oldest first. */
+    @Transactional(readOnly = true)
+    public List<Task> listSubTasks(CurrentUser caller, UUID mainTaskId) {
+        return taskRepository.findAllByParentTaskIdOrderByCreatedAtAscIdAsc(get(caller, mainTaskId).getId());
     }
 
     /**

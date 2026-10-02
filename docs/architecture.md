@@ -290,6 +290,12 @@ the assigned manager **starts** and **submits** it (the worker-only
 rules stay for every other task). A main task has no answers of its
 own: it is complete when all its sub-tasks are approved.
 
+The manager adds sub-tasks with `POST /api/tasks/{id}/sub-tasks` (same
+body as creating a task). A sub-task starts as `DRAFT`, is created by
+the manager (who reviews it by default) and carries `parentTaskId`;
+the manager then assigns it to a worker or publishes it, as any task.
+Workers see only their sub-task, never the main task.
+
 A task an administrator creates is a main task: its reviewer is an
 administrator (by default the creator), it is assigned to an active
 manager without requirements, and it cannot be published as an open
@@ -634,6 +640,8 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/assign` | The manager who created the task (to a worker); the administrator who created a main task (to a manager) | `403` |
 | `POST /api/tasks/{id}/publish` (`{"scope": "TEAM" \| "EVERYONE"}`) | The manager who created the task, while DRAFT | `403` |
+| `POST /api/tasks/{id}/sub-tasks` | The manager the main task is assigned to, while ASSIGNED / IN_PROGRESS / REJECTED / CORRECTION_REQUESTED (`409 MAIN_TASK_CLOSED` otherwise, `409 NOT_A_MAIN_TASK` for other tasks) | `403` |
+| `GET /api/tasks/{id}/sub-tasks` | Administrators and managers | `403` / `404` |
 | `POST /api/tasks/{id}/take` | A worker the open task is open to; the first one wins (`409 TASK_ALREADY_TAKEN` for the others); taking it again returns it unchanged | `403` / `404` |
 | `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |

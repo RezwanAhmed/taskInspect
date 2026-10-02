@@ -70,6 +70,10 @@ public class Task {
     @Column(name = "open_scope", length = 20)
     private OpenScope openScope;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_task_id", updatable = false)
+    private Task parentTask;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -110,6 +114,11 @@ public class Task {
 
     void assignTo(User worker) {
         this.assignee = worker;
+    }
+
+    /** Makes a new task a sub-task of a main task; set once, before it is first saved. */
+    void makeSubTaskOf(Task mainTask) {
+        this.parentTask = mainTask;
     }
 
     /** Sets who may take the task once it is published (OPEN). */
@@ -173,6 +182,11 @@ public class Task {
      */
     public boolean isMainTask() {
         return createdBy.hasRole(RoleName.ADMINISTRATOR);
+    }
+
+    /** The main task of a sub-task; {@code null} for every other task. */
+    public UUID getParentTaskId() {
+        return parentTask == null ? null : parentTask.getId();
     }
 
     /** Who may take the task while it is OPEN; {@code null} in every other status. */

@@ -33,6 +33,10 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
     @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
     List<Task> findAll(Specification<Task> spec);
 
+    /** The sub-tasks of a main task, oldest first. */
+    @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
+    List<Task> findAllByParentTaskIdOrderByCreatedAtAscIdAsc(UUID parentTaskId);
+
     /**
      * Sets {@code updatedAt} without a new version, e.g. when a requirement
      * changed, so the sync pull sends the task again but the manager can

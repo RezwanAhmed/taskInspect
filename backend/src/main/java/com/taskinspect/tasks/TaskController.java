@@ -18,6 +18,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.net.URI;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -111,6 +112,25 @@ public class TaskController {
     public TaskResponse publish(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
             @Valid @RequestBody PublishTaskRequest request) {
         return TaskResponse.from(assignmentService.publish(CurrentUser.from(jwt), id, request.scope()));
+    }
+
+    @PostMapping("/{id}/sub-tasks")
+    @PreAuthorize(Roles.MANAGER)
+    @Operation(summary = "Add a sub-task to a main task", description = "Only the manager the main task is "
+            + "assigned to, while it is ASSIGNED, IN_PROGRESS, REJECTED or CORRECTION_REQUESTED (409 "
+            + "MAIN_TASK_CLOSED otherwise; 409 NOT_A_MAIN_TASK for other tasks). The sub-task starts as DRAFT and "
+            + "is assigned or published like any task; without `reviewerId` the manager reviews it.")
+    public ResponseEntity<TaskResponse> createSubTask(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+            @Valid @RequestBody CreateTaskRequest request) {
+        Task task = taskService.createSubTask(CurrentUser.from(jwt), id, request);
+        return ResponseEntity.created(URI.create("/api/tasks/" + task.getId())).body(TaskResponse.from(task));
+    }
+
+    @GetMapping("/{id}/sub-tasks")
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
+    @Operation(summary = "List a main task's sub-tasks", description = "Oldest first; empty for other tasks.")
+    public List<TaskResponse> listSubTasks(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return taskService.listSubTasks(CurrentUser.from(jwt), id).stream().map(TaskResponse::from).toList();
     }
 
     @PostMapping("/{id}/take")
