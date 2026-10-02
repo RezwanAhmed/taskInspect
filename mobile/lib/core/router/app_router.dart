@@ -12,6 +12,7 @@ import 'package:taskinspect/features/tasks/presentation/pages/task_details_page.
 import 'package:taskinspect/features/tasks/presentation/pages/task_history_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_list_page.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
+import 'package:taskinspect/features/teams/presentation/pages/teams_page.dart';
 
 /// Route paths, so screens never hard-code URLs.
 abstract final class AppRoutes {
@@ -19,6 +20,7 @@ abstract final class AppRoutes {
   static const login = '/login';
   static const home = '/home';
   static const tasks = '/tasks';
+  static const teams = '/teams';
 
   /// The task list opened on one tab, e.g. `/tasks?tab=inProgress`.
   static String tasksOn(TaskTab tab) => '$tasks?tab=${tab.name}';
@@ -52,6 +54,7 @@ GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.spl
       GoRoute(path: AppRoutes.splash, builder: (context, state) => const SplashPage()),
       GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginPage()),
       GoRoute(path: AppRoutes.home, builder: (context, state) => const HomePage()),
+      GoRoute(path: AppRoutes.teams, builder: (context, state) => const TeamsPage()),
       GoRoute(
         path: AppRoutes.tasks,
         builder: (context, state) => TaskListPage(initialTab: TaskTab.parse(state.uri.queryParameters['tab'])),

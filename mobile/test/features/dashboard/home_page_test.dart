@@ -3,7 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
+import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/teams/domain/entities/team_summary.dart';
+import 'package:taskinspect/features/teams/domain/repositories/team_repository.dart';
+import 'package:taskinspect/features/teams/domain/usecases/load_teams.dart';
 
 import '../../helpers/fake_auth.dart';
 import '../../helpers/fake_tasks.dart';
@@ -67,4 +71,22 @@ void main() {
     expect(find.byKey(const Key('dashboard-message')), findsNothing);
     expect(tasks.refreshes, 2);
   });
+
+  testWidgets('a worker opens the Teams page from the dashboard', (tester) async {
+    getIt.registerFactory(() => LoadTeams(_OneTeam()));
+    await open(tester, FakeTaskRepository());
+
+    await tester.tap(find.byTooltip('Teams'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mia Manager'), findsOneWidget);
+    expect(find.text('2 members · 4 open tasks'), findsOneWidget);
+  });
+}
+
+class _OneTeam implements TeamRepository {
+  @override
+  Future<Result<List<TeamSummary>>> loadTeams() async => const Ok([
+        TeamSummary(managerId: 'm1', managerName: 'Mia Manager', memberCount: 2, unfinishedTaskCount: 4, isMyTeam: true),
+      ]);
 }

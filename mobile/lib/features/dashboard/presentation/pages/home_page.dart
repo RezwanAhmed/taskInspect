@@ -69,6 +69,11 @@ class _DashboardView extends StatelessWidget {
         title: const Text('Dashboard'),
         actions: [
           IconButton(
+            tooltip: 'Teams',
+            icon: const Icon(Icons.groups_outlined),
+            onPressed: () => context.push(AppRoutes.teams),
+          ),
+          IconButton(
             tooltip: 'All tasks',
             icon: const Icon(Icons.list_alt),
             onPressed: () => context.push(AppRoutes.tasks),

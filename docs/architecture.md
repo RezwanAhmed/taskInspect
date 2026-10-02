@@ -243,7 +243,10 @@ the task lifecycle above; everything else stays as described there.
 | Of other teams | Only numbers per manager: how many tasks, how many team members |
 
 The server enforces this on every call, including the sync pull: a tile
-is sent without requirements, and other teams only as counts.
+is sent without requirements, and other teams only as counts. In the
+app, the **Teams** page (from the dashboard) shows every manager's team
+in numbers: members and open tasks, the user's own team marked. It is
+loaded online (`GET /api/teams`), not stored on the device.
 
 ### Open Tasks
 

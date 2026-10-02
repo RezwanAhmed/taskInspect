@@ -55,6 +55,9 @@ import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_team_tasks.dart';
+import 'package:taskinspect/features/teams/data/team_repository_impl.dart';
+import 'package:taskinspect/features/teams/domain/repositories/team_repository.dart';
+import 'package:taskinspect/features/teams/domain/usecases/load_teams.dart';
 
 /// The app's service locator. Every dependency is registered in
 /// [configureDependencies]; widgets and BLoCs never create their own
@@ -163,6 +166,9 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     ..registerFactory(() => TakeTask(getIt()))
     ..registerFactory(() => SubmitTask(getIt()))
     ..registerFactory(() => LoadTaskHistory(getIt()))
+    // Teams
+    ..registerLazySingleton<TeamRepository>(() => TeamRepositoryImpl(getIt()))
+    ..registerFactory(() => LoadTeams(getIt()))
     // Answers and evidence
     ..registerLazySingleton<EvidencePicker>(DeviceEvidencePicker.new)
     ..registerLazySingleton<DocumentOpener>(() => const OpenFilexDocumentOpener())
