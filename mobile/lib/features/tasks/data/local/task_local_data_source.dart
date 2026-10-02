@@ -174,6 +174,11 @@ class TaskLocalDataSource {
         updatedAt: row.updatedAt,
       );
 
+  /// Whether changes of the task are still waiting in the sync queue
+  /// (e.g. a draft the server doesn't have yet).
+  Future<bool> hasQueuedChanges(String taskId) async =>
+      (await _taskIdsInQueue()).contains(taskId);
+
   Future<Set<String>> _taskIdsInQueue() {
     final queue = _db.localSyncOperations;
     final query = _db.selectOnly(queue, distinct: true)..addColumns([queue.taskId]);

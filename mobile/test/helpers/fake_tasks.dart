@@ -20,7 +20,9 @@ import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/assign_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/edit_requirements.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
@@ -249,6 +251,45 @@ class FakeTaskRepository implements TaskRepository {
     final byId = {for (final r in requirements[taskId] ?? const <Requirement>[]) r.id: r};
     requirements = {...requirements, taskId: [for (final id in requirementIds) if (byId[id] != null) byId[id]!]};
     return const Ok(null);
+  }
+
+  /// Workers for [loadWorkers]; when set, assigning or publishing fails with [assignFailure].
+  List<WorkerOption> workers = const [];
+  Failure? assignFailure;
+
+  @override
+  Future<Result<List<WorkerOption>>> loadWorkers(String managerId) async => Ok(workers);
+
+  @override
+  Future<Result<Task>> assign(String taskId, String workerId) async {
+    final worker = workers.firstWhere((w) => w.id == workerId);
+    return _changeStatus(taskId, TaskStatus.assigned, PersonRef(id: worker.id, name: worker.name));
+  }
+
+  @override
+  Future<Result<Task>> publish(String taskId, OpenScope scope) async =>
+      _changeStatus(taskId, TaskStatus.open, null);
+
+  Result<Task> _changeStatus(String taskId, TaskStatus status, PersonRef? assignee) {
+    if (assignFailure case final failure?) {
+      return Err(failure);
+    }
+    final task = current.firstWhere((t) => t.id == taskId);
+    final changed = Task(
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      status: status,
+      dueDate: task.dueDate,
+      createdBy: task.createdBy,
+      reviewer: task.reviewer,
+      assignee: assignee,
+      version: task.version + 1,
+      updatedAt: task.updatedAt,
+    );
+    emit([for (final t in current) t.id == taskId ? changed : t]);
+    return Ok(changed);
   }
 
   /// Sub-tasks per main task ID for [loadSubTasks], or [subTasksFailure].
@@ -526,6 +567,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<LoadSubTasks>() ? getIt.unregister<LoadSubTasks>() : null,
     () => getIt.isRegistered<SaveDraftTask>() ? getIt.unregister<SaveDraftTask>() : null,
     () => getIt.isRegistered<EditRequirements>() ? getIt.unregister<EditRequirements>() : null,
+    () => getIt.isRegistered<AssignTask>() ? getIt.unregister<AssignTask>() : null,
     () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
     () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
@@ -546,6 +588,7 @@ void registerFakeTasks(
     ..registerFactory(() => LoadSubTasks(repository))
     ..registerFactory(() => SaveDraftTask(repository))
     ..registerFactory(() => EditRequirements(repository))
+    ..registerFactory(() => AssignTask(repository))
     ..registerFactory(() => SubmitTask(repository))
     ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())

@@ -10,6 +10,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 
 class TaskRepositoryImpl implements TaskRepository {
@@ -93,6 +94,37 @@ class TaskRepositoryImpl implements TaskRepository {
       await _local.reorderRequirements(taskId, requirementIds)
           ? const Ok(null)
           : const Err(InvalidInputFailure(field: 'requirements', message: 'The requirements changed meanwhile.'));
+
+  /// Kept when a draft's changes still wait in the sync queue.
+  static const notSyncedYet =
+      InvalidInputFailure(field: 'task', message: 'This task is not on the server yet. Sync first, then try again.');
+
+  @override
+  Future<Result<List<WorkerOption>>> loadWorkers(String managerId) async {
+    final result = await _remote.fetchWorkers(managerId);
+    return switch (result) {
+      Ok(:final value) => Ok([...value.where((w) => w.inMyTeam), ...value.where((w) => !w.inMyTeam)]),
+      Err() => result,
+    };
+  }
+
+  @override
+  Future<Result<Task>> assign(String taskId, String workerId) =>
+      _sentNow(taskId, () => _remote.assign(taskId, workerId));
+
+  @override
+  Future<Result<Task>> publish(String taskId, OpenScope scope) => _sentNow(taskId, () => _remote.publish(taskId, scope));
+
+  Future<Result<Task>> _sentNow(String taskId, Future<Result<Task>> Function() call) async {
+    if (await _local.hasQueuedChanges(taskId)) {
+      return const Err(notSyncedYet);
+    }
+    final result = await call();
+    if (result case Ok(:final value)) {
+      await _local.saveTaskDetails(value);
+    }
+    return result;
+  }
 
   @override
   Future<Result<List<Task>>> loadSubTasks(String mainTaskId) => _remote.fetchSubTasks(mainTaskId);

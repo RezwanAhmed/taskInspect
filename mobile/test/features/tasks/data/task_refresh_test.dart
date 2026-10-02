@@ -12,7 +12,9 @@ import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dar
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
 
 import '../../../helpers/fake_server.dart';
 
@@ -233,6 +235,74 @@ void main() {
 
       expect(await repository.take('t1'), isA<Err<Task>>());
       expect((await local.watchTask('t1').first)!.status, TaskStatus.open);
+    });
+  });
+
+  group('assign and publish', () {
+    Future<void> storeDraft() => local.saveTask(
+          Task(
+            id: 't1',
+            title: 'Boiler room',
+            priority: TaskPriority.high,
+            status: TaskStatus.draft,
+            dueDate: DateTime.utc(2026, 10, 2, 9),
+            createdBy: const PersonRef(id: 'm1', name: 'Mia Manager'),
+            reviewer: const PersonRef(id: 'm1', name: 'Mia Manager'),
+            version: 0,
+            updatedAt: DateTime.utc(2026, 10, 1),
+          ),
+          const [],
+        );
+
+    test('lists active workers, my team first', () async {
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        expect(request.queryParameters['role'], 'WORKER');
+        return (200, page([
+          {'id': 'w2', 'fullName': 'Olga Other', 'active': true, 'teamManager': {'id': 'm2', 'fullName': 'Max'}},
+          {'id': 'w1', 'fullName': 'Wendy Worker', 'active': true, 'teamManager': {'id': 'm1', 'fullName': 'Mia'}},
+          {'id': 'w3', 'fullName': 'Gone', 'active': false, 'teamManager': null},
+        ], 0, 1));
+      });
+
+      final result = await repository.loadWorkers('m1');
+
+      expect([for (final w in (result as Ok<List<WorkerOption>>).value) '${w.name}/${w.inMyTeam}'],
+          ['Wendy Worker/true', 'Olga Other/false']);
+    });
+
+    test('assigning stores the task as the server returns it', () async {
+      await storeDraft();
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        expect(request.path, '/api/tasks/t1/assign');
+        expect(request.data, {'assigneeId': 'w1'});
+        return (200, taskJson('t1', 'Boiler room'));
+      });
+
+      expect(await repository.assign('t1', 'w1'), isA<Ok<Task>>());
+      expect((await local.watchTask('t1').first)!.status, TaskStatus.assigned);
+    });
+
+    test('publishing sends the scope', () async {
+      await storeDraft();
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        expect(request.data, {'scope': 'EVERYONE'});
+        return (200, taskJson('t1', 'Boiler room', status: 'OPEN'));
+      });
+
+      expect(await repository.publish('t1', OpenScope.everyone), isA<Ok<Task>>());
+      expect((await local.watchTask('t1').first)!.status, TaskStatus.open);
+    });
+
+    test('a draft whose changes still wait in the queue is not sent', () async {
+      final draft = await local.createDraft(
+        TaskDraft(title: 'New', priority: TaskPriority.low, dueDate: DateTime.utc(2026, 12, 1)),
+        creator: const PersonRef(id: 'm1', name: 'Mia Manager'),
+      );
+      api.dio.httpClientAdapter = FakeServer((_) async => fail('nothing may be sent'));
+
+      final result = await repository.assign(draft.id, 'w1');
+
+      expect((result as Err<Task>).failure, TaskRepositoryImpl.notSyncedYet);
     });
   });
 }

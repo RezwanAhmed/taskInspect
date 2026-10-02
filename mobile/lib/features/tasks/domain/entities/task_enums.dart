@@ -58,3 +58,14 @@ enum RequirementType {
   /// Photos and documents are answered with evidence files.
   bool get isEvidence => this == photo || this == document;
 }
+
+/// Who may take an open task (Phase 7A): the publishing manager's team or
+/// every worker of the organization.
+enum OpenScope {
+  team('TEAM'),
+  everyone('EVERYONE');
+
+  const OpenScope(this.apiName);
+
+  final String apiName;
+}

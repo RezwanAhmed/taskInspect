@@ -5,10 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/app.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
+import 'package:taskinspect/features/tasks/presentation/widgets/assign_sheet.dart';
 
 import '../../../helpers/fake_auth.dart';
 import '../../../helpers/fake_tasks.dart';
@@ -101,5 +104,62 @@ void main() {
     await go(tester, AppRoutes.task('t1'));
 
     expect(find.byTooltip('Edit'), findsNothing);
+  });
+
+  group('assign or publish a draft', () {
+    Future<FakeTaskRepository> openDraft(WidgetTester tester, AuthUser user) async {
+      final tasks = FakeTaskRepository([fakeTask('d1', title: 'Boiler room', status: TaskStatus.draft)])
+        ..workers = const [
+          WorkerOption(id: 'u1', name: 'Wendy Worker', inMyTeam: true),
+          WorkerOption(id: 'u3', name: 'Olga Other', inMyTeam: false),
+        ];
+      registerFakeTasks(tasks);
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: user))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('d1'));
+      return tasks;
+    }
+
+    testWidgets('the creator assigns it to a worker of the team', (tester) async {
+      final tasks = await openDraft(tester, testManager);
+
+      await tester.tap(find.byKey(const Key('assign-task')));
+      await tester.pumpAndSettle();
+      expect(find.text('My team'), findsOneWidget);
+      await tester.tap(find.descendant(of: find.byType(AssignSheet), matching: find.text('Wendy Worker')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Assigned to Wendy Worker.'), findsOneWidget);
+      expect(tasks.current.single.status, TaskStatus.assigned);
+      expect(find.byKey(const Key('assign-task')), findsNothing);
+    });
+
+    testWidgets('publishing to everyone; a refusal is shown in the sheet', (tester) async {
+      final tasks = await openDraft(tester, testManager);
+      tasks.assignFailure = const ServerFailure(statusCode: 409, code: 'TASK_HAS_NO_REQUIREMENTS');
+
+      await tester.tap(find.byKey(const Key('assign-task')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('To everyone'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add at least one requirement first.'), findsOneWidget);
+
+      tasks.assignFailure = const ServerFailure(statusCode: 400, code: 'REVIEWER_IS_ASSIGNEE');
+      await tester.tap(find.descendant(of: find.byType(AssignSheet), matching: find.text('Olga Other')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('The reviewer cannot also be the worker.'), findsOneWidget);
+
+      tasks.assignFailure = null;
+      await tester.tap(find.text('To everyone'));
+      await tester.pumpAndSettle();
+      expect(find.text('Published to every worker.'), findsOneWidget);
+      expect(tasks.current.single.status, TaskStatus.open);
+    });
+
+    testWidgets('workers get no assign button', (tester) async {
+      await openDraft(tester, testWorker);
+
+      expect(find.byKey(const Key('assign-task')), findsNothing);
+    });
   });
 }

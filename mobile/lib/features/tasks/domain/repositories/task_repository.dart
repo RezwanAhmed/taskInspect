@@ -7,6 +7,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/worker_option.dart';
 
 /// Tasks as the screens see them. Everything is read from the local
 /// database as live streams, so screens update by themselves and work the
@@ -54,6 +55,16 @@ abstract interface class TaskRepository {
   Future<Result<void>> deleteRequirement(String taskId, String requirementId);
 
   Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds);
+
+  /// Active workers from the server, [managerId]'s team first (online).
+  Future<Result<List<WorkerOption>>> loadWorkers(String managerId);
+
+  /// Assigns a draft to a worker / publishes it as an open task (online).
+  /// Refused while changes of the task still wait to be synced; on success
+  /// the task is stored with its new status.
+  Future<Result<Task>> assign(String taskId, String workerId);
+
+  Future<Result<Task>> publish(String taskId, OpenScope scope);
 
   /// The sub-tasks of a main task from the server (needs a connection;
   /// not stored on the device).
