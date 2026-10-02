@@ -184,7 +184,8 @@ public class RequirementService {
                         "Requirement not found"));
     }
 
-    private static void validate(RequirementRequest request) {
+    /** Checks the settings that depend on the type (package-private for the unit tests). */
+    static void validate(RequirementRequest request) {
         List<String> options = request.options() == null ? List.of() : request.options();
         if (request.type().hasOptions() && options.size() < 2) {
             throw invalid(request.type() + " needs at least two options");
