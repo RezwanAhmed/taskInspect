@@ -16,6 +16,7 @@ import com.taskinspect.tasks.TaskAction;
 import com.taskinspect.tasks.TaskRepository;
 import com.taskinspect.tasks.TaskService;
 import com.taskinspect.tasks.TaskStateMachine;
+import com.taskinspect.tasks.TaskStatus;
 import com.taskinspect.tasks.TaskTransitionService;
 import com.taskinspect.users.UserService;
 import java.util.List;
@@ -39,6 +40,8 @@ public class SubmissionService {
 
     public static final String REQUIREMENTS_MISSING = "REQUIREMENTS_MISSING";
     public static final String EVIDENCE_NOT_UPLOADED = "EVIDENCE_NOT_UPLOADED";
+    public static final String NO_SUB_TASKS = "NO_SUB_TASKS";
+    public static final String SUB_TASKS_NOT_APPROVED = "SUB_TASKS_NOT_APPROVED";
 
     private final TaskService taskService;
     private final TaskStateMachine stateMachine;
@@ -71,6 +74,9 @@ public class SubmissionService {
         Task task = taskService.requireAssignee(caller, taskId);
         // The status first (409 TASK_INVALID_TRANSITION etc.), then what is missing.
         stateMachine.next(task.getStatus(), TaskAction.SUBMIT);
+        if (task.isMainTask()) {
+            requireSubTasksApproved(task);
+        }
 
         List<Evidence> evidence = evidenceRepository.findAllByTaskIdOrderByCreatedAtAsc(task.getId());
         long waiting = evidence.stream().filter(e -> e.getStatus() != EvidenceStatus.UPLOADED).count();
@@ -111,6 +117,31 @@ public class SubmissionService {
             case DOCUMENT -> "a document is required";
             default -> "an answer is required";
         };
+    }
+
+    /**
+     * A main task has no answers of its own: it is complete when it has
+     * sub-tasks and every one that is not cancelled is approved
+     * (docs/architecture.md, "Tasks for Managers and Sub-tasks"). Approved and
+     * cancelled are final, and adding a sub-task locks the main task like
+     * submit does, so the check cannot be overtaken (not covered by a test).
+     */
+    private void requireSubTasksApproved(Task mainTask) {
+        List<Task> subTasks = taskRepository.findAllByParentTaskIdOrderByCreatedAtAscIdAsc(mainTask.getId()).stream()
+                .filter(t -> t.getStatus() != TaskStatus.CANCELLED)
+                .toList();
+        if (subTasks.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, NO_SUB_TASKS,
+                    "Add sub-tasks and get them approved before submitting the main task");
+        }
+        List<ErrorResponse.FieldError> open = subTasks.stream()
+                .filter(t -> t.getStatus() != TaskStatus.APPROVED)
+                .map(t -> new ErrorResponse.FieldError(t.getId().toString(), t.getTitle() + ": " + t.getStatus()))
+                .toList();
+        if (!open.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, SUB_TASKS_NOT_APPROVED,
+                    open.size() + " of " + subTasks.size() + " sub-tasks are not approved yet", open);
+        }
     }
 
 }

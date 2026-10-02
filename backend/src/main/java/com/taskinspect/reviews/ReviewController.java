@@ -30,8 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 public class ReviewController {
 
-    private static final String WHO = "The task's reviewer (a manager), never its worker - except a personal task "
-            + "a manager assigned to themself. ";
+    private static final String WHO = "The task's reviewer (a manager; an administrator for a main task), never its "
+            + "worker - except a personal task a manager assigned to themself. ";
 
     private final ReviewService reviewService;
 
@@ -40,7 +40,7 @@ public class ReviewController {
     }
 
     @PostMapping("/approve")
-    @PreAuthorize(Roles.MANAGER)
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
     @Operation(summary = "Approve a submitted task", description = WHO + "SUBMITTED → APPROVED (final). "
             + "Optional body: {\"comment\": \"...\"}.")
     public TaskResponse approve(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
@@ -50,7 +50,7 @@ public class ReviewController {
     }
 
     @PostMapping("/reject")
-    @PreAuthorize(Roles.MANAGER)
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
     @Operation(summary = "Reject a submitted task", description = WHO + "SUBMITTED → REJECTED with a reason; the "
             + "worker can change every answer and photo, then submits again.")
     public TaskResponse reject(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
@@ -59,7 +59,7 @@ public class ReviewController {
     }
 
     @PostMapping("/request-correction")
-    @PreAuthorize(Roles.MANAGER)
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
     @Operation(summary = "Request a correction", description = WHO + "SUBMITTED → CORRECTION_REQUESTED. At least "
             + "one requirement of the task is marked, each with a comment; only those go back to the worker.")
     public TaskResponse requestCorrection(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,

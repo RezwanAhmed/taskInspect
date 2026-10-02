@@ -11,6 +11,8 @@ public final class Roles {
     public static final String MANAGER = "hasRole('MANAGER')";
     public static final String WORKER = "hasRole('WORKER')";
     public static final String ADMIN_OR_MANAGER = "hasAnyRole('ADMINISTRATOR', 'MANAGER')";
+    /** Workers, and managers working on a main task (Phase 7A); the services check the assignee. */
+    public static final String WORKER_OR_MANAGER = "hasAnyRole('WORKER', 'MANAGER')";
 
     private Roles() {
     }

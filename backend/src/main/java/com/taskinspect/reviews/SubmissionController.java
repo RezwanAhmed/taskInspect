@@ -29,11 +29,14 @@ public class SubmissionController {
     }
 
     @PostMapping("/submit")
-    @PreAuthorize(Roles.WORKER)
+    @PreAuthorize(Roles.WORKER_OR_MANAGER)
     @Operation(summary = "Submit a task for review", description = "The assigned worker only. IN_PROGRESS → "
             + "SUBMITTED. Every required requirement needs an answer (or an uploaded file for PHOTO / DOCUMENT), "
             + "and no file may still be waiting for its upload: 409 REQUIREMENTS_MISSING (the missing "
-            + "requirements are listed in errors, field = requirement ID) or 409 EVIDENCE_NOT_UPLOADED.")
+            + "requirements are listed in errors, field = requirement ID) or 409 EVIDENCE_NOT_UPLOADED. "
+            + "A main task is submitted by its manager once it has sub-tasks and every one that is not "
+            + "cancelled is approved: 409 NO_SUB_TASKS or 409 SUB_TASKS_NOT_APPROVED (listed in errors, "
+            + "field = sub-task ID).")
     public TaskResponse submit(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return TaskResponse.from(submissionService.submit(CurrentUser.from(jwt), id));
     }

@@ -79,6 +79,8 @@ public class TaskService {
      */
     @Transactional
     public Task createSubTask(CurrentUser caller, UUID mainTaskId, CreateTaskRequest request) {
+        // Waits for a submit of the main task running at the same time, so no sub-task is added after its check.
+        lockForUpdate(mainTaskId);
         Task mainTask = get(caller, mainTaskId);
         if (!mainTask.isMainTask()) {
             throw new ApiException(HttpStatus.CONFLICT, NOT_A_MAIN_TASK,

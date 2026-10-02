@@ -296,6 +296,14 @@ the manager (who reviews it by default) and carries `parentTaskId`;
 the manager then assigns it to a worker or publishes it, as any task.
 Workers see only their sub-task, never the main task.
 
+The main task's progress is the number of approved sub-tasks out of
+those not cancelled (the app counts them from
+`GET /api/tasks/{id}/sub-tasks`). The manager starts the main task and
+submits it once every sub-task that is not cancelled is approved; the
+administrator then approves or rejects it. After a reject the manager
+starts it again and can add sub-tasks. (A correction request needs
+marked requirements, so it does not apply to a main task.)
+
 A task an administrator creates is a main task: its reviewer is an
 administrator (by default the creator), it is assigned to an active
 manager without requirements, and it cannot be published as an open
@@ -643,10 +651,10 @@ matters, ownership in the service. Tasks a user may not see answer
 | `POST /api/tasks/{id}/sub-tasks` | The manager the main task is assigned to, while ASSIGNED / IN_PROGRESS / REJECTED / CORRECTION_REQUESTED (`409 MAIN_TASK_CLOSED` otherwise, `409 NOT_A_MAIN_TASK` for other tasks) | `403` |
 | `GET /api/tasks/{id}/sub-tasks` | Administrators and managers | `403` / `404` |
 | `POST /api/tasks/{id}/take` | A worker the open task is open to; the first one wins (`409 TASK_ALREADY_TAKEN` for the others); taking it again returns it unchanged | `403` / `404` |
-| `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
+| `POST /api/tasks/{id}/start` | The assigned worker (main task: the assigned manager) | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
-| `POST /api/tasks/{id}/submit` | The assigned worker, while IN_PROGRESS; every required requirement answered (files uploaded) | `403` / `404` |
-| `POST /api/tasks/{id}/approve`, `…/reject`, `…/request-correction` | The task's reviewer (a manager), while SUBMITTED; never the task's worker, except a personal task a manager assigned to themself | `403` / `404` |
+| `POST /api/tasks/{id}/submit` | The assigned worker, while IN_PROGRESS; every required requirement answered (files uploaded). Main task: the assigned manager, once it has sub-tasks and every one not cancelled is approved (`409 NO_SUB_TASKS` / `409 SUB_TASKS_NOT_APPROVED`) | `403` / `404` |
+| `POST /api/tasks/{id}/approve`, `…/reject`, `…/request-correction` | The task's reviewer (a manager; an administrator for a main task), while SUBMITTED; never the task's worker, except a personal task a manager assigned to themself | `403` / `404` |
 | `GET /api/tasks/{id}/reviews`, `GET /api/tasks/{id}/history` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/requirements/{rid}/evidence`, `POST …/evidence/{eid}/upload-url`, `POST …/evidence/{eid}/complete`, `DELETE /api/tasks/{id}/evidence/{eid}` | The assigned worker, while IN_PROGRESS (PHOTO: JPEG/PNG up to 10 MB; DOCUMENT: PDF up to 20 MB) | `403` / `404` |
 | `GET /api/tasks/{id}/evidence/{eid}/download-url` | Anyone who can see the task | `404` |

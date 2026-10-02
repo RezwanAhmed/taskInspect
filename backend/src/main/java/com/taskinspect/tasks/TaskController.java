@@ -144,9 +144,10 @@ public class TaskController {
     }
 
     @PostMapping("/{id}/start")
-    @PreAuthorize(Roles.WORKER)
-    @Operation(summary = "Start working on a task", description = "The assigned worker only. ASSIGNED → "
-            + "IN_PROGRESS; also used to work on the task again after a reject or a correction request.")
+    @PreAuthorize(Roles.WORKER_OR_MANAGER)
+    @Operation(summary = "Start working on a task", description = "The assigned worker only (for a main task: "
+            + "the assigned manager). ASSIGNED → IN_PROGRESS; also used to work on the task again after a reject "
+            + "or a correction request.")
     public TaskResponse start(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         return TaskResponse.from(taskService.start(CurrentUser.from(jwt), id));
     }
