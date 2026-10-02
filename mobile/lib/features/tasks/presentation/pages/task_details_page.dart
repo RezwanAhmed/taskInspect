@@ -153,6 +153,9 @@ class TaskDetailsPage extends StatelessWidget {
                 mainTaskPanel: user != null && LoadSubTasks.isMainTask(task, user)
                     ? MainTaskPanel(task: task)
                     : null,
+                onEditRequirements: user != null && SaveDraftTask.canEdit(task, user)
+                    ? () => context.push(AppRoutes.editRequirements(taskId))
+                    : null,
               ),
             },
           );
@@ -178,6 +181,7 @@ class _Details extends StatelessWidget {
     required this.requirements,
     this.review,
     this.mainTaskPanel,
+    this.onEditRequirements,
   });
 
   final Task task;
@@ -186,6 +190,9 @@ class _Details extends StatelessWidget {
 
   /// For the manager of a main task: its sub-tasks and the submit.
   final Widget? mainTaskPanel;
+
+  /// For the task's creator while it can still be edited.
+  final VoidCallback? onEditRequirements;
 
   @override
   Widget build(BuildContext context) {
@@ -253,9 +260,22 @@ class _Details extends StatelessWidget {
           value: task.reviewer.name,
         ),
         const Divider(height: 32),
-        Text(
-          'Requirements (${requirements.length})',
-          style: theme.textTheme.titleMedium,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Requirements (${requirements.length})',
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            if (onEditRequirements != null)
+              TextButton.icon(
+                key: const Key('edit-requirements'),
+                onPressed: onEditRequirements,
+                icon: const Icon(Icons.edit_note),
+                label: const Text('Edit'),
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         if (requirements.isEmpty) const Text('No requirements yet.'),

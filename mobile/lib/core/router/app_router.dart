@@ -8,6 +8,7 @@ import 'package:taskinspect/features/authentication/presentation/pages/splash_pa
 import 'package:taskinspect/features/dashboard/presentation/pages/home_page.dart';
 import 'package:taskinspect/features/requirements/presentation/pages/execution_page.dart';
 import 'package:taskinspect/features/review/presentation/pages/review_page.dart';
+import 'package:taskinspect/features/tasks/presentation/pages/requirement_editor_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_details_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_form_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_history_page.dart';
@@ -31,6 +32,8 @@ abstract final class AppRoutes {
   static const newTask = '$tasks/new';
 
   static String editTask(String id) => '$tasks/$id/edit';
+
+  static String editRequirements(String id) => '$tasks/$id/requirements';
 
   static String execute(String id) => '$tasks/$id/execute';
 
@@ -73,6 +76,10 @@ GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.spl
       GoRoute(
         path: '${AppRoutes.tasks}/:id/edit',
         builder: (context, state) => TaskFormPage(taskId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/requirements',
+        builder: (context, state) => RequirementEditorPage(taskId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '${AppRoutes.tasks}/:id/execute',

@@ -52,7 +52,18 @@ class FakeTaskRepository implements TaskRepository {
 
   final List<StreamController<List<Task>>> _watchers = [];
   List<Task> current;
-  Map<String, List<Requirement>> requirements = {};
+  /// Requirements per task ID; changing them notifies every watcher, like the local database.
+  Map<String, List<Requirement>> get requirements => _requirements;
+
+  set requirements(Map<String, List<Requirement>> value) {
+    _requirements = value;
+    for (final (taskId, watcher) in _requirementWatchers) {
+      watcher.add(value[taskId] ?? const []);
+    }
+  }
+
+  Map<String, List<Requirement>> _requirements = {};
+  final List<(String, StreamController<List<Requirement>>)> _requirementWatchers = [];
   Failure? refreshFailure;
   int refreshes = 0;
 
@@ -93,8 +104,18 @@ class FakeTaskRepository implements TaskRepository {
       watchTasks().map((tasks) => tasks.where((t) => t.id == id).firstOrNull);
 
   @override
-  Stream<List<Requirement>> watchRequirements(String taskId) async* {
-    yield requirements[taskId] ?? const [];
+  Stream<List<Requirement>> watchRequirements(String taskId) {
+    // Ends when its listener cancels (onCancel), like watchTasks.
+    // ignore: close_sinks
+    late final StreamController<List<Requirement>> controller;
+    controller = StreamController<List<Requirement>>(
+      onListen: () {
+        _requirementWatchers.add((taskId, controller));
+        controller.add(requirements[taskId] ?? const []);
+      },
+      onCancel: () => _requirementWatchers.removeWhere((entry) => entry.$2 == controller),
+    );
+    return controller.stream;
   }
 
   @override
@@ -225,6 +246,8 @@ class FakeTaskRepository implements TaskRepository {
   @override
   Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds) async {
     lastOrder = requirementIds;
+    final byId = {for (final r in requirements[taskId] ?? const <Requirement>[]) r.id: r};
+    requirements = {...requirements, taskId: [for (final id in requirementIds) if (byId[id] != null) byId[id]!]};
     return const Ok(null);
   }
 
