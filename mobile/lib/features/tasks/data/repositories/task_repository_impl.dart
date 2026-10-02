@@ -4,6 +4,7 @@ import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dar
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -70,6 +71,28 @@ class TaskRepositoryImpl implements TaskRepository {
         ? const Err(InvalidInputFailure(field: 'task', message: 'This task can no longer be edited.'))
         : Ok(updated);
   }
+
+  @override
+  Future<Result<Requirement>> addRequirement(String taskId, RequirementDraft draft) async =>
+      Ok(await _local.addRequirement(taskId, draft));
+
+  @override
+  Future<Result<void>> updateRequirement(String taskId, String requirementId, RequirementDraft draft) async {
+    await _local.updateRequirement(taskId, requirementId, draft);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> deleteRequirement(String taskId, String requirementId) async {
+    await _local.deleteRequirement(taskId, requirementId);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds) async =>
+      await _local.reorderRequirements(taskId, requirementIds)
+          ? const Ok(null)
+          : const Err(InvalidInputFailure(field: 'requirements', message: 'The requirements changed meanwhile.'));
 
   @override
   Future<Result<List<Task>>> loadSubTasks(String mainTaskId) => _remote.fetchSubTasks(mainTaskId);

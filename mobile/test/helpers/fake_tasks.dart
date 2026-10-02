@@ -14,12 +14,14 @@ import 'package:taskinspect/features/requirements/domain/entities/answer.dart';
 import 'package:taskinspect/features/requirements/domain/repositories/answer_repository.dart';
 import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/edit_requirements.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
@@ -157,6 +159,73 @@ class FakeTaskRepository implements TaskRepository {
     );
     emit([for (final t in current) t.id == taskId ? updated : t]);
     return Ok(updated);
+  }
+
+  @override
+  Future<Result<Requirement>> addRequirement(String taskId, RequirementDraft draft) async {
+    final list = requirements[taskId] ?? const <Requirement>[];
+    final requirement = Requirement(
+      id: 'r${list.length + 1}-$taskId',
+      taskId: taskId,
+      title: draft.title,
+      description: draft.description,
+      type: draft.type,
+      required: draft.required,
+      position: list.length,
+      unit: draft.unit,
+      options: [
+        for (final (index, label) in draft.options.indexed) RequirementOption(id: 'o$index', label: label, position: index),
+      ],
+    );
+    requirements = {...requirements, taskId: [...list, requirement]};
+    return Ok(requirement);
+  }
+
+  @override
+  Future<Result<void>> updateRequirement(String taskId, String requirementId, RequirementDraft draft) async {
+    requirements = {
+      ...requirements,
+      taskId: [
+        for (final r in requirements[taskId] ?? const <Requirement>[])
+          r.id == requirementId
+              ? Requirement(
+                  id: r.id,
+                  taskId: taskId,
+                  title: draft.title,
+                  description: draft.description,
+                  type: draft.type,
+                  required: draft.required,
+                  position: r.position,
+                  unit: draft.type == RequirementType.number ? draft.unit : null,
+                  options: draft.type.hasOptions
+                      ? [
+                          for (final (index, label) in draft.options.indexed)
+                            RequirementOption(id: 'o$index', label: label, position: index),
+                        ]
+                      : const [],
+                )
+              : r,
+      ],
+    };
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void>> deleteRequirement(String taskId, String requirementId) async {
+    requirements = {
+      ...requirements,
+      taskId: [for (final r in requirements[taskId] ?? const <Requirement>[]) if (r.id != requirementId) r],
+    };
+    return const Ok(null);
+  }
+
+  /// The last order [reorderRequirements] got.
+  List<String>? lastOrder;
+
+  @override
+  Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds) async {
+    lastOrder = requirementIds;
+    return const Ok(null);
   }
 
   /// Sub-tasks per main task ID for [loadSubTasks], or [subTasksFailure].
@@ -433,6 +502,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<TakeTask>() ? getIt.unregister<TakeTask>() : null,
     () => getIt.isRegistered<LoadSubTasks>() ? getIt.unregister<LoadSubTasks>() : null,
     () => getIt.isRegistered<SaveDraftTask>() ? getIt.unregister<SaveDraftTask>() : null,
+    () => getIt.isRegistered<EditRequirements>() ? getIt.unregister<EditRequirements>() : null,
     () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
     () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
@@ -452,6 +522,7 @@ void registerFakeTasks(
     ..registerFactory(() => TakeTask(repository))
     ..registerFactory(() => LoadSubTasks(repository))
     ..registerFactory(() => SaveDraftTask(repository))
+    ..registerFactory(() => EditRequirements(repository))
     ..registerFactory(() => SubmitTask(repository))
     ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())

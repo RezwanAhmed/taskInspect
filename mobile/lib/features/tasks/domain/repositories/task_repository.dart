@@ -1,6 +1,7 @@
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/features/tasks/domain/entities/history_entry.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -43,6 +44,16 @@ abstract interface class TaskRepository {
   /// The creator changes a task's details while it is DRAFT, OPEN or
   /// ASSIGNED (works offline, like [createDraft]).
   Future<Result<Task>> updateDraft(String taskId, TaskDraft draft);
+
+  /// Requirement changes of a task's creator (work offline, sent at the
+  /// next sync like drafts).
+  Future<Result<Requirement>> addRequirement(String taskId, RequirementDraft draft);
+
+  Future<Result<void>> updateRequirement(String taskId, String requirementId, RequirementDraft draft);
+
+  Future<Result<void>> deleteRequirement(String taskId, String requirementId);
+
+  Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds);
 
   /// The sub-tasks of a main task from the server (needs a connection;
   /// not stored on the device).

@@ -47,6 +47,7 @@ import 'package:taskinspect/features/tasks/data/local/task_local_data_source.dar
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/data/repositories/task_repository_impl.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/edit_requirements.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
@@ -168,6 +169,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     ..registerFactory(() => TakeTask(getIt()))
     ..registerFactory(() => LoadSubTasks(getIt()))
     ..registerFactory(() => SaveDraftTask(getIt()))
+    ..registerFactory(() => EditRequirements(getIt()))
     ..registerFactory(() => SubmitTask(getIt()))
     ..registerFactory(() => LoadTaskHistory(getIt()))
     // Teams

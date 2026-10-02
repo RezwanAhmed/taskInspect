@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/sync_queue.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
+import 'package:taskinspect/features/tasks/domain/entities/requirement_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_draft.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -359,6 +360,188 @@ class TaskLocalDataSource {
       return _toTask(updated);
     });
   }
+
+  /// Adds a requirement at the end of the task's list on the device and
+  /// queues its `Requirement CREATE` (with the ID made here), in one
+  /// transaction - works offline like [createDraft].
+  Future<Requirement> addRequirement(String taskId, RequirementDraft draft) {
+    return _db.transaction(() async {
+      final count = await (_db.select(_db.localRequirements)..where((r) => r.taskId.equals(taskId))).get();
+      final requirement = _requirementFrom(_ids.v4(), taskId, count.length, draft);
+      await _writeRequirement(requirement);
+      await _queue.add(
+        entity: SyncEntity.requirement,
+        entityId: requirement.id,
+        taskId: taskId,
+        operation: SyncOperation.create,
+        payload: _requirementPayload(draft),
+      );
+      return requirement;
+    });
+  }
+
+  /// Changes a requirement on the device and queues the change: a still
+  /// PENDING CREATE carries the new content, otherwise a `Requirement
+  /// UPDATE` is queued (updates of the same requirement coalesce).
+  Future<void> updateRequirement(String taskId, String requirementId, RequirementDraft draft) {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.localRequirements)..where((r) => r.id.equals(requirementId)))
+          .getSingleOrNull();
+      if (row == null || row.taskId != taskId) {
+        return;
+      }
+      await _writeRequirement(_requirementFrom(requirementId, taskId, row.position, draft));
+      if (await _rewritePendingCreate(SyncEntity.requirement, requirementId, _requirementPayload(draft)) == 0) {
+        await _queue.add(
+          entity: SyncEntity.requirement,
+          entityId: requirementId,
+          taskId: taskId,
+          operation: SyncOperation.update,
+          payload: _requirementPayload(draft),
+        );
+      }
+    });
+  }
+
+  /// Deletes a requirement on the device and closes the gap in the
+  /// positions. One the server never got just leaves the queue (its CREATE
+  /// and updates); otherwise a `Requirement DELETE` is queued. A waiting
+  /// new order no longer names it.
+  Future<void> deleteRequirement(String taskId, String requirementId) {
+    return _db.transaction(() async {
+      await (_db.delete(_db.localRequirements)
+            ..where((r) => r.id.equals(requirementId) & r.taskId.equals(taskId)))
+          .go();
+      final remaining = await (_db.select(_db.localRequirements)
+            ..where((r) => r.taskId.equals(taskId))
+            ..orderBy([(r) => OrderingTerm(expression: r.position)]))
+          .get();
+      for (final (index, row) in remaining.indexed) {
+        await (_db.update(_db.localRequirements)..where((r) => r.id.equals(row.id)))
+            .write(LocalRequirementsCompanion(position: Value(index)));
+      }
+      final queue = _db.localSyncOperations;
+      final neverSent = await (_db.delete(queue)
+            ..where((o) =>
+                o.entityType.equals(SyncEntity.requirement.apiName) &
+                o.entityId.equals(requirementId) &
+                o.operation.equals(SyncOperation.create.apiName) &
+                o.status.equals('PENDING')))
+          .go();
+      await (_db.delete(queue)
+            ..where((o) =>
+                o.entityType.equals(SyncEntity.requirement.apiName) &
+                o.entityId.equals(requirementId) &
+                o.status.equals('PENDING')))
+          .go();
+      if (neverSent == 0) {
+        await _queue.add(
+          entity: SyncEntity.requirement,
+          entityId: requirementId,
+          taskId: taskId,
+          operation: SyncOperation.delete,
+        );
+      }
+      final waitingOrder = await (_db.select(queue)
+            ..where((o) =>
+                o.entityType.equals(SyncEntity.requirementOrder.apiName) &
+                o.entityId.equals(taskId) &
+                o.status.equals('PENDING')))
+          .getSingleOrNull();
+      if (waitingOrder != null) {
+        await (_db.update(queue)..where((o) => o.id.equals(waitingOrder.id))).write(LocalSyncOperationsCompanion(
+          payload: Value(jsonEncode({'requirementIds': [for (final row in remaining) row.id]})),
+        ));
+      }
+    });
+  }
+
+  /// Puts the task's requirements in the given order on the device and
+  /// queues a `RequirementOrder UPDATE` (later reorders replace it).
+  /// [requirementIds] must name each requirement of the task exactly once
+  /// (the server's rule); otherwise nothing changes and `false` is returned.
+  Future<bool> reorderRequirements(String taskId, List<String> requirementIds) {
+    return _db.transaction(() async {
+      final current = await (_db.select(_db.localRequirements)..where((r) => r.taskId.equals(taskId))).get();
+      final ids = {for (final row in current) row.id};
+      if (requirementIds.length != ids.length || requirementIds.toSet().length != ids.length ||
+          !ids.containsAll(requirementIds)) {
+        return false;
+      }
+      for (final (index, id) in requirementIds.indexed) {
+        await (_db.update(_db.localRequirements)..where((r) => r.id.equals(id) & r.taskId.equals(taskId)))
+            .write(LocalRequirementsCompanion(position: Value(index)));
+      }
+      await _queue.add(
+        entity: SyncEntity.requirementOrder,
+        entityId: taskId,
+        taskId: taskId,
+        operation: SyncOperation.update,
+        payload: {'requirementIds': requirementIds},
+      );
+      return true;
+    });
+  }
+
+  Requirement _requirementFrom(String id, String taskId, int position, RequirementDraft draft) => Requirement(
+        id: id,
+        taskId: taskId,
+        title: draft.title,
+        description: draft.description,
+        type: draft.type,
+        required: draft.required,
+        position: position,
+        unit: draft.type == RequirementType.number ? draft.unit : null,
+        options: draft.type.hasOptions
+            ? [
+                for (final (index, label) in draft.options.indexed)
+                  RequirementOption(id: _ids.v4(), label: label, position: index),
+              ]
+            : const [],
+      );
+
+  Future<void> _writeRequirement(Requirement requirement) async {
+    await _db.into(_db.localRequirements).insertOnConflictUpdate(LocalRequirementsCompanion.insert(
+          id: requirement.id,
+          taskId: requirement.taskId,
+          title: requirement.title,
+          description: Value(requirement.description),
+          type: requirement.type.apiName,
+          isRequired: requirement.required,
+          position: requirement.position,
+          unit: Value(requirement.unit),
+        ));
+    await (_db.delete(_db.localRequirementOptions)..where((o) => o.requirementId.equals(requirement.id))).go();
+    for (final option in requirement.options) {
+      await _db.into(_db.localRequirementOptions).insert(LocalRequirementOptionsCompanion.insert(
+            id: option.id,
+            requirementId: requirement.id,
+            label: option.label,
+            position: option.position,
+          ));
+    }
+  }
+
+  /// Gives a still PENDING CREATE of the entity the new payload; returns
+  /// how many were changed (0: the CREATE was sent already, or none).
+  Future<int> _rewritePendingCreate(SyncEntity entity, String entityId, Map<String, Object?> payload) {
+    return (_db.update(_db.localSyncOperations)
+          ..where((o) =>
+              o.entityType.equals(entity.apiName) &
+              o.entityId.equals(entityId) &
+              o.operation.equals(SyncOperation.create.apiName) &
+              o.status.equals('PENDING')))
+        .write(LocalSyncOperationsCompanion(payload: Value(jsonEncode(payload))));
+  }
+
+  static Map<String, Object?> _requirementPayload(RequirementDraft draft) => {
+        'title': draft.title,
+        'description': draft.description,
+        'type': draft.type.apiName,
+        'required': draft.required,
+        'unit': draft.type == RequirementType.number ? draft.unit : null,
+        'options': draft.type.hasOptions ? draft.options : null,
+      };
 
   static Map<String, Object?> _draftPayload(TaskDraft draft) => {
         'title': draft.title,
