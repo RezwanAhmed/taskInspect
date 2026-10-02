@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/app.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 
 import '../../../helpers/fake_auth.dart';
@@ -35,6 +36,24 @@ void main() {
 
     expect(find.byKey(const Key('login-error')), findsOneWidget);
     expect(find.text('Email or password is incorrect'), findsOneWidget);
+  });
+
+  testWidgets('offline sign in explains that a connection is needed; it works once online', (tester) async {
+    final repository = FakeAuthRepository()..loginFailure = const NetworkFailure();
+    await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(repository)));
+    await tester.pumpAndSettle();
+
+    await signIn(tester, 'worker@example.com', 'secret');
+
+    expect(find.byKey(const Key('login-error')), findsOneWidget);
+    expect(find.text('No internet connection. Connect to sign in.'), findsOneWidget);
+    expect(find.text('Hello, Wendy Worker'), findsNothing);
+
+    repository.loginFailure = null;
+    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hello, Wendy Worker'), findsOneWidget);
   });
 
   testWidgets('empty email is shown under the email field', (tester) async {
