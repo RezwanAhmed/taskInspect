@@ -1,5 +1,6 @@
 package com.taskinspect.common.security;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -10,6 +11,7 @@ import com.taskinspect.auth.JwtService;
 import com.taskinspect.requirements.Requirement;
 import com.taskinspect.requirements.RequirementRepository;
 import com.taskinspect.requirements.RequirementType;
+import com.taskinspect.tasks.OpenScope;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskAction;
 import com.taskinspect.tasks.TaskFixtures;
@@ -121,6 +123,37 @@ class AuthorizationMatrixTests {
     private static final Endpoint LIST_RESPONSES = new Endpoint("GET /api/tasks/{id}/responses",
             TaskStatus.IN_PROGRESS, (f, a) -> get("/api/tasks/{id}/responses", f.task().getId()));
 
+    // Task endpoints added since Phase 7 (task 9.3a).
+    private static final Endpoint LIST_TASKS = new Endpoint("GET /api/tasks", TaskStatus.ASSIGNED,
+            (f, a) -> get("/api/tasks"));
+    private static final Endpoint PUBLISH = new Endpoint("POST /api/tasks/{id}/publish", TaskStatus.DRAFT,
+            (f, a) -> post("/api/tasks/{id}/publish", f.task().getId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"scope\": \"EVERYONE\"}"));
+    private static final Endpoint TAKE = new Endpoint("POST /api/tasks/{id}/take", TaskStatus.OPEN,
+            (f, a) -> post("/api/tasks/{id}/take", f.task().getId()));
+    private static final Endpoint REISSUE = new Endpoint("POST /api/tasks/{id}/reissue", TaskStatus.IN_PROGRESS,
+            (f, a) -> post("/api/tasks/{id}/reissue", f.task().getId()));
+    // The fixture's task is not a main task: a manager allowed past the role check gets 409 NOT_A_MAIN_TASK.
+    private static final Endpoint ADD_SUB_TASK = new Endpoint("POST /api/tasks/{id}/sub-tasks",
+            TaskStatus.ASSIGNED, (f, a) -> post("/api/tasks/{id}/sub-tasks", f.task().getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"title\": \"T\", \"priority\": \"LOW\", \"dueDate\": \"2026-12-01T09:00:00Z\"}"));
+    private static final Endpoint LIST_SUB_TASKS = new Endpoint("GET /api/tasks/{id}/sub-tasks", TaskStatus.ASSIGNED,
+            (f, a) -> get("/api/tasks/{id}/sub-tasks", f.task().getId()));
+    private static final Endpoint LIST_REQUIREMENTS = new Endpoint("GET /api/tasks/{id}/requirements",
+            TaskStatus.ASSIGNED, (f, a) -> get("/api/tasks/{id}/requirements", f.task().getId()));
+    private static final Endpoint EDIT_REQUIREMENT = new Endpoint("PUT /api/tasks/{id}/requirements/{rid}",
+            TaskStatus.DRAFT, (f, a) -> put("/api/tasks/{t}/requirements/{r}", f.task().getId(),
+                    f.requirement().getId()).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"title\": \"Clean?\", \"type\": \"YES_NO\"}"));
+    private static final Endpoint DELETE_REQUIREMENT = new Endpoint("DELETE /api/tasks/{id}/requirements/{rid}",
+            TaskStatus.DRAFT, (f, a) -> delete("/api/tasks/{t}/requirements/{r}", f.task().getId(),
+                    f.requirement().getId()));
+    private static final Endpoint ORDER_REQUIREMENTS = new Endpoint("PUT /api/tasks/{id}/requirements/order",
+            TaskStatus.DRAFT, (f, a) -> put("/api/tasks/{id}/requirements/order", f.task().getId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"requirementIds\": [\"" + f.requirement().getId() + "\"]}"));
+
     static Stream<Arguments> matrix() {
         return Stream.of(
                 row(LIST_USERS, 401, 200, 200, 200, 403, 403),
@@ -142,7 +175,17 @@ class AuthorizationMatrixTests {
                 row(REQUEST_CORRECTION, 401, 403, 200, 403, 403, 403),
                 row(LIST_REVIEWS, 401, 200, 200, 200, 200, 404),
                 row(HISTORY, 401, 200, 200, 200, 200, 404),
-                row(LIST_RESPONSES, 401, 200, 200, 200, 200, 404))
+                row(LIST_RESPONSES, 401, 200, 200, 200, 200, 404),
+                row(LIST_TASKS, 401, 200, 200, 200, 200, 200),
+                row(PUBLISH, 401, 403, 200, 403, 403, 403),
+                row(TAKE, 401, 403, 403, 403, 200, 200),
+                row(REISSUE, 401, 403, 201, 403, 403, 403),
+                row(ADD_SUB_TASK, 401, 403, 409, 409, 403, 403),
+                row(LIST_SUB_TASKS, 401, 200, 200, 200, 403, 403),
+                row(LIST_REQUIREMENTS, 401, 200, 200, 200, 200, 404),
+                row(EDIT_REQUIREMENT, 401, 403, 200, 403, 403, 403),
+                row(DELETE_REQUIREMENT, 401, 403, 204, 403, 403, 403),
+                row(ORDER_REQUIREMENTS, 401, 403, 200, 403, 403, 403))
                 .flatMap(Function.identity());
     }
 
@@ -214,6 +257,11 @@ class AuthorizationMatrixTests {
                 Instant.parse("2026-12-01T09:00:00Z"), null));
         Requirement requirement = requirementRepository.save(new Requirement(task, "Ok?", null,
                 RequirementType.YES_NO, true, 0, null, null));
+        if (wanted == TaskStatus.OPEN) {
+            stateMachine.apply(task, TaskAction.PUBLISH);
+            TaskFixtures.openTo(task, OpenScope.EVERYONE);
+            return new Fixture(users, taskRepository.save(task), requirement);
+        }
         if (wanted != TaskStatus.DRAFT) {
             TaskFixtures.assign(task, users.get(Actor.ASSIGNED_WORKER));
             stateMachine.apply(task, TaskAction.ASSIGN);
