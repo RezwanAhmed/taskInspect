@@ -19,6 +19,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
@@ -114,6 +115,14 @@ class FakeTaskRepository implements TaskRepository {
     emit([for (final t in current) t.id == taskId ? started : t]);
     return Ok(started);
   }
+
+  /// Sub-tasks per main task ID for [loadSubTasks], or [subTasksFailure].
+  Map<String, List<Task>> subTasks = {};
+  Failure? subTasksFailure;
+
+  @override
+  Future<Result<List<Task>>> loadSubTasks(String mainTaskId) async =>
+      subTasksFailure == null ? Ok(subTasks[mainTaskId] ?? const []) : Err(subTasksFailure!);
 
   /// When set, taking a task fails with this.
   Failure? takeFailure;
@@ -379,6 +388,7 @@ void registerFakeTasks(
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
     () => getIt.isRegistered<TakeTask>() ? getIt.unregister<TakeTask>() : null,
+    () => getIt.isRegistered<LoadSubTasks>() ? getIt.unregister<LoadSubTasks>() : null,
     () => getIt.isRegistered<SubmitTask>() ? getIt.unregister<SubmitTask>() : null,
     () => getIt.isRegistered<LoadTaskHistory>() ? getIt.unregister<LoadTaskHistory>() : null,
     () => getIt.isRegistered<AnswerRepository>() ? getIt.unregister<AnswerRepository>() : null,
@@ -396,6 +406,7 @@ void registerFakeTasks(
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
     ..registerFactory(() => TakeTask(repository))
+    ..registerFactory(() => LoadSubTasks(repository))
     ..registerFactory(() => SubmitTask(repository))
     ..registerFactory(() => LoadTaskHistory(repository))
     ..registerSingleton<AnswerRepository>(answers ?? FakeAnswerRepository())

@@ -35,6 +35,10 @@ abstract interface class TaskRepository {
   /// local data stays as it was.
   Future<Result<void>> refresh();
 
+  /// The sub-tasks of a main task from the server (needs a connection;
+  /// not stored on the device).
+  Future<Result<List<Task>>> loadSubTasks(String mainTaskId);
+
   /// A worker takes an open task (needs a connection). On success the task
   /// is stored as theirs; when someone else took it first (or it is no
   /// longer open to them) it is removed from the device.

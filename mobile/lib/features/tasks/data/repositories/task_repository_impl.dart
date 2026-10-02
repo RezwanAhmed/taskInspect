@@ -59,6 +59,9 @@ class TaskRepositoryImpl implements TaskRepository {
   }
 
   @override
+  Future<Result<List<Task>>> loadSubTasks(String mainTaskId) => _remote.fetchSubTasks(mainTaskId);
+
+  @override
   Future<Result<Task>> take(String taskId) async {
     final result = await _remote.take(taskId);
     switch (result) {

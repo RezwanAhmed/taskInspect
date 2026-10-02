@@ -121,12 +121,16 @@ public class SyncService {
     }
 
     private void apply(CurrentUser caller, SyncOperationRequest operation) {
-        // The same role check as the matching API endpoints.
-        if (!caller.hasRole(RoleName.WORKER.name())) {
+        // The same role check as the matching API endpoints: start and submit
+        // also for managers (their main tasks, Phase 7A); the services check
+        // that the caller is the task's assignee.
+        String kind = operation.entityType() + " " + operation.operation();
+        boolean managersToo = kind.equals("Task START") || kind.equals("Task SUBMIT");
+        if (!caller.hasRole(RoleName.WORKER.name()) && !(managersToo && caller.hasRole(RoleName.MANAGER.name()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "Only workers can do this");
         }
         UUID taskId = operation.taskId();
-        switch (operation.entityType() + " " + operation.operation()) {
+        switch (kind) {
             case "TaskResponse UPDATE" -> responseService.save(caller, taskId, operation.entityId(),
                     payload(operation, SaveResponseRequest.class));
             case "Evidence CREATE" -> {

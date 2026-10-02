@@ -25,6 +25,7 @@ import com.taskinspect.users.User;
 import com.taskinspect.users.UserRepository;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
@@ -202,6 +203,30 @@ class SyncPushTests {
         push(manager, start(task)).andExpect(jsonPath("$.results[0].code").value("FORBIDDEN"));
 
         assertThat(taskRepository.findById(task.getId()).orElseThrow().getStatus()).isEqualTo(TaskStatus.ASSIGNED);
+    }
+
+    @Test
+    void aManagerSyncsStartAndSubmitOfTheirMainTaskOnly() throws Exception {
+        User admin = save("admin@example.com", "Ada Admin", RoleName.ADMINISTRATOR);
+        Task mainTask = new Task(admin, "Inspect building B", null, TaskPriority.HIGH,
+                Instant.parse("2026-12-01T09:00:00Z"), null);
+        TaskFixtures.assign(mainTask, manager);
+        stateMachine.apply(mainTask, TaskAction.ASSIGN);
+        mainTask = taskRepository.saveAndFlush(mainTask);
+        Task floor = new Task(manager, "Floor 1", null, TaskPriority.HIGH, Instant.parse("2026-12-01T09:00:00Z"), null);
+        TaskFixtures.makeSubTaskOf(floor, mainTask);
+        TaskFixtures.assign(floor, worker);
+        for (TaskAction action : List.of(TaskAction.ASSIGN, TaskAction.START, TaskAction.SUBMIT, TaskAction.APPROVE)) {
+            stateMachine.apply(floor, action);
+        }
+        taskRepository.saveAndFlush(floor);
+
+        push(manager, start(mainTask)).andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        push(manager, operation(mainTask.getId(), "Task", mainTask.getId(), "SUBMIT", "{}"))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        assertThat(taskRepository.findById(mainTask.getId()).orElseThrow().getStatus()).isEqualTo(TaskStatus.SUBMITTED);
+        // Answers stay worker-only.
+        push(manager, answer(task, yesNo, "{\"booleanValue\": true}")).andExpect(jsonPath("$.results[0].code").value("FORBIDDEN"));
     }
 
     @Test

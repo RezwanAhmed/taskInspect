@@ -9,9 +9,11 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_details_cubit.dart';
+import 'package:taskinspect/features/tasks/presentation/widgets/main_task_panel.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/requirement_type_icon.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/status_chip.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/task_tile.dart';
@@ -72,7 +74,7 @@ class TaskDetailsPage extends StatelessWidget {
                       ),
                     ),
                   )
-                : task != null && _canContinue(task, userId)
+                : task != null && _canContinue(task, userId) && !(user != null && LoadSubTasks.isMainTask(task, user))
                 ? SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -141,6 +143,9 @@ class TaskDetailsPage extends StatelessWidget {
                 task: task,
                 requirements: state.requirements,
                 review: state.review,
+                mainTaskPanel: user != null && LoadSubTasks.isMainTask(task, user)
+                    ? MainTaskPanel(task: task)
+                    : null,
               ),
             },
           );
@@ -165,11 +170,15 @@ class _Details extends StatelessWidget {
     required this.task,
     required this.requirements,
     this.review,
+    this.mainTaskPanel,
   });
 
   final Task task;
   final List<Requirement> requirements;
   final TaskReview? review;
+
+  /// For the manager of a main task: its sub-tasks and the submit.
+  final Widget? mainTaskPanel;
 
   @override
   Widget build(BuildContext context) {
@@ -181,6 +190,7 @@ class _Details extends StatelessWidget {
         Text(task.title, style: theme.textTheme.headlineSmall),
         const SizedBox(height: 8),
         Align(alignment: Alignment.centerLeft, child: StatusChip(task.status)),
+        if (mainTaskPanel != null) ...[const SizedBox(height: 12), mainTaskPanel!],
         if (task.status == TaskStatus.submitted &&
             context.select(
               (SyncStatusCubit cubit) => cubit.state.unsentTaskIds.contains(task.id),

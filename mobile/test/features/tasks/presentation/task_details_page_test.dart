@@ -8,6 +8,7 @@ import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
+import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
@@ -157,6 +158,87 @@ void main() {
       await openOpenTask(tester, testManager);
 
       expect(find.byKey(const Key('take-task')), findsNothing);
+    });
+  });
+
+  group('main task (manager)', () {
+    Task task(String id, String title, TaskStatus status, {PersonRef? assignee}) => Task(
+          id: id,
+          title: title,
+          priority: TaskPriority.high,
+          status: status,
+          dueDate: DateTime.utc(2099),
+          createdBy: const PersonRef(id: 'a1', name: 'Ada Admin'),
+          reviewer: const PersonRef(id: 'a1', name: 'Ada Admin'),
+          assignee: assignee,
+          version: 1,
+          updatedAt: DateTime.utc(2026, 10, 1),
+        );
+    const manager = PersonRef(id: 'm1', name: 'Mia Manager');
+    const worker = PersonRef(id: 'u2', name: 'Tom Teammate');
+
+    Future<void> openMainTask(WidgetTester tester, List<Task> subTasks) async {
+      final tasks = FakeTaskRepository([task('main', 'Inspect building B', TaskStatus.inProgress, assignee: manager)])
+        ..subTasks = {'main': subTasks};
+      registerFakeTasks(tasks);
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testManager))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('main'));
+    }
+
+    testWidgets('shows the sub-tasks and their progress; submit waits for all approvals', (tester) async {
+      await openMainTask(tester, [
+        task('s1', 'Floor 1', TaskStatus.approved, assignee: worker),
+        task('s2', 'Floor 2', TaskStatus.submitted, assignee: worker),
+        task('s3', 'Floor 3', TaskStatus.cancelled),
+      ]);
+
+      expect(find.text('1 of 2 approved'), findsOneWidget);
+      expect(find.text('Floor 2'), findsOneWidget);
+      expect(find.byKey(const Key('continue-task')), findsNothing);
+      final submit = tester.widget<FilledButton>(find.byKey(const Key('submit-main-task')));
+      expect(submit.onPressed, isNull);
+      expect(find.text('Every sub-task must be approved first.'), findsOneWidget);
+    });
+
+    testWidgets('submits once every sub-task is approved', (tester) async {
+      await openMainTask(tester, [task('s1', 'Floor 1', TaskStatus.approved, assignee: worker)]);
+
+      await tester.ensureVisible(find.byKey(const Key('submit-main-task')));
+      await tester.tap(find.byKey(const Key('submit-main-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Main task submitted for review.'), findsOneWidget);
+    });
+
+    testWidgets("a worker-manager's own personal task is a normal task", (tester) async {
+      const both = AuthUser(id: 'm1', email: 'both@example.com', fullName: 'Mia Manager', roles: {UserRole.worker, UserRole.manager});
+      final personal = Task(
+        id: 'p1',
+        title: 'My own check',
+        priority: TaskPriority.low,
+        status: TaskStatus.inProgress,
+        dueDate: DateTime.utc(2099),
+        createdBy: manager,
+        reviewer: manager,
+        assignee: manager,
+        version: 1,
+        updatedAt: DateTime.utc(2026, 10, 1),
+      );
+      registerFakeTasks(FakeTaskRepository([personal]));
+      await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: both))));
+      await tester.pumpAndSettle();
+      await go(tester, AppRoutes.task('p1'));
+
+      expect(find.byKey(const Key('main-task-panel')), findsNothing);
+      expect(find.byKey(const Key('continue-task')), findsOneWidget);
+    });
+
+    testWidgets('workers never see the panel', (tester) async {
+      await openApp(tester);
+      await go(tester, AppRoutes.task('t1'));
+
+      expect(find.byKey(const Key('main-task-panel')), findsNothing);
     });
   });
 }

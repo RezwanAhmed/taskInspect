@@ -66,6 +66,14 @@ class TaskRemoteDataSource {
     );
   }
 
+  /// The sub-tasks of a main task, oldest first.
+  Future<Result<List<Task>>> fetchSubTasks(String taskId) {
+    return _api.send(
+      (dio) => dio.get<Object?>('/api/tasks/$taskId/sub-tasks'),
+      (body) => [for (final json in (body! as List<Object?>).cast<Map<String, Object?>>()) taskFromJson(json)],
+    );
+  }
+
   /// Takes an open task (first worker wins: 409 TASK_ALREADY_TAKEN for the others).
   Future<Result<Task>> take(String taskId) {
     return _api.send(
