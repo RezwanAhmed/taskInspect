@@ -805,8 +805,10 @@ sequenceDiagram
 
 1. **Push.** `POST /api/sync/push` sends pending operations in the order
    they were created. The server records every applied operation ID in
-   `sync_records`; if an ID arrives again (for example after a timeout),
-   it returns the earlier result instead of applying it twice. Each
+   `sync_records`; if an applied ID arrives again (for example after a
+   timeout), it answers `APPLIED` without applying it twice. Rejected
+   operations are not recorded, so they can be sent again after a fix
+   (details: [offline-sync.md](offline-sync.md)). Each
    operation goes through the same services and rules as a normal API
    call — the task state machine, role and ownership checks. Adding a
    photo or PDF is one of these operations: it registers the file
@@ -913,5 +915,5 @@ source of truth for the worker's own unsent answers.
 | Background sync, evidence upload queue | 6.11-6.12 |
 | Sync status UI and tests | 6.13-6.14 |
 
-The full sync API and edge cases are documented in `docs/offline-sync.md`
-(task 11.9).
+The full sync API and edge cases are documented in
+[offline-sync.md](offline-sync.md).
