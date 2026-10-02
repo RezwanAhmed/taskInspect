@@ -402,6 +402,106 @@ void main() {
       expect(sinces, [null, '2026-10-01T10:00:00Z']);
     });
 
+    Map<String, Object?> tileJson(String id, String title, {String status = 'IN_PROGRESS'}) => {
+          'id': id,
+          'title': title,
+          'priority': 'HIGH',
+          'status': status,
+          'dueDate': '2026-12-01T09:00:00Z',
+          'assignee': {'id': 'u2', 'fullName': 'Tom Teammate'},
+          'updatedAt': '2026-10-01T09:00:00Z',
+        };
+
+    Future<List<String>> tileTitles() async =>
+        (await TaskLocalDataSource(db).watchTeamTasks().first).map((t) => '${t.title}/${t.assignee?.name}').toList();
+
+    test('stores team tiles apart from the tasks and removes tiles no longer visible', () async {
+      final body = <String, Object?>{
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'tileIds': ['x1', 'x2'],
+        'tiles': [tileJson('x1', 'Roof'), tileJson('x2', 'Cellar', status: 'REJECTED')],
+        'teamVersion': 'v1',
+      };
+      servePull(body);
+
+      await manager.pull();
+      expect(await tileTitles(), ['Cellar/Tom Teammate', 'Roof/Tom Teammate']);
+      expect(await localTitles(), ['Task t1', 'Task t2']);
+
+      body
+        ..['tileIds'] = ['x2']
+        ..['tiles'] = <Object?>[];
+      await manager.pull();
+      expect(await tileTitles(), ['Cellar/Tom Teammate']);
+    });
+
+    test('a new team version pulls everything again, once', () async {
+      final body = <String, Object?>{
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'teamVersion': 'v1',
+      };
+      final sinces = servePull(body);
+
+      await manager.pull();
+      await manager.pull();
+      body['teamVersion'] = 'v2';
+      await manager.pull();
+
+      expect(sinces, [null, '2026-10-01T10:00:00Z', '2026-10-01T10:00:00Z', null]);
+    });
+
+    test('when the full pull after a team change fails, the next pull tries it again', () async {
+      final body = <String, Object?>{
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'teamVersion': 'v1',
+      };
+      servePull(body);
+      await manager.pull();
+
+      body['teamVersion'] = 'v2';
+      final sinces = <Object?>[];
+      var failFull = true;
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        final since = request.queryParameters['since'];
+        sinces.add(since);
+        return failFull && since == null ? (503, null) : (200, body);
+      });
+      expect(await manager.pull(), isA<Err<void>>());
+      failFull = false;
+      expect(await manager.pull(), isA<Ok<void>>());
+
+      expect(sinces, ['2026-10-01T10:00:00Z', null, '2026-10-01T10:00:00Z', null]);
+    });
+
+    test('a tile with a status this app does not know is skipped, not a broken pull', () async {
+      servePull({
+        'cursor': '2026-10-01T10:00:00Z',
+        'taskIds': ['t1', 't2'],
+        'tasks': <Object?>[],
+        'tileIds': ['x1', 'x2'],
+        'tiles': [tileJson('x1', 'Roof'), tileJson('x2', 'Cellar', status: 'ESCALATED')],
+      });
+
+      expect(await manager.pull(), isA<Ok<void>>());
+      expect(await tileTitles(), ['Roof/Tom Teammate']);
+    });
+
+    test('a server without team versions never forces a full pull', () async {
+      final sinces = servePull({'cursor': '2026-10-01T10:00:00Z', 'taskIds': ['t1', 't2'], 'tasks': <Object?>[]});
+
+      await manager.pull();
+      await manager.pull();
+
+      expect(sinces, [null, '2026-10-01T10:00:00Z']);
+      expect(await tileTitles(), isEmpty);
+    });
+
     test('a task with unsent changes keeps its local version and is not removed', () async {
       await add('t2', 'e1');
       servePull({'cursor': 'c', 'taskIds': ['t1'], 'tasks': [pulled('t1', 'Kitchen (new)')]});

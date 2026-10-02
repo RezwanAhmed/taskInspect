@@ -4213,6 +4213,523 @@ class LocalTaskReviewsCompanion extends UpdateCompanion<TaskReviewRow> {
   }
 }
 
+class $LocalTeamTasksTable extends LocalTeamTasks
+    with TableInfo<$LocalTeamTasksTable, TeamTaskRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalTeamTasksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _priorityMeta = const VerificationMeta(
+    'priority',
+  );
+  @override
+  late final GeneratedColumn<String> priority = GeneratedColumn<String>(
+    'priority',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dueDateMeta = const VerificationMeta(
+    'dueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+    'due_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _assigneeIdMeta = const VerificationMeta(
+    'assigneeId',
+  );
+  @override
+  late final GeneratedColumn<String> assigneeId = GeneratedColumn<String>(
+    'assignee_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _assigneeNameMeta = const VerificationMeta(
+    'assigneeName',
+  );
+  @override
+  late final GeneratedColumn<String> assigneeName = GeneratedColumn<String>(
+    'assignee_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    priority,
+    status,
+    dueDate,
+    assigneeId,
+    assigneeName,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_team_tasks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TeamTaskRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('priority')) {
+      context.handle(
+        _priorityMeta,
+        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_priorityMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('due_date')) {
+      context.handle(
+        _dueDateMeta,
+        dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dueDateMeta);
+    }
+    if (data.containsKey('assignee_id')) {
+      context.handle(
+        _assigneeIdMeta,
+        assigneeId.isAcceptableOrUnknown(data['assignee_id']!, _assigneeIdMeta),
+      );
+    }
+    if (data.containsKey('assignee_name')) {
+      context.handle(
+        _assigneeNameMeta,
+        assigneeName.isAcceptableOrUnknown(
+          data['assignee_name']!,
+          _assigneeNameMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TeamTaskRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TeamTaskRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      priority: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}priority'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date'],
+      )!,
+      assigneeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}assignee_id'],
+      ),
+      assigneeName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}assignee_name'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalTeamTasksTable createAlias(String alias) {
+    return $LocalTeamTasksTable(attachedDatabase, alias);
+  }
+}
+
+class TeamTaskRow extends DataClass implements Insertable<TeamTaskRow> {
+  final String id;
+  final String title;
+  final String priority;
+  final String status;
+  final DateTime dueDate;
+  final String? assigneeId;
+  final String? assigneeName;
+  final DateTime updatedAt;
+  const TeamTaskRow({
+    required this.id,
+    required this.title,
+    required this.priority,
+    required this.status,
+    required this.dueDate,
+    this.assigneeId,
+    this.assigneeName,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    map['priority'] = Variable<String>(priority);
+    map['status'] = Variable<String>(status);
+    map['due_date'] = Variable<DateTime>(dueDate);
+    if (!nullToAbsent || assigneeId != null) {
+      map['assignee_id'] = Variable<String>(assigneeId);
+    }
+    if (!nullToAbsent || assigneeName != null) {
+      map['assignee_name'] = Variable<String>(assigneeName);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalTeamTasksCompanion toCompanion(bool nullToAbsent) {
+    return LocalTeamTasksCompanion(
+      id: Value(id),
+      title: Value(title),
+      priority: Value(priority),
+      status: Value(status),
+      dueDate: Value(dueDate),
+      assigneeId: assigneeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assigneeId),
+      assigneeName: assigneeName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assigneeName),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory TeamTaskRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TeamTaskRow(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      priority: serializer.fromJson<String>(json['priority']),
+      status: serializer.fromJson<String>(json['status']),
+      dueDate: serializer.fromJson<DateTime>(json['dueDate']),
+      assigneeId: serializer.fromJson<String?>(json['assigneeId']),
+      assigneeName: serializer.fromJson<String?>(json['assigneeName']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'priority': serializer.toJson<String>(priority),
+      'status': serializer.toJson<String>(status),
+      'dueDate': serializer.toJson<DateTime>(dueDate),
+      'assigneeId': serializer.toJson<String?>(assigneeId),
+      'assigneeName': serializer.toJson<String?>(assigneeName),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  TeamTaskRow copyWith({
+    String? id,
+    String? title,
+    String? priority,
+    String? status,
+    DateTime? dueDate,
+    Value<String?> assigneeId = const Value.absent(),
+    Value<String?> assigneeName = const Value.absent(),
+    DateTime? updatedAt,
+  }) => TeamTaskRow(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    priority: priority ?? this.priority,
+    status: status ?? this.status,
+    dueDate: dueDate ?? this.dueDate,
+    assigneeId: assigneeId.present ? assigneeId.value : this.assigneeId,
+    assigneeName: assigneeName.present ? assigneeName.value : this.assigneeName,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  TeamTaskRow copyWithCompanion(LocalTeamTasksCompanion data) {
+    return TeamTaskRow(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      priority: data.priority.present ? data.priority.value : this.priority,
+      status: data.status.present ? data.status.value : this.status,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      assigneeId: data.assigneeId.present
+          ? data.assigneeId.value
+          : this.assigneeId,
+      assigneeName: data.assigneeName.present
+          ? data.assigneeName.value
+          : this.assigneeName,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TeamTaskRow(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('priority: $priority, ')
+          ..write('status: $status, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('assigneeId: $assigneeId, ')
+          ..write('assigneeName: $assigneeName, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    priority,
+    status,
+    dueDate,
+    assigneeId,
+    assigneeName,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TeamTaskRow &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.priority == this.priority &&
+          other.status == this.status &&
+          other.dueDate == this.dueDate &&
+          other.assigneeId == this.assigneeId &&
+          other.assigneeName == this.assigneeName &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalTeamTasksCompanion extends UpdateCompanion<TeamTaskRow> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<String> priority;
+  final Value<String> status;
+  final Value<DateTime> dueDate;
+  final Value<String?> assigneeId;
+  final Value<String?> assigneeName;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalTeamTasksCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.status = const Value.absent(),
+    this.dueDate = const Value.absent(),
+    this.assigneeId = const Value.absent(),
+    this.assigneeName = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalTeamTasksCompanion.insert({
+    required String id,
+    required String title,
+    required String priority,
+    required String status,
+    required DateTime dueDate,
+    this.assigneeId = const Value.absent(),
+    this.assigneeName = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       title = Value(title),
+       priority = Value(priority),
+       status = Value(status),
+       dueDate = Value(dueDate),
+       updatedAt = Value(updatedAt);
+  static Insertable<TeamTaskRow> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<String>? priority,
+    Expression<String>? status,
+    Expression<DateTime>? dueDate,
+    Expression<String>? assigneeId,
+    Expression<String>? assigneeName,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (priority != null) 'priority': priority,
+      if (status != null) 'status': status,
+      if (dueDate != null) 'due_date': dueDate,
+      if (assigneeId != null) 'assignee_id': assigneeId,
+      if (assigneeName != null) 'assignee_name': assigneeName,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalTeamTasksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<String>? priority,
+    Value<String>? status,
+    Value<DateTime>? dueDate,
+    Value<String?>? assigneeId,
+    Value<String?>? assigneeName,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalTeamTasksCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      dueDate: dueDate ?? this.dueDate,
+      assigneeId: assigneeId ?? this.assigneeId,
+      assigneeName: assigneeName ?? this.assigneeName,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (priority.present) {
+      map['priority'] = Variable<String>(priority.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
+    if (assigneeId.present) {
+      map['assignee_id'] = Variable<String>(assigneeId.value);
+    }
+    if (assigneeName.present) {
+      map['assignee_name'] = Variable<String>(assigneeName.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalTeamTasksCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('priority: $priority, ')
+          ..write('status: $status, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('assigneeId: $assigneeId, ')
+          ..write('assigneeName: $assigneeName, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4229,6 +4746,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalTaskReviewsTable localTaskReviews = $LocalTaskReviewsTable(
     this,
   );
+  late final $LocalTeamTasksTable localTeamTasks = $LocalTeamTasksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4242,6 +4760,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localSyncOperations,
     localSyncState,
     localTaskReviews,
+    localTeamTasks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -7924,6 +8443,278 @@ typedef $$LocalTaskReviewsTableProcessedTableManager =
       TaskReviewRow,
       PrefetchHooks Function({bool taskId})
     >;
+typedef $$LocalTeamTasksTableCreateCompanionBuilder =
+    LocalTeamTasksCompanion Function({
+      required String id,
+      required String title,
+      required String priority,
+      required String status,
+      required DateTime dueDate,
+      Value<String?> assigneeId,
+      Value<String?> assigneeName,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalTeamTasksTableUpdateCompanionBuilder =
+    LocalTeamTasksCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<String> priority,
+      Value<String> status,
+      Value<DateTime> dueDate,
+      Value<String?> assigneeId,
+      Value<String?> assigneeName,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalTeamTasksTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalTeamTasksTable> {
+  $$LocalTeamTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assigneeId => $composableBuilder(
+    column: $table.assigneeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assigneeName => $composableBuilder(
+    column: $table.assigneeName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalTeamTasksTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalTeamTasksTable> {
+  $$LocalTeamTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priority => $composableBuilder(
+    column: $table.priority,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assigneeId => $composableBuilder(
+    column: $table.assigneeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assigneeName => $composableBuilder(
+    column: $table.assigneeName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalTeamTasksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalTeamTasksTable> {
+  $$LocalTeamTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<String> get assigneeId => $composableBuilder(
+    column: $table.assigneeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get assigneeName => $composableBuilder(
+    column: $table.assigneeName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LocalTeamTasksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalTeamTasksTable,
+          TeamTaskRow,
+          $$LocalTeamTasksTableFilterComposer,
+          $$LocalTeamTasksTableOrderingComposer,
+          $$LocalTeamTasksTableAnnotationComposer,
+          $$LocalTeamTasksTableCreateCompanionBuilder,
+          $$LocalTeamTasksTableUpdateCompanionBuilder,
+          (
+            TeamTaskRow,
+            BaseReferences<_$AppDatabase, $LocalTeamTasksTable, TeamTaskRow>,
+          ),
+          TeamTaskRow,
+          PrefetchHooks Function()
+        > {
+  $$LocalTeamTasksTableTableManager(
+    _$AppDatabase db,
+    $LocalTeamTasksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalTeamTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalTeamTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalTeamTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> priority = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> dueDate = const Value.absent(),
+                Value<String?> assigneeId = const Value.absent(),
+                Value<String?> assigneeName = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTeamTasksCompanion(
+                id: id,
+                title: title,
+                priority: priority,
+                status: status,
+                dueDate: dueDate,
+                assigneeId: assigneeId,
+                assigneeName: assigneeName,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String title,
+                required String priority,
+                required String status,
+                required DateTime dueDate,
+                Value<String?> assigneeId = const Value.absent(),
+                Value<String?> assigneeName = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTeamTasksCompanion.insert(
+                id: id,
+                title: title,
+                priority: priority,
+                status: status,
+                dueDate: dueDate,
+                assigneeId: assigneeId,
+                assigneeName: assigneeName,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LocalTeamTasksTable, TeamTaskRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LocalTeamTasksTable,
+                    TeamTaskRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalTeamTasksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalTeamTasksTable,
+      TeamTaskRow,
+      $$LocalTeamTasksTableFilterComposer,
+      $$LocalTeamTasksTableOrderingComposer,
+      $$LocalTeamTasksTableAnnotationComposer,
+      $$LocalTeamTasksTableCreateCompanionBuilder,
+      $$LocalTeamTasksTableUpdateCompanionBuilder,
+      (
+        TeamTaskRow,
+        BaseReferences<_$AppDatabase, $LocalTeamTasksTable, TeamTaskRow>,
+      ),
+      TeamTaskRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7947,4 +8738,6 @@ class $AppDatabaseManager {
       $$LocalSyncStateTableTableManager(_db, _db.localSyncState);
   $$LocalTaskReviewsTableTableManager get localTaskReviews =>
       $$LocalTaskReviewsTableTableManager(_db, _db.localTaskReviews);
+  $$LocalTeamTasksTableTableManager get localTeamTasks =>
+      $$LocalTeamTasksTableTableManager(_db, _db.localTeamTasks);
 }

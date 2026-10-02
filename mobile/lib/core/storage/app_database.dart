@@ -13,12 +13,12 @@ part 'app_database.g.dart';
 ///
 /// Every schema change raises [schemaVersion] and adds a step to
 /// [migration], because devices keep their database between app updates.
-@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations, LocalSyncState, LocalTaskReviews])
+@DriftDatabase(tables: [LocalTasks, LocalRequirements, LocalRequirementOptions, LocalResponses, LocalEvidence, LocalSyncOperations, LocalSyncState, LocalTaskReviews, LocalTeamTasks])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openDefault());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -55,6 +55,11 @@ class AppDatabase extends _$AppDatabase {
             // The next pull loads everything again (SyncManager.pullCursorKey),
             // so tasks already on the device get their latest review.
             await (delete(localSyncState)..where((s) => s.key.equals('pullCursor'))).go();
+          }
+          if (from < 10) {
+            // Filled by the next pull: no team version is stored yet, so
+            // SyncManager.pull loads everything again.
+            await migrator.createTable(localTeamTasks);
           }
         },
         beforeOpen: (details) async {

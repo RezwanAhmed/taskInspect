@@ -32,8 +32,8 @@ void main() {
     expect(count.read<int>('c'), 0);
   });
 
-  test('is at schema version 9', () {
-    expect(database.schemaVersion, 9);
+  test('is at schema version 10', () {
+    expect(database.schemaVersion, 10);
   });
 
   test('a version 1 database (no tables) is upgraded with all tables', () async {
@@ -54,9 +54,10 @@ void main() {
       'local_sync_state',
       'local_task_reviews',
       'local_tasks',
+      'local_team_tasks',
     ]);
     final version = await old.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 9);
+    expect(version.read<int>('user_version'), 10);
   });
 
   test('a version 4 database gets the evidence file_name column', () async {
@@ -156,6 +157,20 @@ void main() {
 
     expect(keys, ['ownerId'], reason: 'the cursor is gone, the owner stays');
     expect(await old.select(old.localTaskReviews).get(), isEmpty);
+  });
+
+  test('a version 9 database gets the team tile table and keeps its cursor', () async {
+    final old = AppDatabase(NativeDatabase.memory(setup: (raw) {
+      raw
+        ..execute('CREATE TABLE local_sync_state (key TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)')
+        ..execute("INSERT INTO local_sync_state VALUES ('pullCursor', 'c1')")
+        ..execute('PRAGMA user_version = 9');
+    }));
+    addTearDown(old.close);
+
+    expect(await old.select(old.localTeamTasks).get(), isEmpty);
+    // No team version is stored yet, so the next pull loads everything (SyncManager).
+    expect(await old.select(old.localSyncState).map((row) => row.key).get(), ['pullCursor']);
   });
 
   test('clearUserData removes every row', () async {

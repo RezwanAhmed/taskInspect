@@ -63,3 +63,22 @@ class LocalTaskReviews extends Table {
   @override
   Set<Column<Object>> get primaryKey => {taskId};
 }
+
+/// Team members' tasks as tiles (Phase 7A, docs/architecture.md "What a
+/// Worker Sees"): who works on what and how far it is, without
+/// requirements, answers or evidence. Kept apart from [LocalTasks], so a
+/// tile is never shown or synced as one of the user's own tasks.
+@DataClassName('TeamTaskRow')
+class LocalTeamTasks extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get priority => text()();
+  TextColumn get status => text()();
+  DateTimeColumn get dueDate => dateTime()();
+  TextColumn get assigneeId => text().nullable()();
+  TextColumn get assigneeName => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}

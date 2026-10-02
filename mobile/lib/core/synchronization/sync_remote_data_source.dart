@@ -6,7 +6,9 @@ import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/features/tasks/data/remote/task_remote_data_source.dart';
 import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 
 /// What the server did with one pushed operation.
 enum SyncResultStatus {
@@ -39,7 +41,15 @@ class SyncResult {
 
 /// What changed on the server since the last pull.
 class PullResult {
-  const PullResult({required this.cursor, required this.taskIds, required this.tasks, this.reviews = const {}});
+  const PullResult({
+    required this.cursor,
+    required this.taskIds,
+    required this.tasks,
+    this.reviews = const {},
+    this.teamTaskIds = const {},
+    this.teamTasks = const [],
+    this.teamVersion,
+  });
 
   /// Sent as `since` in the next pull.
   final String cursor;
@@ -52,6 +62,16 @@ class PullResult {
 
   /// The latest review of each changed task (`null`: none).
   final Map<String, TaskReview?> reviews;
+
+  /// Every team member's task (tile) the user may see now; the others are removed.
+  final Set<String> teamTaskIds;
+
+  /// The tiles that changed.
+  final List<TeamTask> teamTasks;
+
+  /// Changes whenever the user's team changes; then everything is pulled
+  /// again (`null` from a server before Phase 7A).
+  final String? teamVersion;
 }
 
 /// `POST /api/sync/push` sends queued operations, in order; `GET
@@ -106,8 +126,36 @@ class SyncRemoteDataSource {
               (pulled['task']! as Map<String, Object?>)['id']! as String:
                   _review(pulled['latestReview'] as Map<String, Object?>?),
           },
+          teamTaskIds: (json['tileIds'] as List<Object?>? ?? []).cast<String>().toSet(),
+          teamTasks: [
+            for (final tile in (json['tiles'] as List<Object?>? ?? []).cast<Map<String, Object?>>())
+              ?_teamTask(tile),
+          ],
+          teamVersion: json['teamVersion'] as String?,
         );
       },
+    );
+  }
+
+  /// A tile, or `null` when its status or priority is one this app version
+  /// doesn't know: a teammate's tile must not break the user's own pull.
+  static TeamTask? _teamTask(Map<String, Object?> json) {
+    final assignee = json['assignee'] as Map<String, Object?>?;
+    final status = TaskStatus.values.where((s) => s.apiName == json['status']).firstOrNull;
+    final priority = TaskPriority.values.where((p) => p.apiName == json['priority']).firstOrNull;
+    if (status == null || priority == null) {
+      return null;
+    }
+    return TeamTask(
+      id: json['id']! as String,
+      title: json['title']! as String,
+      priority: priority,
+      status: status,
+      dueDate: DateTime.parse(json['dueDate']! as String).toUtc(),
+      assignee: assignee == null
+          ? null
+          : PersonRef(id: assignee['id']! as String, name: assignee['fullName']! as String),
+      updatedAt: DateTime.parse(json['updatedAt']! as String).toUtc(),
     );
   }
 

@@ -31,6 +31,9 @@ class SyncManager {
 
   static const pullCursorKey = 'pullCursor';
 
+  /// The team version of the last pull (Phase 7A).
+  static const teamVersionKey = 'teamVersion';
+
   /// `lastError` of operations whose push failed for a temporary reason.
   static const networkError = SyncErrors.network;
   static const serverError = SyncErrors.server;
@@ -102,23 +105,41 @@ class SyncManager {
   /// Loads what changed on the server since the last pull (everything the
   /// first time) and stores it. The new cursor is stored in the same
   /// transaction as the changes, so a failure half-way loads them again.
-  Future<Result<void>> pull() async {
-    final cursor = await (_db.select(_db.localSyncState)..where((s) => s.key.equals(pullCursorKey)))
-        .map((row) => row.value)
-        .getSingleOrNull();
+  ///
+  /// When the team version differs from the stored one, the user's team
+  /// changed: tasks and tiles may have become visible without changing
+  /// themselves, which a cursor can't show, so everything is pulled again
+  /// once (docs/architecture.md, "Data Changes").
+  Future<Result<void>> pull() => _pull(fresh: false);
+
+  Future<Result<void>> _pull({required bool fresh}) async {
+    final cursor = fresh ? null : await _state(pullCursorKey);
+    final teamVersion = await _state(teamVersionKey);
     switch (await _remote.pull(since: cursor)) {
       case Err(:final failure):
         return Err(failure);
+      case Ok(:final value) when cursor != null && value.teamVersion != null && value.teamVersion != teamVersion:
+        // Nothing is stored, so a failed full pull is tried again next time.
+        return _pull(fresh: true);
       case Ok(:final value):
         await _db.transaction(() async {
           await _tasks.applyServerChanges(value.tasks, value.taskIds, reviews: value.reviews);
+          await _tasks.applyTeamChanges(value.teamTasks, value.teamTaskIds);
           await _db
               .into(_db.localSyncState)
               .insertOnConflictUpdate(LocalSyncStateCompanion.insert(key: pullCursorKey, value: value.cursor));
+          if (value.teamVersion case final version?) {
+            await _db
+                .into(_db.localSyncState)
+                .insertOnConflictUpdate(LocalSyncStateCompanion.insert(key: teamVersionKey, value: version));
+          }
         });
         return const Ok(null);
     }
   }
+
+  Future<String?> _state(String key) =>
+      (_db.select(_db.localSyncState)..where((s) => s.key.equals(key))).map((row) => row.value).getSingleOrNull();
 
   /// Operations and uploads that failed for a temporary reason go back to
   /// PENDING, for the automatic retry.

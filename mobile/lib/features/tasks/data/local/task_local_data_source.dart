@@ -7,6 +7,7 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 
 /// Reads and writes tasks and requirements in the local database.
 class TaskLocalDataSource {
@@ -130,6 +131,41 @@ class TaskLocalDataSource {
       await deleteTasksExcept({...visibleIds, ...await _taskIdsInQueue()});
     });
   }
+
+  /// Team members' tasks (tiles), sorted by due date.
+  Stream<List<TeamTask>> watchTeamTasks() {
+    final query = _db.select(_db.localTeamTasks)
+      ..orderBy([(t) => OrderingTerm(expression: t.dueDate), (t) => OrderingTerm(expression: t.title)]);
+    return query.watch().map((rows) => rows.map(_toTeamTask).toList());
+  }
+
+  /// Stores the [changed] tiles and removes the tiles that are not in
+  /// [visibleIds] any more (call it inside the pull's transaction).
+  Future<void> applyTeamChanges(List<TeamTask> changed, Set<String> visibleIds) async {
+    for (final tile in changed) {
+      await _db.into(_db.localTeamTasks).insertOnConflictUpdate(LocalTeamTasksCompanion.insert(
+            id: tile.id,
+            title: tile.title,
+            priority: tile.priority.apiName,
+            status: tile.status.apiName,
+            dueDate: tile.dueDate,
+            assigneeId: Value(tile.assignee?.id),
+            assigneeName: Value(tile.assignee?.name),
+            updatedAt: tile.updatedAt,
+          ));
+    }
+    await (_db.delete(_db.localTeamTasks)..where((t) => t.id.isNotIn(visibleIds))).go();
+  }
+
+  static TeamTask _toTeamTask(TeamTaskRow row) => TeamTask(
+        id: row.id,
+        title: row.title,
+        priority: TaskPriority.fromApi(row.priority),
+        status: TaskStatus.fromApi(row.status),
+        dueDate: row.dueDate,
+        assignee: row.assigneeId == null ? null : PersonRef(id: row.assigneeId!, name: row.assigneeName ?? ''),
+        updatedAt: row.updatedAt,
+      );
 
   Future<Set<String>> _taskIdsInQueue() {
     final queue = _db.localSyncOperations;
