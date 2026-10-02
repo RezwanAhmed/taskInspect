@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 
 /// When a task is due, for filtering.
 enum DueFilter {
@@ -30,19 +31,27 @@ class TaskFilter extends Equatable {
 
   int get activeCount => (priorities.isNotEmpty ? 1 : 0) + (due != DueFilter.any ? 1 : 0) + (statuses.isNotEmpty ? 1 : 0);
 
-  bool matches(Task task, DateTime now) {
-    if (priorities.isNotEmpty && !priorities.contains(task.priority)) {
+  bool matches(Task task, DateTime now) =>
+      _matches(task.priority, task.status, task.dueDate, overdue: task.isOverdue(now), now: now);
+
+  /// The same filters for a team member's task (tile).
+  bool matchesTeamTask(TeamTask task, DateTime now) =>
+      _matches(task.priority, task.status, task.dueDate, overdue: task.isOverdue(now), now: now);
+
+  bool _matches(TaskPriority priority, TaskStatus status, DateTime dueDate,
+      {required bool overdue, required DateTime now}) {
+    if (priorities.isNotEmpty && !priorities.contains(priority)) {
       return false;
     }
-    if (statuses.isNotEmpty && !statuses.contains(task.status)) {
+    if (statuses.isNotEmpty && !statuses.contains(status)) {
       return false;
     }
     final localNow = now.toLocal();
     final startOfToday = DateTime(localNow.year, localNow.month, localNow.day);
-    final due = task.dueDate.toLocal();
+    final due = dueDate.toLocal();
     return switch (this.due) {
       DueFilter.any => true,
-      DueFilter.overdue => task.isOverdue(now),
+      DueFilter.overdue => overdue,
       DueFilter.today => !due.isBefore(startOfToday) && due.isBefore(startOfToday.add(const Duration(days: 1))),
       DueFilter.next7Days => !due.isBefore(localNow) && due.isBefore(startOfToday.add(const Duration(days: 8))),
     };

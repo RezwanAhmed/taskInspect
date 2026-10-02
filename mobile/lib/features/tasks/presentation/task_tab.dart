@@ -24,6 +24,19 @@ enum TaskTab {
   static TaskTab parse(String? name) => values.firstWhere((tab) => tab.name == name, orElse: () => all);
 }
 
+/// The worker's "All tasks" tabs with their team members' tasks (tiles).
+enum TeamTaskTab {
+  pending('Team: pending', {TaskStatus.assigned, TaskStatus.inProgress, TaskStatus.submitted}),
+  rejected('Team: rejected', {TaskStatus.rejected, TaskStatus.correctionRequested});
+
+  const TeamTaskTab(this.label, this.statuses);
+
+  final String label;
+  final Set<TaskStatus> statuses;
+
+  bool matches(TaskStatus status) => statuses.contains(status);
+}
+
 /// The worker's "My tasks" tabs (docs/architecture.md, "The Worker's Tabs"):
 /// only the tasks assigned to them. Managers keep [TaskTab].
 enum MyTaskTab {

@@ -4,6 +4,7 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 
 /// Tasks as the screens see them. Everything is read from the local
 /// database as live streams, so screens update by themselves and work the
@@ -12,6 +13,9 @@ import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 abstract interface class TaskRepository {
   /// Tasks sorted by due date, optionally only one [status].
   Stream<List<Task>> watchTasks({TaskStatus? status});
+
+  /// The team members' tasks (tiles) sorted by due date (Phase 7A, workers only).
+  Stream<List<TeamTask>> watchTeamTasks();
 
   /// One task, or `null` if it is not on the device.
   Stream<Task?> watchTask(String id);

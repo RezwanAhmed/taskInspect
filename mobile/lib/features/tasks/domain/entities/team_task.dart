@@ -24,6 +24,9 @@ class TeamTask extends Equatable {
   final PersonRef? assignee;
   final DateTime updatedAt;
 
+  /// Same rule as [Task.isOverdue].
+  bool isOverdue(DateTime now) => !status.isFinal && status != TaskStatus.submitted && dueDate.isBefore(now);
+
   @override
   List<Object?> get props => [id, title, priority, status, dueDate, assignee, updatedAt];
 }

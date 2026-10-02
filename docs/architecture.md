@@ -342,9 +342,9 @@ then the manager reviews it. The original task is not changed.
 | **My tasks** — Rejected | Mine, rejected or with a correction request |
 | **My tasks** — Partially done | Mine, in progress |
 | **My tasks** — Done | Mine, submitted or approved (read-only) |
-| **All tasks** — Open | Open tasks I may take |
-| **All tasks** — Pending | My team's tasks that are not done yet (tiles) |
-| **All tasks** — Rejected | My team's rejected tasks (tiles) |
+| **All tasks** — Open tasks | Open tasks I may take |
+| **All tasks** — Team: pending | My team's tasks that are not done yet: assigned, in progress, submitted (tiles) |
+| **All tasks** — Team: rejected | My team's rejected tasks, also with a correction request (tiles) |
 
 Managers keep the dashboard and task list they have now (they see every
 task of their organization).
@@ -360,8 +360,9 @@ task of their organization).
 
 New state `OPEN`; new actions *publish* and *take* in the state machine.
 
-On the phone, every task stored locally gets a detail level: **full** or
-**tile** (tiles have no requirements, answers or evidence). The sync pull
+On the phone, tiles are stored in their own table (`local_team_tasks`,
+no requirements, answers or evidence), apart from the full tasks, so a
+tile is never shown or synced as one of the user's own tasks. The sync pull
 follows the new visibility: tasks the worker may no longer see (e.g. an
 open task someone else took) leave `taskIds` and are removed. A team
 change makes the next pull a full one (the server tells the app with a

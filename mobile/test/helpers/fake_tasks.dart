@@ -17,6 +17,7 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_task_history.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/refresh_tasks.dart';
@@ -24,6 +25,7 @@ import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/submit_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/watch_team_tasks.dart';
 
 Task fakeTask(String id, {TaskStatus status = TaskStatus.assigned, DateTime? due, String? title}) => Task(
       id: id,
@@ -51,6 +53,9 @@ class FakeTaskRepository implements TaskRepository {
   /// When set, starting a task fails with this.
   Failure? startFailure;
 
+  /// The team members' tasks (tiles) on the "device".
+  List<TeamTask> teamTasks = [];
+
   /// Changes the tasks on the "device"; every watcher sees the change.
   void emit(List<Task> tasks) {
     current = tasks;
@@ -73,6 +78,9 @@ class FakeTaskRepository implements TaskRepository {
     return controller.stream
         .map((tasks) => status == null ? tasks : tasks.where((t) => t.status == status).toList());
   }
+
+  @override
+  Stream<List<TeamTask>> watchTeamTasks() => Stream.value(teamTasks);
 
   @override
   Stream<Task?> watchTask(String id) =>
@@ -332,6 +340,9 @@ void registerFakeTasks(
   if (getIt.isRegistered<WatchTasks>()) {
     getIt.unregister<WatchTasks>();
   }
+  if (getIt.isRegistered<WatchTeamTasks>()) {
+    getIt.unregister<WatchTeamTasks>();
+  }
   for (final unregister in [
     () => getIt.isRegistered<WatchTaskDetails>() ? getIt.unregister<WatchTaskDetails>() : null,
     () => getIt.isRegistered<StartTask>() ? getIt.unregister<StartTask>() : null,
@@ -348,6 +359,7 @@ void registerFakeTasks(
   getIt
     ..registerFactory(() => DashboardCubit(repository, RefreshTasks(repository)))
     ..registerFactory(() => WatchTasks(repository))
+    ..registerFactory(() => WatchTeamTasks(repository))
     ..registerFactory(() => WatchTaskDetails(repository))
     ..registerFactory(() => StartTask(repository))
     ..registerFactory(() => SubmitTask(repository))

@@ -11,6 +11,7 @@ import 'package:taskinspect/features/authentication/domain/entities/auth_user.da
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
 
 import '../../../helpers/fake_auth.dart';
@@ -148,6 +149,27 @@ void main() {
       ),
     ]);
 
+    workerTasks.teamTasks = [
+      TeamTask(
+        id: 'x1',
+        title: 'Roof check',
+        priority: TaskPriority.high,
+        status: TaskStatus.inProgress,
+        dueDate: DateTime.utc(2099),
+        assignee: const PersonRef(id: 'u2', name: 'Tom Teammate'),
+        updatedAt: DateTime.utc(2026, 10, 1),
+      ),
+      TeamTask(
+        id: 'x2',
+        title: 'Cellar check',
+        priority: TaskPriority.low,
+        status: TaskStatus.rejected,
+        dueDate: DateTime.utc(2099),
+        assignee: const PersonRef(id: 'u2', name: 'Tom Teammate'),
+        updatedAt: DateTime.utc(2026, 10, 1),
+      ),
+    ];
+
     Future<void> openAsWorker(WidgetTester tester) async {
       registerFakeTasks(workerTasks);
       await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testWorker))));
@@ -177,6 +199,45 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Storage'), findsOneWidget);
       expect(find.text('Roof'), findsOneWidget);
+    });
+
+    testWidgets('All tasks: open tasks to take, and the team tasks as tiles', (tester) async {
+      await openAsWorker(tester);
+      await go(tester, AppRoutes.tasks);
+
+      await tester.tap(find.widgetWithText(Tab, 'Open tasks'));
+      await tester.pumpAndSettle();
+      expect(find.text('Open boiler room'), findsOneWidget);
+      expect(find.text('Kitchen check'), findsNothing);
+
+      await tester.ensureVisible(find.widgetWithText(Tab, 'Team: pending'));
+      await tester.tap(find.widgetWithText(Tab, 'Team: pending'));
+      await tester.pumpAndSettle();
+      expect(find.text('Roof check'), findsOneWidget);
+      expect(find.text('Tom Teammate'), findsOneWidget);
+      expect(find.text('Cellar check'), findsNothing);
+
+      await tester.ensureVisible(find.widgetWithText(Tab, 'Team: rejected'));
+      await tester.tap(find.widgetWithText(Tab, 'Team: rejected'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cellar check'), findsOneWidget);
+    });
+
+    testWidgets('filters also narrow the team tabs', (tester) async {
+      await openAsWorker(tester);
+      await go(tester, AppRoutes.tasks);
+      await tester.ensureVisible(find.widgetWithText(Tab, 'Team: pending'));
+      await tester.tap(find.widgetWithText(Tab, 'Team: pending'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Filter'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, 'Low'));
+      await tester.tap(find.byKey(const Key('apply-filters')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Roof check'), findsNothing);
+      expect(find.text('No tasks match the filters'), findsOneWidget);
     });
 
     testWidgets('a user who is also a manager keeps the manager tabs', (tester) async {

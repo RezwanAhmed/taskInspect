@@ -7,6 +7,7 @@ import 'package:taskinspect/features/tasks/domain/entities/requirement.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
+import 'package:taskinspect/features/tasks/domain/entities/team_task.dart';
 import 'package:taskinspect/features/tasks/domain/repositories/task_repository.dart';
 
 class TaskRepositoryImpl implements TaskRepository {
@@ -17,6 +18,9 @@ class TaskRepositoryImpl implements TaskRepository {
 
   @override
   Stream<List<Task>> watchTasks({TaskStatus? status}) => _local.watchTasks(status: status);
+
+  @override
+  Stream<List<TeamTask>> watchTeamTasks() => _local.watchTeamTasks();
 
   @override
   Stream<Task?> watchTask(String id) => _local.watchTask(id);

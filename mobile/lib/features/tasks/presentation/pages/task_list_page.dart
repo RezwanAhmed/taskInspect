@@ -7,7 +7,9 @@ import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_list_cubit.dart';
+import 'package:taskinspect/features/tasks/presentation/cubit/team_task_list_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/task_filter.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
 import 'package:taskinspect/features/tasks/presentation/widgets/task_filter_sheet.dart';
@@ -16,8 +18,10 @@ import 'package:taskinspect/shared/widgets/sync_status_banner.dart';
 
 /// The tasks on the device in tabs, with filters for priority, due date and
 /// status that apply to every tab. Managers get every task by status
-/// ([TaskTab]); workers get "My tasks", only those assigned to them
-/// ([MyTaskTab], docs/architecture.md "The Worker's Tabs").
+/// ([TaskTab]). Workers get "My tasks", only those assigned to them
+/// ([MyTaskTab]), then "All tasks": the open tasks they may take and their
+/// team's tasks as tiles ([TeamTaskTab]) - docs/architecture.md "The
+/// Worker's Tabs".
 class TaskListPage extends StatelessWidget {
   const TaskListPage({this.initialTab = TaskTab.all, super.key});
 
@@ -31,9 +35,15 @@ class TaskListPage extends StatelessWidget {
     final tabs = myTasks
         ? [
             for (final tab in MyTaskTab.values)
-              _TabSpec(tab.label, (task) => tab.matches(task.status) && task.assignee?.id == user.id),
+              _TabSpec.tasks(tab.label, (task) => tab.matches(task.status) && task.assignee?.id == user.id),
+            _TabSpec.tasks('Open tasks', (task) => task.status == TaskStatus.open),
+            for (final tab in TeamTaskTab.values)
+              _TabSpec(
+                tab.label,
+                () => BlocProvider(create: (_) => TeamTaskListCubit(getIt(), tab), child: const _TeamTabView()),
+              ),
           ]
-        : [for (final tab in TaskTab.values) _TabSpec(tab.label, (task) => tab.matches(task.status))];
+        : [for (final tab in TaskTab.values) _TabSpec.tasks(tab.label, (task) => tab.matches(task.status))];
     return BlocProvider(
       create: (_) => TaskFilterCubit(),
       child: DefaultTabController(
@@ -57,11 +67,7 @@ class TaskListPage extends StatelessWidget {
               Expanded(
                 child: TabBarView(
                   children: [
-                    for (final tab in tabs)
-                      BlocProvider(
-                        create: (_) => TaskListCubit(getIt(), tab.matches),
-                        child: const _TaskTabView(),
-                      ),
+                    for (final tab in tabs) tab.body(),
                   ],
                 ),
               ),
@@ -73,12 +79,16 @@ class TaskListPage extends StatelessWidget {
   }
 }
 
-/// One tab of the page: its label and which tasks it shows.
+/// One tab of the page: its label and its content.
 class _TabSpec {
-  const _TabSpec(this.label, this.matches);
+  const _TabSpec(this.label, this.body);
+
+  /// A tab with the tasks on the device that [matches] accepts.
+  _TabSpec.tasks(this.label, bool Function(Task task) matches)
+      : body = (() => BlocProvider(create: (_) => TaskListCubit(getIt(), matches), child: const _TaskTabView()));
 
   final String label;
-  final bool Function(Task task) matches;
+  final Widget Function() body;
 }
 
 /// The filter chosen on the task list page, shared by all tabs.
@@ -163,6 +173,44 @@ class _TaskTabView extends StatelessWidget {
             hasUnsentChanges: unsent.contains(tasks[index].id),
             onTap: () => context.push(AppRoutes.task(tasks[index].id)),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _TeamTabView extends StatelessWidget {
+  const _TeamTabView();
+
+  @override
+  Widget build(BuildContext context) {
+    final filter = context.watch<TaskFilterCubit>().state;
+    return BlocBuilder<TeamTaskListCubit, TeamTaskListState>(
+      builder: (context, state) {
+        if (state.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final now = DateTime.now();
+        final tasks = state.tasks.where((task) => filter.matchesTeamTask(task, now)).toList();
+        if (tasks.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(filter.isActive ? 'No tasks match the filters' : 'No team tasks here'),
+                if (filter.isActive)
+                  TextButton(
+                    onPressed: () => context.read<TaskFilterCubit>().apply(const TaskFilter()),
+                    child: const Text('Clear filters'),
+                  ),
+              ],
+            ),
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: tasks.length,
+          itemBuilder: (context, index) => TeamTaskTile(task: tasks[index], now: now),
         );
       },
     );
