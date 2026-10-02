@@ -17,6 +17,7 @@ public class TaskTransitionService {
 
     private static final Map<TaskAction, AuditAction> AUDIT_ACTIONS = Map.of(
             TaskAction.ASSIGN, AuditAction.TASK_ASSIGNED,
+            TaskAction.PUBLISH, AuditAction.TASK_PUBLISHED,
             TaskAction.START, AuditAction.TASK_STARTED,
             TaskAction.SUBMIT, AuditAction.TASK_SUBMITTED,
             TaskAction.APPROVE, AuditAction.TASK_APPROVED,

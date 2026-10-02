@@ -21,6 +21,7 @@ class TaskStateMachineTests {
     /** Every allowed change, exactly as in docs/architecture.md. Anything else must be rejected. */
     private static final Map<String, TaskStatus> ALLOWED = Map.ofEntries(
             Map.entry("DRAFT+ASSIGN", TaskStatus.ASSIGNED),
+            Map.entry("DRAFT+PUBLISH", TaskStatus.OPEN),
             Map.entry("ASSIGNED+START", TaskStatus.IN_PROGRESS),
             Map.entry("IN_PROGRESS+SUBMIT", TaskStatus.SUBMITTED),
             Map.entry("SUBMITTED+APPROVE", TaskStatus.APPROVED),
@@ -29,6 +30,7 @@ class TaskStateMachineTests {
             Map.entry("REJECTED+START", TaskStatus.IN_PROGRESS),
             Map.entry("CORRECTION_REQUESTED+START", TaskStatus.IN_PROGRESS),
             Map.entry("DRAFT+CANCEL", TaskStatus.CANCELLED),
+            Map.entry("OPEN+CANCEL", TaskStatus.CANCELLED),
             Map.entry("ASSIGNED+CANCEL", TaskStatus.CANCELLED),
             Map.entry("IN_PROGRESS+CANCEL", TaskStatus.CANCELLED),
             Map.entry("REJECTED+CANCEL", TaskStatus.CANCELLED),

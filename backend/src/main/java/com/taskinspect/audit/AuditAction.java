@@ -11,6 +11,7 @@ public enum AuditAction {
     TASK_CREATED,
     TASK_UPDATED,
     TASK_ASSIGNED,
+    TASK_PUBLISHED,
     TASK_STARTED,
     TASK_SUBMITTED,
     TASK_APPROVED,

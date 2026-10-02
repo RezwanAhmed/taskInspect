@@ -65,6 +65,10 @@ public class Task {
     @JoinColumn(name = "assignee_id")
     private User assignee;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "open_scope", length = 20)
+    private OpenScope openScope;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -107,9 +111,17 @@ public class Task {
         this.assignee = worker;
     }
 
-    /** Only the task state machine changes the status. */
+    /** Sets who may take the task once it is published (OPEN). */
+    void openTo(OpenScope scope) {
+        this.openScope = scope;
+    }
+
+    /** Only the task state machine changes the status. Leaving OPEN clears who may take it. */
     void changeStatus(TaskStatus newStatus) {
         this.status = newStatus;
+        if (newStatus != TaskStatus.OPEN) {
+            this.openScope = null;
+        }
     }
 
     public UUID getId() {
@@ -151,6 +163,11 @@ public class Task {
     /** The worker the task is assigned to, or {@code null} before it is assigned. */
     public User getAssignee() {
         return assignee;
+    }
+
+    /** Who may take the task while it is OPEN; {@code null} in every other status. */
+    public OpenScope getOpenScope() {
+        return openScope;
     }
 
     public long getVersion() {

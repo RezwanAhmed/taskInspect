@@ -149,7 +149,7 @@ stateDiagram-v2
 |------|----|--------|-----|------------|
 | — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. A reviewer is set (defaults to the creator). |
 | `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
-| `DRAFT` | `OPEN` | Publish (Phase 7A) | Manager | The task has at least one requirement; who may take it: team or everyone. |
+| `DRAFT` | `OPEN` | Publish (`POST /api/tasks/{id}/publish`) | Manager | The task has at least one requirement; who may take it: team (needs an active team member, else `409 TEAM_HAS_NO_MEMBERS`) or everyone. |
 | `OPEN` | `ASSIGNED` | Take (Phase 7A) | A worker who may take it | The first one wins (`409 TASK_ALREADY_TAKEN` for the others). |
 | `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
 | `IN_PROGRESS` | `SUBMITTED` | Submit (`POST /api/tasks/{id}/submit`) | Assigned worker | Every required requirement has a response. |
@@ -620,10 +620,11 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them | `404` (hidden) |
 | `GET /api/tasks/team` (`?status=`) | Any logged-in user: their team members' tasks as tiles (not their own, no cancelled ones). Empty without a team, when the team's manager is deactivated, and for administrators and managers (they have no team; they see all tasks above) | `401` |
 | `GET /api/teams` | Any logged-in user: every active manager's team in numbers (active members; tasks not approved or cancelled, also those of deactivated members) | `401` |
-| `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
-| `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / ASSIGNED | `403` |
+| `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
+| `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
 | `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
+| `POST /api/tasks/{id}/publish` (`{"scope": "TEAM" \| "EVERYONE"}`) | The manager who created the task, while DRAFT | `403` |
 | `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |
 | `POST /api/tasks/{id}/submit` | The assigned worker, while IN_PROGRESS; every required requirement answered (files uploaded) | `403` / `404` |

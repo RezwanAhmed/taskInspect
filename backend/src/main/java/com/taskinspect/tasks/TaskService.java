@@ -38,7 +38,7 @@ public class TaskService {
     static final String TASK_NOT_EDITABLE = "TASK_NOT_EDITABLE";
 
     /** A task's details can change only until the worker starts it. */
-    private static final Set<TaskStatus> EDITABLE = EnumSet.of(TaskStatus.DRAFT, TaskStatus.ASSIGNED);
+    private static final Set<TaskStatus> EDITABLE = EnumSet.of(TaskStatus.DRAFT, TaskStatus.OPEN, TaskStatus.ASSIGNED);
 
     private final TaskRepository taskRepository;
     private final UserService userService;

@@ -6,6 +6,7 @@ import com.taskinspect.common.security.Roles;
 import com.taskinspect.common.web.PageResponse;
 import com.taskinspect.tasks.dto.AssignTaskRequest;
 import com.taskinspect.tasks.dto.CreateTaskRequest;
+import com.taskinspect.tasks.dto.PublishTaskRequest;
 import com.taskinspect.tasks.dto.TaskResponse;
 import com.taskinspect.tasks.dto.TaskTile;
 import com.taskinspect.tasks.dto.UpdateTaskRequest;
@@ -98,6 +99,17 @@ public class TaskController {
     public TaskResponse assign(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
             @Valid @RequestBody AssignTaskRequest request) {
         return TaskResponse.from(assignmentService.assign(CurrentUser.from(jwt), id, request.assigneeId()));
+    }
+
+    @PostMapping("/{id}/publish")
+    @PreAuthorize(Roles.MANAGER)
+    @Operation(summary = "Publish a task as an open task", description = "DRAFT → OPEN, without an assignee. "
+            + "Only the manager who created the task; it needs at least one requirement. `scope` says who may "
+            + "take it: TEAM (the manager's team; 409 TEAM_HAS_NO_MEMBERS when it has no active worker) or "
+            + "EVERYONE (every worker of the organization).")
+    public TaskResponse publish(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
+            @Valid @RequestBody PublishTaskRequest request) {
+        return TaskResponse.from(assignmentService.publish(CurrentUser.from(jwt), id, request.scope()));
     }
 
     @PostMapping("/{id}/start")

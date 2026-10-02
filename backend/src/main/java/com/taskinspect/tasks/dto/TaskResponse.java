@@ -1,5 +1,6 @@
 package com.taskinspect.tasks.dto;
 
+import com.taskinspect.tasks.OpenScope;
 import com.taskinspect.tasks.Task;
 import com.taskinspect.tasks.TaskPriority;
 import com.taskinspect.tasks.TaskStatus;
@@ -18,6 +19,7 @@ public record TaskResponse(
         UserRef createdBy,
         UserRef reviewer,
         UserRef assignee,
+        OpenScope openScope,
         long version,
         Instant createdAt,
         Instant updatedAt) {
@@ -25,7 +27,7 @@ public record TaskResponse(
     public static TaskResponse from(Task task) {
         return new TaskResponse(task.getId(), task.getTitle(), task.getDescription(), task.getPriority(),
                 task.getStatus(), task.getDueDate(), UserRef.from(task.getCreatedBy()),
-                UserRef.from(task.getReviewer()), UserRef.from(task.getAssignee()), task.getVersion(),
+                UserRef.from(task.getReviewer()), UserRef.from(task.getAssignee()), task.getOpenScope(), task.getVersion(),
                 task.getCreatedAt(), task.getUpdatedAt());
     }
 

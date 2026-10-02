@@ -6,6 +6,7 @@ import static com.taskinspect.tasks.TaskStatus.CANCELLED;
 import static com.taskinspect.tasks.TaskStatus.CORRECTION_REQUESTED;
 import static com.taskinspect.tasks.TaskStatus.DRAFT;
 import static com.taskinspect.tasks.TaskStatus.IN_PROGRESS;
+import static com.taskinspect.tasks.TaskStatus.OPEN;
 import static com.taskinspect.tasks.TaskStatus.REJECTED;
 import static com.taskinspect.tasks.TaskStatus.SUBMITTED;
 
@@ -33,6 +34,7 @@ public class TaskStateMachine {
 
     static {
         allow(DRAFT, TaskAction.ASSIGN, ASSIGNED);
+        allow(DRAFT, TaskAction.PUBLISH, OPEN);
         allow(ASSIGNED, TaskAction.START, IN_PROGRESS);
         allow(IN_PROGRESS, TaskAction.SUBMIT, SUBMITTED);
         allow(SUBMITTED, TaskAction.APPROVE, APPROVED);
@@ -40,7 +42,7 @@ public class TaskStateMachine {
         allow(SUBMITTED, TaskAction.REQUEST_CORRECTION, CORRECTION_REQUESTED);
         allow(REJECTED, TaskAction.START, IN_PROGRESS);
         allow(CORRECTION_REQUESTED, TaskAction.START, IN_PROGRESS);
-        for (TaskStatus status : Set.of(DRAFT, ASSIGNED, IN_PROGRESS, REJECTED, CORRECTION_REQUESTED)) {
+        for (TaskStatus status : Set.of(DRAFT, OPEN, ASSIGNED, IN_PROGRESS, REJECTED, CORRECTION_REQUESTED)) {
             allow(status, TaskAction.CANCEL, CANCELLED);
         }
     }
