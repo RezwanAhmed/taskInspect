@@ -125,7 +125,9 @@ class FakeTaskRepository implements TaskRepository {
 
   @override
   Future<Result<Task>> start(String taskId) async {
-    await startGate?.future;
+    if (startGate case final gate?) {
+      await gate.future;
+    }
     if (startFailure != null) {
       return Err(startFailure!);
     }
@@ -369,8 +371,14 @@ class FakeTaskRepository implements TaskRepository {
   /// When set, submitting fails with this.
   Failure? submitFailure;
 
+  /// When set, submitting waits for it (e.g. until the page is closed).
+  Completer<void>? submitGate;
+
   @override
   Future<Result<Task>> submit(String taskId) async {
+    if (submitGate case final gate?) {
+      await gate.future;
+    }
     if (submitFailure case final failure?) {
       return Err(failure);
     }
@@ -409,8 +417,14 @@ class FakeAnswerRepository implements AnswerRepository {
     yield Map.of(saved[taskId] ?? const {});
   }
 
+  /// When set, saving waits for it (e.g. so a read sees the older answers).
+  Completer<void>? saveGate;
+
   @override
   Future<void> saveAnswer({required String taskId, required String requirementId, required Answer answer}) async {
+    if (saveGate case final gate?) {
+      await gate.future;
+    }
     (saved[taskId] ??= {})[requirementId] = answer;
   }
 }
@@ -425,9 +439,15 @@ class FakeEvidencePicker implements EvidencePicker {
   /// Documents returned by [chooseDocument], in order (`null` = cancelled).
   final List<PickedDocument?> nextDocuments = [];
 
+  /// When set, the camera waits for it (e.g. until the page is closed).
+  Completer<void>? gate;
+
   @override
   Future<String?> takePhoto() async {
     cameraUses++;
+    if (gate case final waiting?) {
+      await waiting.future;
+    }
     return next.isEmpty ? null : next.removeAt(0);
   }
 
