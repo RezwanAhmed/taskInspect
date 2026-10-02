@@ -49,7 +49,9 @@ public class SyncController {
             description = "Without `since` (first pull, after sign in): every task the user may see, with its "
                     + "requirements. With `since` = the `cursor` of the last pull: only the tasks changed since "
                     + "then (changes from shortly before are sent again, so none is missed). `taskIds` lists every "
-                    + "task the user may see now, so the app can remove the others.")
+                    + "task the user may see now, so the app can remove the others. Tiles (team members' tasks, "
+                    + "without requirements) come the same way in `tileIds` / `tiles`. `teamVersion` changes when "
+                    + "the user's team changes; then the app pulls again without `since`.")
     public SyncPullResponse pull(@AuthenticationPrincipal Jwt jwt, @RequestParam(required = false) Instant since) {
         return syncPullService.pull(CurrentUser.from(jwt), since);
     }

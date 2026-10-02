@@ -6,6 +6,7 @@ import com.taskinspect.common.error.ApiException;
 import com.taskinspect.common.error.ErrorCode;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.users.dto.CreateUserRequest;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -114,6 +115,26 @@ public class UserService {
     public User requireCaller(CurrentUser caller) {
         return userRepository.findById(caller.id())
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Unknown user"));
+    }
+
+    /**
+     * A short value that changes whenever the caller's team changes: they
+     * join or leave a team, a member joins or leaves it, or its manager is
+     * deactivated or reactivated. The sync pull sends it; when it differs
+     * from the last one, the app pulls everything again, because tasks that
+     * became visible this way did not change themselves (docs/architecture.md,
+     * "Data Changes").
+     */
+    @Transactional(readOnly = true)
+    public String teamVersion(CurrentUser caller) {
+        User teamManager = requireCaller(caller).getTeamManager();
+        if (teamManager == null) {
+            return "none";
+        }
+        String team = teamManager.getId() + ":" + teamManager.isActive() + ":"
+                + userRepository.findMemberIds(teamManager.getId()).stream().map(UUID::toString)
+                        .collect(Collectors.joining(","));
+        return UUID.nameUUIDFromBytes(team.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     /**

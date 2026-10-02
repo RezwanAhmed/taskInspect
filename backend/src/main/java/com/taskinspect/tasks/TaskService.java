@@ -241,13 +241,22 @@ public class TaskService {
     @Transactional(readOnly = true)
     public Page<Task> listTeam(CurrentUser caller, TaskStatus status, Pageable pageable) {
         User user = userService.requireCaller(caller);
-        User teamManager = user.getTeamManager();
-        if (teamManager == null || !teamManager.isActive()) {
-            return Page.empty(pageable);
-        }
-        return taskRepository.findAll(Specification.allOf(inOrganization(user.getOrganization().getId()),
-                assignedToTeamOf(teamManager.getId()), notAssignedTo(user.getId()),
-                notInStatus(TaskStatus.CANCELLED), hasStatus(status)), pageable);
+        UUID teamManagerId = activeTeamManagerId(user);
+        return teamManagerId == null ? Page.empty(pageable)
+                : taskRepository.findAll(Specification.allOf(teamTiles(user, teamManagerId), hasStatus(status)), pageable);
+    }
+
+    /** Every tile of the caller's team (same rules as {@link #listTeam}), e.g. for the sync pull. */
+    @Transactional(readOnly = true)
+    public List<Task> listTeamAll(CurrentUser caller) {
+        User user = userService.requireCaller(caller);
+        UUID teamManagerId = activeTeamManagerId(user);
+        return teamManagerId == null ? List.of() : taskRepository.findAll(teamTiles(user, teamManagerId));
+    }
+
+    private static Specification<Task> teamTiles(User user, UUID teamManagerId) {
+        return Specification.allOf(inOrganization(user.getOrganization().getId()), assignedToTeamOf(teamManagerId),
+                notAssignedTo(user.getId()), notInStatus(TaskStatus.CANCELLED));
     }
 
     /** One task the caller may see; 404 for tasks that don't exist or aren't visible. */

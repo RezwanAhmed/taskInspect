@@ -25,6 +25,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             group by u.teamManager.id""")
     List<Object[]> countActiveMembersPerTeam(UUID organizationId);
 
+    /** The members of a manager's team, also deactivated ones (their tasks stay visible as tiles). */
+    @Query("select u.id from User u where u.teamManager.id = :teamManagerId order by u.id")
+    List<UUID> findMemberIds(UUID teamManagerId);
+
     /** How many active members a manager's team has. */
     long countByTeamManagerIdAndActiveTrue(UUID teamManagerId);
 

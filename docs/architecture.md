@@ -366,7 +366,13 @@ follows the new visibility: tasks the worker may no longer see (e.g. an
 open task someone else took) leave `taskIds` and are removed. A team
 change makes the next pull a full one (the server tells the app with a
 team version in the pull), because a change cursor can't show tasks that
-became visible without changing themselves. Publishing and taking need a
+became visible without changing themselves. In the pull, tiles come apart from
+the full tasks: `tileIds` (every tile the user may see now) and `tiles`
+(the changed ones, without requirements), so an app that doesn't know
+tiles yet never stores them as tasks. `teamVersion` changes when the
+user joins or leaves a team, a member joins or leaves it, or its manager
+is deactivated; it is `none` without a team. Other teams' numbers are
+not in the pull (`GET /api/teams`, online). Publishing and taking need a
 connection (see *What Works Offline*). The API permissions table below
 changes with tasks 7A.3-7A.7.
 
