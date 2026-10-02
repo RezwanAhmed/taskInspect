@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
+import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
+import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_list_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/task_filter.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
@@ -12,8 +14,10 @@ import 'package:taskinspect/features/tasks/presentation/widgets/task_filter_shee
 import 'package:taskinspect/features/tasks/presentation/widgets/task_tile.dart';
 import 'package:taskinspect/shared/widgets/sync_status_banner.dart';
 
-/// All tasks on the device, in tabs by status, with filters for priority,
-/// due date and status that apply to every tab.
+/// The tasks on the device in tabs, with filters for priority, due date and
+/// status that apply to every tab. Managers get every task by status
+/// ([TaskTab]); workers get "My tasks", only those assigned to them
+/// ([MyTaskTab], docs/architecture.md "The Worker's Tabs").
 class TaskListPage extends StatelessWidget {
   const TaskListPage({this.initialTab = TaskTab.all, super.key});
 
@@ -21,19 +25,30 @@ class TaskListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
+    final user = auth is Authenticated ? auth.user : null;
+    final myTasks = user != null && user.isWorker && !user.isManager;
+    final tabs = myTasks
+        ? [
+            for (final tab in MyTaskTab.values)
+              _TabSpec(tab.label, (task) => tab.matches(task.status) && task.assignee?.id == user.id),
+          ]
+        : [for (final tab in TaskTab.values) _TabSpec(tab.label, (task) => tab.matches(task.status))];
     return BlocProvider(
       create: (_) => TaskFilterCubit(),
       child: DefaultTabController(
-        length: TaskTab.values.length,
-        initialIndex: initialTab.index,
+        // A new controller when the tab set changes (e.g. another user signs in).
+        key: ValueKey(myTasks),
+        length: tabs.length,
+        initialIndex: myTasks ? MyTaskTab.of(initialTab).index : initialTab.index,
         child: Scaffold(
           appBar: AppBar(
-            title: const Text('Tasks'),
+            title: Text(myTasks ? 'My tasks' : 'Tasks'),
             actions: const [_FilterButton()],
             bottom: TabBar(
               isScrollable: true,
               tabAlignment: TabAlignment.start,
-              tabs: [for (final tab in TaskTab.values) Tab(text: tab.label)],
+              tabs: [for (final tab in tabs) Tab(text: tab.label)],
             ),
           ),
           body: Column(
@@ -42,9 +57,9 @@ class TaskListPage extends StatelessWidget {
               Expanded(
                 child: TabBarView(
                   children: [
-                    for (final tab in TaskTab.values)
+                    for (final tab in tabs)
                       BlocProvider(
-                        create: (_) => TaskListCubit(getIt(), tab),
+                        create: (_) => TaskListCubit(getIt(), tab.matches),
                         child: const _TaskTabView(),
                       ),
                   ],
@@ -56,6 +71,14 @@ class TaskListPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One tab of the page: its label and which tasks it shows.
+class _TabSpec {
+  const _TabSpec(this.label, this.matches);
+
+  final String label;
+  final bool Function(Task task) matches;
 }
 
 /// The filter chosen on the task list page, shared by all tabs.
