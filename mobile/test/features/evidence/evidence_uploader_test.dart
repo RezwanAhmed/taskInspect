@@ -30,8 +30,11 @@ void main() {
   late Map<String, int> statusOf;
   late Map<String, String> codeOf;
 
-  /// File uploads as received: URL, content type and size.
-  late List<({String url, Object? contentType, Object? length})> uploads;
+  /// File uploads as received: URL, content type, size and all headers.
+  late List<({String url, Object? contentType, Object? length, Map<String, dynamic> headers})> uploads;
+
+  /// The signed URL the API hands out (local storage by default; S3 style in one test).
+  late Map<String, Object?> signedUpload;
 
   setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
@@ -40,6 +43,11 @@ void main() {
     statusOf = {};
     codeOf = {};
     uploads = [];
+    signedUpload = {
+      'method': 'PUT',
+      'headers': {'Content-Type': 'image/jpeg'},
+      'expiresAt': '2026-10-01T09:10:00Z',
+    };
     api.dio.httpClientAdapter = FakeServer((request) async {
       final step = request.path.split('/').last;
       final status = statusOf[step] ?? 200;
@@ -49,9 +57,7 @@ void main() {
       return switch (step) {
         'upload-url' => (200, {
             'url': 'http://files.test/api/files/${request.path.split('/')[5]}.jpg?signature=s',
-            'method': 'PUT',
-            'headers': {'Content-Type': 'image/jpeg'},
-            'expiresAt': '2026-10-01T09:10:00Z',
+            ...signedUpload,
           }),
         _ => (200, {'id': request.path.split('/')[5], 'status': 'UPLOADED'}),
       };
@@ -61,6 +67,7 @@ void main() {
         url: request.uri.toString(),
         contentType: request.contentType,
         length: request.headers[Headers.contentLengthHeader],
+        headers: request.headers,
       ));
       return (statusOf['file'] ?? 200, null);
     });
@@ -97,6 +104,45 @@ void main() {
   }
 
   Future<EvidenceRow> row(String id) => (db.select(db.localEvidence)..where((e) => e.id.equals(id))).getSingle();
+
+  test('an S3 pre-signed URL gets its signed headers, one length and no login (task 8.3)', () async {
+    signedUpload = {
+      'url': 'https://evidence.s3.eu-central-1.amazonaws.com/tasks/t1/e1.jpg?X-Amz-Signature=abc',
+      'method': 'PUT',
+      'headers': {'Content-Type': 'image/jpeg', 'Content-Length': '5'},
+      'expiresAt': '2026-10-01T09:10:00Z',
+    };
+    await photo('e1');
+
+    expect(await uploader.uploadAll(), isA<Ok<void>>());
+
+    final upload = uploads.single;
+    expect(upload.url, startsWith('https://evidence.s3.eu-central-1.amazonaws.com/tasks/t1/e1.jpg'));
+    expect(upload.contentType, 'image/jpeg');
+    expect(upload.length, 5);
+    expect([for (final key in upload.headers.keys) key.toLowerCase()].where((k) => k == 'content-length'), hasLength(1));
+    expect(upload.headers.keys.map((k) => k.toLowerCase()), isNot(contains('authorization')));
+  });
+
+  test('an upload refused twice in a row is not retried automatically any more', () async {
+    await photo('e1');
+    statusOf['file'] = 403;
+
+    await uploader.uploadAll();
+    expect((await row('e1')).uploadError, EvidenceRemoteDataSource.urlExpired);
+    await uploader.retryTemporaryFailures();
+    final second = await uploader.uploadAll();
+
+    expect((await row('e1')).uploadError, EvidenceUploader.uploadRefused);
+    expect(second, isA<Ok<void>>(), reason: 'not a temporary failure for the sync');
+    await uploader.retryTemporaryFailures();
+    expect((await row('e1')).uploadStatus, 'FAILED');
+
+    statusOf['file'] = 200;
+    await uploader.retryFailed();
+    await uploader.uploadAll();
+    expect((await row('e1')).uploadStatus, 'UPLOADED');
+  });
 
   test('uploads a registered file: upload URL, file (with its type and size), complete', () async {
     await photo('e1');

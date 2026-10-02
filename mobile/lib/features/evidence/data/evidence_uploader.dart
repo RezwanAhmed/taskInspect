@@ -17,6 +17,12 @@ class EvidenceUploader {
   EvidenceUploader(this._db, this._remote);
 
   static const fileMissing = 'FILE_MISSING';
+
+  /// The signed URL was refused twice in a row: not an expired URL but an
+  /// upload the storage won't take (e.g. the file's size differs from the
+  /// registered one - S3 checks it). Waits for the Retry button instead of
+  /// being retried automatically forever.
+  static const uploadRefused = 'UPLOAD_REFUSED';
   static const _alreadyUploaded = 'EVIDENCE_ALREADY_UPLOADED';
 
   /// `uploadError`s retried automatically.
@@ -87,11 +93,16 @@ class EvidenceUploader {
       case Err(failure: UnauthorizedFailure()):
         await _write(evidence.id, const LocalEvidenceCompanion(uploadStatus: Value('PENDING')));
       case Err(:final failure):
+        final refusedAgain = _errorCode(failure) == EvidenceRemoteDataSource.urlExpired &&
+            evidence.uploadError == EvidenceRemoteDataSource.urlExpired;
         await _write(evidence.id, LocalEvidenceCompanion(
           uploadStatus: const Value('FAILED'),
           uploadRetryCount: Value(evidence.uploadRetryCount + 1),
-          uploadError: Value(_errorCode(failure)),
+          uploadError: Value(refusedAgain ? uploadRefused : _errorCode(failure)),
         ));
+        if (refusedAgain) {
+          return const Err(ServerFailure(statusCode: 403, code: uploadRefused));
+        }
     }
     return result;
   }
