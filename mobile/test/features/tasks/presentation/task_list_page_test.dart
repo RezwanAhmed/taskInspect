@@ -249,6 +249,9 @@ void main() {
 
       expect(find.text('Tasks'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'All'), findsOneWidget);
+      // Every task, also those of others (on a short tab, so the list fits the screen).
+      await tester.tap(find.widgetWithText(Tab, 'Pending'));
+      await tester.pumpAndSettle();
       expect(find.text('Someone else'), findsOneWidget);
     });
 

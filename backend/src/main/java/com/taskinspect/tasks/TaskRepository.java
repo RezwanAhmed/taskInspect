@@ -35,6 +35,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID>, JpaSpecificat
 
     /** The sub-tasks of a main task, oldest first. */
     @EntityGraph(attributePaths = {"createdBy", "reviewer", "assignee"})
+    @Query("select t from Task t where t.parentTask.id = :parentTaskId order by t.createdAt asc, t.id asc")
     List<Task> findAllByParentTaskIdOrderByCreatedAtAscIdAsc(UUID parentTaskId);
 
     /**
