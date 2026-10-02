@@ -761,6 +761,13 @@ stateDiagram-v2
     SYNCED --> [*]
 ```
 
+Operations the server accepts: `TaskResponse UPDATE`, `Evidence CREATE` /
+`DELETE` and `Task START` / `SUBMIT` (workers; start and submit also the
+manager of a main task), and `Task CREATE` / `UPDATE` (managers: drafts
+made offline). A `Task CREATE` carries the task ID the app gave the
+draft; sending it again changes nothing, and an ID of someone else's
+task is refused (`409 TASK_ID_CONFLICT`).
+
 The queue is stored in the database, not in memory, so nothing is lost
 when the app is closed or the phone restarts. Its contents can be shown
 in the app and inspected in tests.

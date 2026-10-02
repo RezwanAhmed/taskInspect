@@ -8,17 +8,19 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.springframework.data.domain.Persistable;
 
 /**
  * A task that a manager creates and a worker completes. New tasks start as
@@ -27,11 +29,18 @@ import org.hibernate.annotations.UpdateTimestamp;
  */
 @Entity
 @Table(name = "tasks")
-public class Task {
+public class Task implements Persistable<UUID> {
 
+    /**
+     * Set when the task is made: a task created offline brings the ID the
+     * app gave it (docs/architecture.md, "What Works Offline").
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    /** Until it is first saved; tells Spring Data to insert it although it has an ID. */
+    @Transient
+    private boolean isNew = true;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "organization_id", nullable = false)
@@ -97,6 +106,13 @@ public class Task {
     /** Creates a draft task. The reviewer defaults to the creator when none is given. */
     public Task(User createdBy, String title, String description, TaskPriority priority, Instant dueDate,
             User reviewer) {
+        this(UUID.randomUUID(), createdBy, title, description, priority, dueDate, reviewer);
+    }
+
+    /** Creates a draft task with the ID a device gave it (created offline). */
+    public Task(UUID id, User createdBy, String title, String description, TaskPriority priority, Instant dueDate,
+            User reviewer) {
+        this.id = id;
         this.organization = createdBy.getOrganization();
         this.createdBy = createdBy;
         this.title = title;
@@ -143,8 +159,20 @@ public class Task {
         }
     }
 
+    @Override
     public UUID getId() {
         return id;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markStored() {
+        this.isNew = false;
     }
 
     public Organization getOrganization() {

@@ -39,7 +39,9 @@ public class SyncController {
                     + "is checked like the matching API call and gets its own result: APPLIED, REJECTED (with "
                     + "the error code) or SKIPPED (an earlier change of the same task was rejected). Safe to "
                     + "send again: operations applied before are not applied twice. Supported: TaskResponse "
-                    + "UPDATE, Evidence CREATE / DELETE, Task START / SUBMIT.")
+                    + "UPDATE, Evidence CREATE / DELETE, Task START / SUBMIT (workers; START / SUBMIT also the "
+                    + "manager of a main task), Task CREATE / UPDATE (managers: drafts made offline; CREATE "
+                    + "uses the task ID the app gave it).")
     public SyncPushResponse push(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody SyncPushRequest request) {
         return new SyncPushResponse(syncService.push(CurrentUser.from(jwt), request.operations()));
     }

@@ -18,6 +18,7 @@ import com.taskinspect.tasks.dto.CreateTaskRequest;
 import com.taskinspect.tasks.dto.UpdateTaskRequest;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import com.taskinspect.users.RoleName;
 import com.taskinspect.users.User;
@@ -38,6 +39,7 @@ public class TaskService {
     static final String TASK_NOT_FOUND = "TASK_NOT_FOUND";
     static final String TASK_NOT_EDITABLE = "TASK_NOT_EDITABLE";
     static final String NOT_A_MAIN_TASK = "NOT_A_MAIN_TASK";
+    static final String TASK_ID_CONFLICT = "TASK_ID_CONFLICT";
     static final String MAIN_TASK_CLOSED = "MAIN_TASK_CLOSED";
 
     /** A main task gets new sub-tasks while its manager is working on it (also after a reject or correction request). */
@@ -66,6 +68,27 @@ public class TaskService {
     public Task create(CurrentUser caller, CreateTaskRequest request) {
         User creator = userService.requireCaller(caller);
         Task task = taskRepository.save(new Task(creator, request.title().trim(), clean(request.description()),
+                request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
+        transitions.recordCreated(task, creator);
+        return task;
+    }
+
+    /**
+     * Creates a draft task with the ID the app gave it offline (sync push
+     * "Task CREATE"). Sending it again returns the task already made; an ID
+     * that belongs to someone else's task is refused.
+     */
+    @Transactional
+    public Task createWithId(CurrentUser caller, UUID id, CreateTaskRequest request) {
+        Optional<Task> existing = taskRepository.findById(id);
+        if (existing.isPresent()) {
+            if (!existing.get().getCreatedBy().getId().equals(caller.id())) {
+                throw new ApiException(HttpStatus.CONFLICT, TASK_ID_CONFLICT, "This task ID is already used");
+            }
+            return existing.get();
+        }
+        User creator = userService.requireCaller(caller);
+        Task task = taskRepository.save(new Task(id, creator, request.title().trim(), clean(request.description()),
                 request.priority(), request.dueDate(), reviewer(request.reviewerId(), creator)));
         transitions.recordCreated(task, creator);
         return task;

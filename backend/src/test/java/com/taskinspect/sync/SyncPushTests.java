@@ -18,6 +18,7 @@ import com.taskinspect.tasks.TaskPriority;
 import com.taskinspect.tasks.TaskRepository;
 import com.taskinspect.tasks.TaskStateMachine;
 import com.taskinspect.tasks.TaskStatus;
+import com.taskinspect.tasks.TaskStatusChangeRepository;
 import com.taskinspect.users.OrganizationRepository;
 import com.taskinspect.users.RoleName;
 import com.taskinspect.users.RoleRepository;
@@ -58,6 +59,9 @@ class SyncPushTests {
 
     @Autowired
     private TaskStateMachine stateMachine;
+
+    @Autowired
+    private TaskStatusChangeRepository historyRepository;
 
     @Autowired
     private RequirementRepository requirementRepository;
@@ -227,6 +231,50 @@ class SyncPushTests {
         assertThat(taskRepository.findById(mainTask.getId()).orElseThrow().getStatus()).isEqualTo(TaskStatus.SUBMITTED);
         // Answers stay worker-only.
         push(manager, answer(task, yesNo, "{\"booleanValue\": true}")).andExpect(jsonPath("$.results[0].code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void aManagerCreatesAndEditsADraftMadeOffline() throws Exception {
+        UUID id = UUID.randomUUID();
+        String create = operation(id, "Task", id, "CREATE",
+                "{\"title\": \"Boiler room\", \"priority\": \"HIGH\", \"dueDate\": \"2026-12-01T09:00:00Z\"}");
+
+        push(manager, create).andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        push(manager, create).andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        // Sent again as a new operation (e.g. the app lost the answer): still one task.
+        push(manager, operation(id, "Task", id, "CREATE",
+                "{\"title\": \"Boiler room\", \"priority\": \"HIGH\", \"dueDate\": \"2026-12-01T09:00:00Z\"}"))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        assertThat(historyRepository.findAllByTaskIdOrderByChangedAtAscIdAsc(id)).hasSize(1);
+        Task draft = taskRepository.findById(id).orElseThrow();
+        assertThat(draft.getStatus()).isEqualTo(TaskStatus.DRAFT);
+        assertThat(draft.getTitle()).isEqualTo("Boiler room");
+        assertThat(taskRepository.count()).isEqualTo(2);
+
+        push(manager, operation(id, "Task", id, "UPDATE", "{\"title\": \"Boiler room 2\", \"priority\": \"LOW\", "
+                + "\"dueDate\": \"2026-12-02T09:00:00Z\", \"version\": 0}"))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        assertThat(taskRepository.findById(id).orElseThrow().getTitle()).isEqualTo("Boiler room 2");
+        push(manager, operation(id, "Task", id, "UPDATE", "{\"title\": \"Old\", \"priority\": \"LOW\", "
+                + "\"dueDate\": \"2026-12-02T09:00:00Z\", \"version\": 0}"))
+                .andExpect(jsonPath("$.results[0].code").value("VERSION_CONFLICT"));
+    }
+
+    @Test
+    void draftsFromTheAppAreManagersWorkAndIdsCannotBeTaken() throws Exception {
+        UUID id = UUID.randomUUID();
+        String body = "{\"title\": \"Boiler room\", \"priority\": \"HIGH\", \"dueDate\": \"2026-12-01T09:00:00Z\"}";
+
+        push(worker, operation(id, "Task", id, "CREATE", body)).andExpect(jsonPath("$.results[0].code").value("FORBIDDEN"));
+        push(manager, operation(task.getId(), "Task", task.getId(), "CREATE", body))
+                .andExpect(jsonPath("$.results[0].status").value("APPLIED"));
+        User otherManager = save("manager2@example.com", "Max Manager", RoleName.MANAGER);
+        push(otherManager, operation(task.getId(), "Task", task.getId(), "CREATE", body))
+                .andExpect(jsonPath("$.results[0].code").value("TASK_ID_CONFLICT"));
+        push(manager, operation(id, "Task", UUID.randomUUID(), "CREATE", body))
+                .andExpect(jsonPath("$.results[0].code").value("INVALID_PAYLOAD"));
+        push(manager, operation(id, "Task", id, "CREATE", "{\"priority\": \"HIGH\"}"))
+                .andExpect(jsonPath("$.results[0].code").value("VALIDATION_ERROR"));
     }
 
     @Test

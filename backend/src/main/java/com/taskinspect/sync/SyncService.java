@@ -6,11 +6,13 @@ import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.evidence.EvidenceService;
 import com.taskinspect.evidence.dto.RegisterEvidenceRequest;
 import com.taskinspect.responses.ResponseService;
-import com.taskinspect.reviews.SubmissionService;
 import com.taskinspect.responses.dto.SaveResponseRequest;
+import com.taskinspect.reviews.SubmissionService;
 import com.taskinspect.sync.dto.SyncOperationRequest;
 import com.taskinspect.sync.dto.SyncOperationResult;
 import com.taskinspect.tasks.TaskService;
+import com.taskinspect.tasks.dto.CreateTaskRequest;
+import com.taskinspect.tasks.dto.UpdateTaskRequest;
 import com.taskinspect.users.RoleName;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
@@ -121,13 +123,18 @@ public class SyncService {
     }
 
     private void apply(CurrentUser caller, SyncOperationRequest operation) {
-        // The same role check as the matching API endpoints: start and submit
+        // The same role check as the matching API endpoints. Start and submit
         // also for managers (their main tasks, Phase 7A); the services check
-        // that the caller is the task's assignee.
+        // that the caller is the task's assignee. Drafts are managers' work.
         String kind = operation.entityType() + " " + operation.operation();
-        boolean managersToo = kind.equals("Task START") || kind.equals("Task SUBMIT");
-        if (!caller.hasRole(RoleName.WORKER.name()) && !(managersToo && caller.hasRole(RoleName.MANAGER.name()))) {
-            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "Only workers can do this");
+        Set<RoleName> roles = switch (kind) {
+            case "Task START", "Task SUBMIT" -> Set.of(RoleName.WORKER, RoleName.MANAGER);
+            case "Task CREATE", "Task UPDATE" -> Set.of(RoleName.MANAGER);
+            default -> Set.of(RoleName.WORKER);
+        };
+        if (roles.stream().noneMatch(role -> caller.hasRole(role.name()))) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    roles.contains(RoleName.WORKER) ? "Only workers can do this" : "Only managers can do this");
         }
         UUID taskId = operation.taskId();
         switch (kind) {
@@ -141,6 +148,14 @@ public class SyncService {
                 evidenceService.register(caller, taskId, uuid(operation.payload(), "requirementId"), request);
             }
             case "Evidence DELETE" -> evidenceService.delete(caller, taskId, operation.entityId());
+            case "Task CREATE" -> {
+                requireTaskEntity(operation);
+                taskService.createWithId(caller, taskId, payload(operation, CreateTaskRequest.class));
+            }
+            case "Task UPDATE" -> {
+                requireTaskEntity(operation);
+                taskService.update(caller, taskId, payload(operation, UpdateTaskRequest.class));
+            }
             case "Task START" -> start(caller, operation);
             case "Task SUBMIT" -> submit(caller, operation);
             default -> throw new ApiException(HttpStatus.BAD_REQUEST, UNSUPPORTED_OPERATION,
@@ -200,6 +215,12 @@ public class SyncService {
             return UUID.fromString(String.valueOf(value));
         } catch (IllegalArgumentException ex) {
             throw invalidPayload(field + " must be a UUID");
+        }
+    }
+
+    private static void requireTaskEntity(SyncOperationRequest operation) {
+        if (!operation.entityId().equals(operation.taskId())) {
+            throw invalidPayload("entityId must be the task ID");
         }
     }
 
