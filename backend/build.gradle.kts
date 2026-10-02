@@ -19,6 +19,13 @@ repositories {
     mavenCentral()
 }
 
+// Security fixes newer than Spring Boot 4.1.1 manages (found by the image
+// scan, task 10.5a). Remove each line once a Spring Boot update includes
+// the version or a newer one.
+extra["tomcat.version"] = "11.0.25"        // CVE-2026-65182, -65905, -68525 (critical)
+extra["jackson-bom.version"] = "3.1.7"     // CVE-2026-68497, -89407, -89425, -91776, -91777
+extra["jackson-2-bom.version"] = "2.21.7"  // the same CVEs in Jackson 2
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
