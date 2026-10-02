@@ -53,7 +53,8 @@ public class TaskService {
 
     /**
      * Creates a draft task in the creator's organization. The reviewer must be
-     * an active manager of the same organization; by default it is the creator.
+     * an active manager of the same organization (an active administrator for
+     * an administrator's main task); by default it is the creator.
      */
     @Transactional
     public Task create(CurrentUser caller, CreateTaskRequest request) {
@@ -125,7 +126,8 @@ public class TaskService {
 
     /**
      * A task the caller may change (details or requirements): only the
-     * manager who created it, and only before work starts.
+     * manager (or administrator, for a main task) who created it, and only
+     * before work starts.
      */
     @Transactional(readOnly = true)
     public Task requireEditable(CurrentUser caller, UUID id) {
@@ -142,7 +144,12 @@ public class TaskService {
     }
 
     private User reviewer(UUID reviewerId, User creator) {
-        return reviewerId == null ? null
+        if (reviewerId == null) {
+            return null;
+        }
+        return creator.hasRole(RoleName.ADMINISTRATOR)
+                ? userService.requireActiveWithRole(reviewerId, creator.getOrganization().getId(),
+                        RoleName.ADMINISTRATOR, INVALID_REVIEWER, "The reviewer of a main task must be an active administrator")
                 : userService.requireActiveWithRole(reviewerId, creator.getOrganization().getId(),
                         RoleName.MANAGER, INVALID_REVIEWER, "The reviewer must be an active manager");
     }

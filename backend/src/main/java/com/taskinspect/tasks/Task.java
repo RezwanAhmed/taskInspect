@@ -1,6 +1,7 @@
 package com.taskinspect.tasks;
 
 import com.taskinspect.users.Organization;
+import com.taskinspect.users.RoleName;
 import com.taskinspect.users.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -163,6 +164,15 @@ public class Task {
     /** The worker the task is assigned to, or {@code null} before it is assigned. */
     public User getAssignee() {
         return assignee;
+    }
+
+    /**
+     * A main task: created by an administrator and assigned to a manager, who
+     * passes it on in sub-tasks (docs/architecture.md, "Tasks for Managers
+     * and Sub-tasks").
+     */
+    public boolean isMainTask() {
+        return createdBy.hasRole(RoleName.ADMINISTRATOR);
     }
 
     /** Who may take the task while it is OPEN; {@code null} in every other status. */

@@ -24,6 +24,7 @@ public class TaskAssignmentService {
     static final String REVIEWER_IS_ASSIGNEE = "REVIEWER_IS_ASSIGNEE";
     static final String TEAM_HAS_NO_MEMBERS = "TEAM_HAS_NO_MEMBERS";
     static final String TASK_ALREADY_TAKEN = "TASK_ALREADY_TAKEN";
+    static final String MAIN_TASK_NOT_PUBLISHABLE = "MAIN_TASK_NOT_PUBLISHABLE";
 
     /** History reason of a publish, followed by the scope; {@link #take} reads the scope back after it was cleared. */
     private static final String OPEN_TO = "open to: ";
@@ -58,15 +59,23 @@ public class TaskAssignmentService {
      * assign it; it needs at least one requirement; the assignee must be an
      * active worker of the organization; and the reviewer cannot be the
      * assignee — except for a personal task that the creator assigns to
-     * themself (solo use, where the same person reviews).
+     * themself (solo use, where the same person reviews). An administrator's
+     * main task goes to an active manager instead and needs no requirement.
      */
     @Transactional
     public Task assign(CurrentUser caller, UUID taskId, UUID assigneeId) {
         Task task = taskService.requireEditable(caller, taskId);
         stateMachine.next(task.getStatus(), TaskAction.ASSIGN);
-        requireRequirements(task, "assigning");
-        User assignee = userService.requireActiveWithRole(assigneeId, task.getOrganization().getId(),
-                RoleName.WORKER, INVALID_ASSIGNEE, "The assignee must be an active worker");
+        User assignee;
+        if (task.isMainTask()) {
+            // The manager passes it on in sub-tasks; the main task has no answers of its own.
+            assignee = userService.requireActiveWithRole(assigneeId, task.getOrganization().getId(),
+                    RoleName.MANAGER, INVALID_ASSIGNEE, "A main task is assigned to an active manager");
+        } else {
+            requireRequirements(task, "assigning");
+            assignee = userService.requireActiveWithRole(assigneeId, task.getOrganization().getId(),
+                    RoleName.WORKER, INVALID_ASSIGNEE, "The assignee must be an active worker");
+        }
         boolean personalTask = assignee.getId().equals(task.getCreatedBy().getId());
         if (assignee.getId().equals(task.getReviewer().getId()) && !personalTask) {
             throw new ApiException(HttpStatus.BAD_REQUEST, REVIEWER_IS_ASSIGNEE,
@@ -90,6 +99,10 @@ public class TaskAssignmentService {
     public Task publish(CurrentUser caller, UUID taskId, OpenScope scope) {
         Task task = taskService.requireEditable(caller, taskId);
         stateMachine.next(task.getStatus(), TaskAction.PUBLISH);
+        if (task.isMainTask()) {
+            throw new ApiException(HttpStatus.CONFLICT, MAIN_TASK_NOT_PUBLISHABLE,
+                    "A main task is assigned to a manager, not published");
+        }
         requireRequirements(task, "publishing");
         if (scope == OpenScope.TEAM && userRepository.countByTeamManagerIdAndActiveTrue(caller.id()) == 0) {
             throw new ApiException(HttpStatus.CONFLICT, TEAM_HAS_NO_MEMBERS,

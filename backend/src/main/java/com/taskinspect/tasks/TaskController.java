@@ -82,9 +82,9 @@ public class TaskController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize(Roles.MANAGER)
-    @Operation(summary = "Edit a task", description = "Only the manager who created the task, and only "
-            + "while it is DRAFT or ASSIGNED. Send the `version` you last received; if the task changed "
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
+    @Operation(summary = "Edit a task", description = "Only the manager (or administrator) who created the task, "
+            + "and only while it is DRAFT, OPEN or ASSIGNED. Send the `version` you last received; if the task changed "
             + "since, the answer is 409 VERSION_CONFLICT.")
     public TaskResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
             @Valid @RequestBody UpdateTaskRequest request) {
@@ -92,10 +92,11 @@ public class TaskController {
     }
 
     @PostMapping("/{id}/assign")
-    @PreAuthorize(Roles.MANAGER)
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
     @Operation(summary = "Assign a task to a worker", description = "DRAFT → ASSIGNED. Only the manager who "
             + "created the task; it needs at least one requirement, the assignee must be an active worker, "
-            + "and the reviewer cannot be the assignee (except a personal task assigned to yourself).")
+            + "and the reviewer cannot be the assignee (except a personal task assigned to yourself). "
+            + "An administrator's main task is assigned to an active manager instead, without requirements.")
     public TaskResponse assign(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
             @Valid @RequestBody AssignTaskRequest request) {
         return TaskResponse.from(assignmentService.assign(CurrentUser.from(jwt), id, request.assigneeId()));
@@ -131,9 +132,10 @@ public class TaskController {
     }
 
     @PostMapping
-    @PreAuthorize(Roles.MANAGER)
-    @Operation(summary = "Create a draft task", description = "Managers only. The task starts as DRAFT; "
-            + "without `reviewerId` the creator reviews it.")
+    @PreAuthorize(Roles.ADMIN_OR_MANAGER)
+    @Operation(summary = "Create a draft task", description = "Managers and administrators. The task starts as "
+            + "DRAFT; without `reviewerId` the creator reviews it. An administrator's task is a main task for a "
+            + "manager; its reviewer must be an administrator.")
     public ResponseEntity<TaskResponse> create(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody CreateTaskRequest request) {
         Task task = taskService.create(CurrentUser.from(jwt), request);

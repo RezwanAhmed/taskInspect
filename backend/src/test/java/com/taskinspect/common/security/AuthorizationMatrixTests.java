@@ -129,7 +129,7 @@ class AuthorizationMatrixTests {
                 row(SET_TEAM, 401, 200, 403, 403, 403, 403),
                 row(LIST_TEAMS, 401, 200, 200, 200, 200, 200),
                 row(LIST_TEAM_TASKS, 401, 200, 200, 200, 200, 200),
-                row(CREATE_TASK, 401, 403, 201, 201, 403, 403),
+                row(CREATE_TASK, 401, 201, 201, 201, 403, 403),
                 row(GET_TASK, 401, 200, 200, 200, 200, 404),
                 row(EDIT_TASK, 401, 403, 200, 403, 403, 403),
                 row(ADD_REQUIREMENT, 401, 403, 201, 403, 403, 403),

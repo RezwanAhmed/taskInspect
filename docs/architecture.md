@@ -147,8 +147,8 @@ stateDiagram-v2
 
 | From | To | Action | Who | Conditions |
 |------|----|--------|-----|------------|
-| — | `DRAFT` | Create (`POST /api/tasks`) | Manager | Title, priority and due date are valid. A reviewer is set (defaults to the creator). |
-| `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager | The task has at least one requirement; the assignee is an active worker. |
+| — | `DRAFT` | Create (`POST /api/tasks`) | Manager, or administrator (main task) | Title, priority and due date are valid. A reviewer is set (defaults to the creator); for a main task it is an administrator. |
+| `DRAFT` | `ASSIGNED` | Assign (`POST /api/tasks/{id}/assign`) | Manager, or administrator (main task) | The task has at least one requirement; the assignee is an active worker. A main task goes to an active manager and needs no requirement. |
 | `DRAFT` | `OPEN` | Publish (`POST /api/tasks/{id}/publish`) | Manager | The task has at least one requirement; who may take it: team (needs an active team member, else `409 TEAM_HAS_NO_MEMBERS`) or everyone. |
 | `OPEN` | `ASSIGNED` | Take (`POST /api/tasks/{id}/take`) | A worker who may take it | The first one wins (`409 TASK_ALREADY_TAKEN` for the others). |
 | `ASSIGNED` | `IN_PROGRESS` | Start (`POST /api/tasks/{id}/start`) | Assigned worker | — |
@@ -289,6 +289,11 @@ an administrator may **create** a task, **assign** it to a manager, and
 the assigned manager **starts** and **submits** it (the worker-only
 rules stay for every other task). A main task has no answers of its
 own: it is complete when all its sub-tasks are approved.
+
+A task an administrator creates is a main task: its reviewer is an
+administrator (by default the creator), it is assigned to an active
+manager without requirements, and it cannot be published as an open
+task (`409 MAIN_TASK_NOT_PUBLISHABLE`).
 
 ### Registering a Task Again
 
@@ -620,14 +625,14 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/users/{id}` | Administrators, managers; others only themselves | `403` |
 | `POST /api/users` | Administrators | `403` |
 | `PUT /api/users/{id}/team` | Administrators (a worker joins one manager's team, or leaves it) | `403` |
-| `POST /api/tasks` | Managers | `403` |
+| `POST /api/tasks` | Managers; administrators (main tasks for managers) | `403` |
 | `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them and open tasks they may take (open to everyone, or to their team while its manager is active) | `404` (hidden) |
 | `GET /api/tasks/team` (`?status=`) | Any logged-in user: their team members' tasks as tiles (not their own, no cancelled ones). Empty without a team, when the team's manager is deactivated, and for administrators and managers (they have no team; they see all tasks above) | `401` |
 | `GET /api/teams` | Any logged-in user: every active manager's team in numbers (active members; tasks not approved or cancelled, also those of deactivated members) | `401` |
-| `PUT /api/tasks/{id}` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
+| `PUT /api/tasks/{id}` | The manager (or administrator, main task) who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `GET /api/tasks/{id}/requirements`, `…/responses`, `…/evidence` | Anyone who can see the task | `404` |
-| `POST /api/tasks/{id}/assign` | The manager who created the task | `403` |
+| `POST /api/tasks/{id}/assign` | The manager who created the task (to a worker); the administrator who created a main task (to a manager) | `403` |
 | `POST /api/tasks/{id}/publish` (`{"scope": "TEAM" \| "EVERYONE"}`) | The manager who created the task, while DRAFT | `403` |
 | `POST /api/tasks/{id}/take` | A worker the open task is open to; the first one wins (`409 TASK_ALREADY_TAKEN` for the others); taking it again returns it unchanged | `403` / `404` |
 | `POST /api/tasks/{id}/start` | The assigned worker | `403` / `404` |
