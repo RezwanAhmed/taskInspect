@@ -74,6 +74,10 @@ public class Task {
     @JoinColumn(name = "parent_task_id", updatable = false)
     private Task parentTask;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reissued_from_id", updatable = false)
+    private Task reissuedFrom;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -119,6 +123,11 @@ public class Task {
     /** Makes a new task a sub-task of a main task; set once, before it is first saved. */
     void makeSubTaskOf(Task mainTask) {
         this.parentTask = mainTask;
+    }
+
+    /** Links a new task to the task it was registered again from; set once, before it is first saved. */
+    void reissueOf(Task original) {
+        this.reissuedFrom = original;
     }
 
     /** Sets who may take the task once it is published (OPEN). */
@@ -187,6 +196,11 @@ public class Task {
     /** The main task of a sub-task; {@code null} for every other task. */
     public UUID getParentTaskId() {
         return parentTask == null ? null : parentTask.getId();
+    }
+
+    /** The task this one was registered again from; {@code null} for every other task. */
+    public UUID getReissuedFromId() {
+        return reissuedFrom == null ? null : reissuedFrom.getId();
     }
 
     /** Who may take the task while it is OPEN; {@code null} in every other status. */

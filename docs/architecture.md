@@ -326,6 +326,14 @@ can be registered again once work has started (`IN_PROGRESS` or later,
 including `APPROVED`); the new one starts as `ASSIGNED` to the same
 worker, so the manager can still edit it before the worker starts.
 
+The manager who created the task registers it again with
+`POST /api/tasks/{id}/reissue` (`409 TASK_NOT_REISSUABLE` before work
+has started, for a cancelled task and for a main task). The new task
+copies the title, description, priority, due date and requirements,
+carries `reissuedFromId`, and is assigned to the same worker (who must
+still be active). The reviewer stays, unless they were deactivated:
+then the manager reviews it. The original task is not changed.
+
 ### The Worker's Tabs
 
 | Tab | Shows |
@@ -650,6 +658,7 @@ matters, ownership in the service. Tasks a user may not see answer
 | `POST /api/tasks/{id}/publish` (`{"scope": "TEAM" \| "EVERYONE"}`) | The manager who created the task, while DRAFT | `403` |
 | `POST /api/tasks/{id}/sub-tasks` | The manager the main task is assigned to, while ASSIGNED / IN_PROGRESS / REJECTED / CORRECTION_REQUESTED (`409 MAIN_TASK_CLOSED` otherwise, `409 NOT_A_MAIN_TASK` for other tasks) | `403` |
 | `GET /api/tasks/{id}/sub-tasks` | Administrators and managers | `403` / `404` |
+| `POST /api/tasks/{id}/reissue` | The manager who created the task, once work has started (IN_PROGRESS / SUBMITTED / REJECTED / CORRECTION_REQUESTED / APPROVED); not a main task | `403` / `404` |
 | `POST /api/tasks/{id}/take` | A worker the open task is open to; the first one wins (`409 TASK_ALREADY_TAKEN` for the others); taking it again returns it unchanged | `403` / `404` |
 | `POST /api/tasks/{id}/start` | The assigned worker (main task: the assigned manager) | `403` / `404` |
 | `PUT /api/tasks/{id}/requirements/{rid}/response` | The assigned worker, while IN_PROGRESS | `403` / `404` |

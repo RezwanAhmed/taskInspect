@@ -133,6 +133,18 @@ public class TaskController {
         return taskService.listSubTasks(CurrentUser.from(jwt), id).stream().map(TaskResponse::from).toList();
     }
 
+    @PostMapping("/{id}/reissue")
+    @PreAuthorize(Roles.MANAGER)
+    @Operation(summary = "Register a task again for the same worker", description = "Only the manager who created "
+            + "the task, once work has started (IN_PROGRESS, SUBMITTED, REJECTED, CORRECTION_REQUESTED or APPROVED; "
+            + "409 TASK_NOT_REISSUABLE otherwise and for main tasks). The new task copies the details and "
+            + "requirements, links to the original (`reissuedFromId`) and starts as ASSIGNED to the same worker, "
+            + "so it can still be edited before the worker starts.")
+    public ResponseEntity<TaskResponse> reissue(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        Task task = assignmentService.reissue(CurrentUser.from(jwt), id);
+        return ResponseEntity.created(URI.create("/api/tasks/" + task.getId())).body(TaskResponse.from(task));
+    }
+
     @PostMapping("/{id}/take")
     @PreAuthorize(Roles.WORKER)
     @Operation(summary = "Take an open task", description = "OPEN → ASSIGNED; the caller becomes the task's worker. "

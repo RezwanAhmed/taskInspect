@@ -53,6 +53,16 @@ public class RequirementService {
         return requirementRepository.findAllByTaskIdOrderByPosition(taskId);
     }
 
+    /** Copies every requirement (with its options) of one task to another, in the same order. */
+    @Transactional
+    public void copyAll(Task from, Task to) {
+        for (Requirement requirement : requirementRepository.findAllByTaskIdOrderByPosition(from.getId())) {
+            requirementRepository.save(new Requirement(to, requirement.getTitle(), requirement.getDescription(),
+                    requirement.getType(), requirement.isRequired(), requirement.getPosition(), requirement.getUnit(),
+                    requirement.getOptions().stream().map(RequirementOption::getLabel).toList()));
+        }
+    }
+
     /** How many requirements a task has, e.g. to check that it can be assigned. */
     @Transactional(readOnly = true)
     public long count(UUID taskId) {

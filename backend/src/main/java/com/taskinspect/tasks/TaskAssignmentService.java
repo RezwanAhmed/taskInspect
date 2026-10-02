@@ -1,12 +1,15 @@
 package com.taskinspect.tasks;
 
 import com.taskinspect.common.error.ApiException;
+import com.taskinspect.common.error.ErrorCode;
 import com.taskinspect.common.security.CurrentUser;
 import com.taskinspect.requirements.RequirementService;
 import com.taskinspect.users.RoleName;
 import com.taskinspect.users.User;
 import com.taskinspect.users.UserRepository;
 import com.taskinspect.users.UserService;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,6 +28,11 @@ public class TaskAssignmentService {
     static final String TEAM_HAS_NO_MEMBERS = "TEAM_HAS_NO_MEMBERS";
     static final String TASK_ALREADY_TAKEN = "TASK_ALREADY_TAKEN";
     static final String MAIN_TASK_NOT_PUBLISHABLE = "MAIN_TASK_NOT_PUBLISHABLE";
+    static final String TASK_NOT_REISSUABLE = "TASK_NOT_REISSUABLE";
+
+    /** A task can be registered again once work on it has started (docs/architecture.md, "Registering a Task Again"). */
+    private static final Set<TaskStatus> REISSUABLE = EnumSet.of(TaskStatus.IN_PROGRESS, TaskStatus.SUBMITTED,
+            TaskStatus.REJECTED, TaskStatus.CORRECTION_REQUESTED, TaskStatus.APPROVED);
 
     /** History reason of a publish, followed by the scope; {@link #take} reads the scope back after it was cleared. */
     private static final String OPEN_TO = "open to: ";
@@ -162,6 +170,47 @@ public class TaskAssignmentService {
                 .filter(reason -> reason != null && reason.startsWith(OPEN_TO))
                 .map(reason -> OpenScope.valueOf(reason.substring(OPEN_TO.length())))
                 .orElse(null);
+    }
+
+    /**
+     * Registers a new task for the same worker from one whose work has
+     * started: its details and requirements are copied, it links to the
+     * original, and it starts as ASSIGNED, so the manager can still change
+     * it before the worker starts. Only the manager who created the
+     * original; not for main tasks (they get sub-tasks instead). The
+     * reviewer is kept while active, otherwise the caller reviews.
+     */
+    @Transactional
+    public Task reissue(CurrentUser caller, UUID taskId) {
+        Task original = taskService.get(caller, taskId);
+        if (!original.getCreatedBy().getId().equals(caller.id())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN,
+                    "Only the manager who created the task can register it again");
+        }
+        if (original.isMainTask()) {
+            throw new ApiException(HttpStatus.CONFLICT, TASK_NOT_REISSUABLE,
+                    "A main task can't be registered again; add a sub-task instead");
+        }
+        if (!REISSUABLE.contains(original.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, TASK_NOT_REISSUABLE,
+                    "A task can be registered again once work has started (status " + original.getStatus() + ")");
+        }
+        User manager = userService.requireCaller(caller);
+        User worker = userService.requireActiveWithRole(original.getAssignee().getId(),
+                original.getOrganization().getId(), RoleName.WORKER, INVALID_ASSIGNEE,
+                "The task's worker is no longer an active worker");
+        User reviewer = original.getReviewer().isActive() ? original.getReviewer() : manager;
+
+        Task copy = new Task(manager, original.getTitle(), original.getDescription(), original.getPriority(),
+                original.getDueDate(), reviewer);
+        copy.reissueOf(original);
+        taskRepository.save(copy);
+        transitions.recordCreated(copy, manager);
+        requirementService.copyAll(original, copy);
+        copy.assignTo(worker);
+        transitions.apply(copy, TaskAction.ASSIGN, manager, "registered again from " + original.getId());
+        assignmentRepository.save(new TaskAssignment(copy, worker, manager));
+        return taskRepository.saveAndFlush(copy);
     }
 
     private static ApiException taskNotFound() {
