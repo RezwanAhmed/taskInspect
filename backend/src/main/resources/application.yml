@@ -40,12 +40,19 @@ taskinspect:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
     full-name: ${ADMIN_FULL_NAME:Administrator}
-  # Evidence files (ADR-0005): "local" = folder on this machine (development;
-  # AWS S3 follows in Phase 8)
+  # Evidence files (ADR-0005): "local" = folder on this machine (development),
+  # "s3" = AWS S3 bucket (or an S3-compatible service via S3_ENDPOINT)
   storage:
     type: ${STORAGE_TYPE:local}
     local:
       directory: ${STORAGE_LOCAL_DIR:./data/evidence}
+    s3:
+      bucket: ${S3_BUCKET:}
+      region: ${S3_REGION:eu-central-1}
+      endpoint: ${S3_ENDPOINT:}
+      path-style: ${S3_PATH_STYLE:false}
+      access-key: ${S3_ACCESS_KEY:}
+      secret-key: ${S3_SECRET_KEY:}
 
 logging:
   pattern:
