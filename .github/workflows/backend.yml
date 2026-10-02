@@ -82,6 +82,19 @@ jobs:
       - name: Build image
         run: docker build -t taskinspect-backend:ci backend
 
+      # Known vulnerabilities in the image's OS packages and in the Java
+      # libraries of the jar (task 10.5a). Fails on HIGH or CRITICAL ones
+      # that already have a fixed version to update to.
+      - name: Scan image for vulnerabilities
+        # Third-party action pinned to the commit of release v0.36.0.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: taskinspect-backend:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
       - name: Start the image and wait until it is healthy
         run: |
           docker run -d --name backend --network host \
