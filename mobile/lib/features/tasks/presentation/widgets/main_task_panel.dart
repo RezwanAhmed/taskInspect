@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/core/router/app_router.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/main_task_cubit.dart';
@@ -11,6 +13,14 @@ import 'package:taskinspect/features/tasks/presentation/widgets/status_chip.dart
 /// (cancelled ones don't count). Loaded from the server.
 class MainTaskPanel extends StatelessWidget {
   const MainTaskPanel({required this.task, super.key});
+
+  /// While the server accepts new sub-tasks (TaskService.createSubTask).
+  static const _takesSubTasks = {
+    TaskStatus.assigned,
+    TaskStatus.inProgress,
+    TaskStatus.rejected,
+    TaskStatus.correctionRequested,
+  };
 
   final Task task;
 
@@ -62,8 +72,23 @@ class MainTaskPanel extends StatelessWidget {
                         title: Text(subTask.title),
                         subtitle: Text(subTask.assignee?.name ?? 'Not assigned'),
                         trailing: StatusChip(subTask.status),
+                        onTap: () => context.push(AppRoutes.task(subTask.id)),
                       ),
                   ],
+                  if (_takesSubTasks.contains(task.status))
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const Key('add-sub-task'),
+                        onPressed: () async {
+                          final cubit = context.read<MainTaskCubit>();
+                          await context.push(AppRoutes.newSubTask(task.id));
+                          await cubit.load();
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add sub-task'),
+                      ),
+                    ),
                   if (task.status == TaskStatus.inProgress) ...[
                     const SizedBox(height: 8),
                     FilledButton.icon(

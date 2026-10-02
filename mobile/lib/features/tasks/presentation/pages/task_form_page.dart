@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:taskinspect/core/di/injection.dart';
+import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/failure_messages.dart';
 import 'package:taskinspect/core/error/result.dart';
 import 'package:taskinspect/core/router/app_router.dart';
@@ -15,11 +16,14 @@ import 'package:taskinspect/features/tasks/presentation/widgets/task_tile.dart';
 
 /// A manager creates a draft task ([taskId] `null`) or edits one (Phase 7B).
 /// Works offline: the task is saved on the phone and sent at the next sync.
-/// The creator reviews the task; choosing another reviewer comes later.
+/// With [mainTaskId] it adds a sub-task to that main task instead, which
+/// needs a connection. The creator reviews the task; choosing another
+/// reviewer comes later.
 class TaskFormPage extends StatefulWidget {
-  const TaskFormPage({this.taskId, super.key});
+  const TaskFormPage({this.taskId, this.mainTaskId, super.key});
 
   final String? taskId;
+  final String? mainTaskId;
 
   @override
   State<TaskFormPage> createState() => _TaskFormPageState();
@@ -36,6 +40,8 @@ class _TaskFormPageState extends State<TaskFormPage> {
   var _saving = false;
 
   bool get _isNew => widget.taskId == null;
+
+  bool get _isSubTask => widget.mainTaskId != null;
 
   static DateTime _tomorrowAtNine() {
     final now = DateTime.now();
@@ -105,7 +111,11 @@ class _TaskFormPageState extends State<TaskFormPage> {
       reviewer: _existing?.reviewer.id == _existing?.createdBy.id ? null : _existing?.reviewer,
     );
     final saveDraft = getIt<SaveDraftTask>();
-    final result = _isNew ? await saveDraft.create(draft, auth.user) : await saveDraft.update(widget.taskId!, draft);
+    final result = _isSubTask
+        ? await saveDraft.createSubTask(widget.mainTaskId!, draft)
+        : _isNew
+            ? await saveDraft.create(draft, auth.user)
+            : await saveDraft.update(widget.taskId!, draft);
     if (!mounted) {
       return;
     }
@@ -113,15 +123,28 @@ class _TaskFormPageState extends State<TaskFormPage> {
     switch (result) {
       case Ok(:final value):
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isNew ? 'Draft saved. It is sent at the next sync.' : 'Changes saved.')),
+          SnackBar(
+            content: Text(_isSubTask
+                ? 'Sub-task added. Open it to add requirements and assign it.'
+                : _isNew
+                    ? 'Draft saved. It is sent at the next sync.'
+                    : 'Changes saved.'),
+          ),
         );
-        if (_isNew) {
+        if (_isNew && !_isSubTask) {
           context.pushReplacement(AppRoutes.task(value.id));
         } else {
+          // Back to the details (edit) or the main task, whose panel reloads its sub-tasks.
           context.pop();
         }
       case Err(:final failure):
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(userMessage(failure))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(switch (failure) {
+            NetworkFailure() => 'No connection. Adding a sub-task needs the internet.',
+            ServerFailure(code: 'MAIN_TASK_CLOSED') => 'The main task no longer takes new sub-tasks.',
+            _ => userMessage(failure),
+          }),
+        ));
     }
   }
 
@@ -133,7 +156,7 @@ class _TaskFormPageState extends State<TaskFormPage> {
         (_isNew ? SaveDraftTask.canCreate(user) : _existing != null && SaveDraftTask.canEdit(_existing!, user));
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'New task' : 'Edit task'),
+        title: Text(_isSubTask ? 'New sub-task' : _isNew ? 'New task' : 'Edit task'),
         actions: [
           if (!_loading && allowed)
             TextButton(

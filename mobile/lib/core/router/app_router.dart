@@ -35,6 +35,8 @@ abstract final class AppRoutes {
 
   static String editRequirements(String id) => '$tasks/$id/requirements';
 
+  static String newSubTask(String mainTaskId) => '$tasks/$mainTaskId/sub-tasks/new';
+
   static String execute(String id) => '$tasks/$id/execute';
 
   static String review(String id) => '$tasks/$id/review';
@@ -76,6 +78,10 @@ GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.spl
       GoRoute(
         path: '${AppRoutes.tasks}/:id/edit',
         builder: (context, state) => TaskFormPage(taskId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/sub-tasks/new',
+        builder: (context, state) => TaskFormPage(mainTaskId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '${AppRoutes.tasks}/:id/requirements',

@@ -100,6 +100,15 @@ class TaskRepositoryImpl implements TaskRepository {
       InvalidInputFailure(field: 'task', message: 'This task is not on the server yet. Sync first, then try again.');
 
   @override
+  Future<Result<Task>> createSubTask(String mainTaskId, TaskDraft draft) async {
+    final result = await _remote.createSubTask(mainTaskId, TaskLocalDataSource.draftPayload(draft));
+    if (result case Ok(:final value)) {
+      await _local.saveTask(value, const []);
+    }
+    return result;
+  }
+
+  @override
   Future<Result<List<WorkerOption>>> loadWorkers(String managerId) async {
     final result = await _remote.fetchWorkers(managerId);
     return switch (result) {

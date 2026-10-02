@@ -177,13 +177,14 @@ void main() {
     const manager = PersonRef(id: 'm1', name: 'Mia Manager');
     const worker = PersonRef(id: 'u2', name: 'Tom Teammate');
 
-    Future<void> openMainTask(WidgetTester tester, List<Task> subTasks) async {
+    Future<FakeTaskRepository> openMainTask(WidgetTester tester, List<Task> subTasks) async {
       final tasks = FakeTaskRepository([task('main', 'Inspect building B', TaskStatus.inProgress, assignee: manager)])
         ..subTasks = {'main': subTasks};
       registerFakeTasks(tasks);
       await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testManager))));
       await tester.pumpAndSettle();
       await go(tester, AppRoutes.task('main'));
+      return tasks;
     }
 
     testWidgets('shows the sub-tasks and their progress; submit waits for all approvals', (tester) async {
@@ -232,6 +233,39 @@ void main() {
 
       expect(find.byKey(const Key('main-task-panel')), findsNothing);
       expect(find.byKey(const Key('continue-task')), findsOneWidget);
+    });
+
+    testWidgets('the manager adds a sub-task from the panel', (tester) async {
+      await openMainTask(tester, const []);
+      expect(find.text('No sub-tasks yet.'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('add-sub-task')));
+      await tester.pumpAndSettle();
+      expect(find.text('New sub-task'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('task-title')), 'Floor 1');
+      await tester.tap(find.byKey(const Key('save-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sub-task added. Open it to add requirements and assign it.'), findsOneWidget);
+      // Back on the main task: the panel lists the new sub-task; it opens from there.
+      expect(find.text('0 of 1 approved'), findsOneWidget);
+      await tester.tap(find.text('Floor 1'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assign-task')), findsOneWidget);
+    });
+
+    testWidgets('adding a sub-task offline says it needs the internet', (tester) async {
+      final tasks = await openMainTask(tester, const []);
+      tasks.subTaskFailure = const NetworkFailure();
+
+      await tester.tap(find.byKey(const Key('add-sub-task')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('task-title')), 'Floor 1');
+      await tester.tap(find.byKey(const Key('save-task')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No connection. Adding a sub-task needs the internet.'), findsOneWidget);
+      expect(find.text('New sub-task'), findsOneWidget);
     });
 
     testWidgets('workers never see the panel', (tester) async {

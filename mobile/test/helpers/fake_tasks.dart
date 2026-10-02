@@ -253,6 +253,20 @@ class FakeTaskRepository implements TaskRepository {
     return const Ok(null);
   }
 
+  /// Sub-tasks made with [createSubTask], per main task; when set, it fails with [subTaskFailure].
+  Failure? subTaskFailure;
+
+  @override
+  Future<Result<Task>> createSubTask(String mainTaskId, TaskDraft draft) async {
+    if (subTaskFailure case final failure?) {
+      return Err(failure);
+    }
+    final created = await createDraft(draft, creator: const PersonRef(id: 'm1', name: 'Mia Manager'));
+    final task = (created as Ok<Task>).value;
+    subTasks = {...subTasks, mainTaskId: [...?subTasks[mainTaskId], task]};
+    return Ok(task);
+  }
+
   /// Workers for [loadWorkers]; when set, assigning or publishing fails with [assignFailure].
   List<WorkerOption> workers = const [];
   Failure? assignFailure;

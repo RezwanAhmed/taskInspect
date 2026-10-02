@@ -293,6 +293,20 @@ void main() {
       expect((await local.watchTask('t1').first)!.status, TaskStatus.open);
     });
 
+    test('a sub-task is created online and stored on the device', () async {
+      api.dio.httpClientAdapter = FakeServer((request) async {
+        expect(request.path, '/api/tasks/main/sub-tasks');
+        expect((request.data as Map)['title'], 'Floor 1');
+        return (201, taskJson('s1', 'Floor 1', status: 'DRAFT'));
+      });
+
+      final result = await repository.createSubTask(
+          'main', TaskDraft(title: 'Floor 1', priority: TaskPriority.high, dueDate: DateTime.utc(2026, 12, 1)));
+
+      expect(result, isA<Ok<Task>>());
+      expect((await local.watchTask('s1').first)!.status, TaskStatus.draft);
+    });
+
     test('a draft whose changes still wait in the queue is not sent', () async {
       final draft = await local.createDraft(
         TaskDraft(title: 'New', priority: TaskPriority.low, dueDate: DateTime.utc(2026, 12, 1)),

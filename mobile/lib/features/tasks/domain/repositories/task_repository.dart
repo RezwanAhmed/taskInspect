@@ -56,6 +56,10 @@ abstract interface class TaskRepository {
 
   Future<Result<void>> reorderRequirements(String taskId, List<String> requirementIds);
 
+  /// The manager of a main task adds a draft sub-task (online); it is stored
+  /// on the device, so requirements can be added and it can be assigned.
+  Future<Result<Task>> createSubTask(String mainTaskId, TaskDraft draft);
+
   /// Active workers from the server, [managerId]'s team first (online).
   Future<Result<List<WorkerOption>>> loadWorkers(String managerId);
 

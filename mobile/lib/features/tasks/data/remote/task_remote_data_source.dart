@@ -67,6 +67,14 @@ class TaskRemoteDataSource {
     );
   }
 
+  /// Adds a draft sub-task to a main task (the manager it is assigned to).
+  Future<Result<Task>> createSubTask(String mainTaskId, Map<String, Object?> draft) {
+    return _api.send(
+      (dio) => dio.post<Object?>('/api/tasks/$mainTaskId/sub-tasks', data: draft),
+      (body) => taskFromJson(body! as Map<String, Object?>),
+    );
+  }
+
   /// Assigns a draft to a worker (DRAFT -> ASSIGNED).
   Future<Result<Task>> assign(String taskId, String workerId) {
     return _api.send(

@@ -548,6 +548,9 @@ class TaskLocalDataSource {
         'options': draft.type.hasOptions ? draft.options : null,
       };
 
+  /// The request body for a new or changed task (CreateTaskRequest).
+  static Map<String, Object?> draftPayload(TaskDraft draft) => _draftPayload(draft);
+
   static Map<String, Object?> _draftPayload(TaskDraft draft) => {
         'title': draft.title,
         'description': draft.description,

@@ -23,4 +23,9 @@ class SaveDraftTask {
       _repository.createDraft(draft, creator: PersonRef(id: user.id, name: user.fullName));
 
   Future<Result<Task>> update(String taskId, TaskDraft draft) => _repository.updateDraft(taskId, draft);
+
+  /// A sub-task of a main task (online; the server checks that the user is
+  /// the main task's manager and that it is still open for sub-tasks).
+  Future<Result<Task>> createSubTask(String mainTaskId, TaskDraft draft) =>
+      _repository.createSubTask(mainTaskId, draft);
 }
