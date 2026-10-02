@@ -46,6 +46,8 @@ public class LocalFileStorage implements FileStorage {
     private static final Pattern KEY = Pattern.compile(
             "tasks/[0-9a-f-]{36}/[0-9a-f-]{36}\\.(jpg|png|pdf)");
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private final Path root;
     private final byte[] signingKey = new byte[32];
     private final Clock clock;
@@ -53,7 +55,7 @@ public class LocalFileStorage implements FileStorage {
     public LocalFileStorage(LocalFileStorageProperties properties, Clock clock) {
         this.root = properties.directory().toAbsolutePath().normalize();
         this.clock = clock;
-        new SecureRandom().nextBytes(signingKey);
+        RANDOM.nextBytes(signingKey);
     }
 
     @Override
@@ -108,8 +110,12 @@ public class LocalFileStorage implements FileStorage {
      */
     boolean write(String key, InputStream content, long maxBytes) throws IOException {
         Path target = resolve(key);
-        Files.createDirectories(target.getParent());
-        Path temp = Files.createTempFile(target.getParent(), ".upload-", ".tmp");
+        Path directory = target.getParent();
+        if (directory == null) {
+            throw new IllegalArgumentException("Invalid storage key");
+        }
+        Files.createDirectories(directory);
+        Path temp = Files.createTempFile(directory, ".upload-", ".tmp");
         try {
             long total = 0;
             byte[] buffer = new byte[64 * 1024];

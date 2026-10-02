@@ -42,14 +42,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Compiles, runs all tests (Docker is available on the runner for
-      # Testcontainers) and builds the jar.
+      # Testcontainers), runs SpotBugs on the application code and builds
+      # the jar.
       - name: Build and test
         run: ./gradlew build --no-daemon
 
-      - name: Upload test reports
+      - name: Upload test and SpotBugs reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-test-reports
-          path: backend/build/reports/tests/test
+          name: backend-reports
+          path: |
+            backend/build/reports/tests/test
+            backend/build/reports/spotbugs
           retention-days: 7

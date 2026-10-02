@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SpotBugs findings that are accepted on purpose (task 10.2). Each entry says why. -->
+<FindBugsFilter>
+    <!--
+      Request / response records carry lists that Jackson creates and reads;
+      they are data carriers between the API and the services, not objects
+      that guard internal state.
+    -->
+    <Match>
+        <Or>
+            <Class name="~com\.taskinspect\..*\.dto\..*"/>
+            <Class name="com.taskinspect.common.error.ErrorResponse"/>
+            <Class name="com.taskinspect.common.web.PageResponse"/>
+            <Class name="com.taskinspect.filestorage.SignedUrl"/>
+        </Or>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!--
+      Services and controllers keep the Spring beans they are given in the
+      constructor (dependency injection); copying a bean would break it.
+    -->
+    <Match>
+        <Class name="~com\.taskinspect\..*(Service|Controller)"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <!--
+      The S3 storage checks its settings in the constructor and stops the
+      application at startup when they are wrong - on purpose (fail fast).
+      Spring creates it once; it is never subclassed.
+    -->
+    <Match>
+        <Class name="com.taskinspect.filestorage.S3FileStorage"/>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Match>
+</FindBugsFilter>

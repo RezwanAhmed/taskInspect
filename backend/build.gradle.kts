@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.github.spotbugs") version "6.5.12"
 }
 
 group = "com.taskinspect"
@@ -45,4 +46,21 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Static analysis of the application code (task 10.2); part of `check`, so
+// `gradlew build` fails on a finding. Known false positives are listed,
+// with the reason, in config/spotbugs-exclude.xml.
+spotbugs {
+    toolVersion = "4.10.4"
+    excludeFilter = file("config/spotbugs-exclude.xml")
+}
+
+tasks.spotbugsMain {
+    reports.create("html") { required = true }
+}
+
+// Tests are not analysed: mocks and fixtures trigger patterns on purpose.
+tasks.spotbugsTest {
+    enabled = false
 }
