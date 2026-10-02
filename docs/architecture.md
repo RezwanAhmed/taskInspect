@@ -661,6 +661,7 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them and open tasks they may take (open to everyone, or to their team while its manager is active) | `404` (hidden) |
 | `GET /api/tasks/team` (`?status=`) | Any logged-in user: their team members' tasks as tiles (not their own, no cancelled ones). Empty without a team, when the team's manager is deactivated, and for administrators and managers (they have no team; they see all tasks above) | `401` |
 | `GET /api/teams` | Any logged-in user: every active manager's team in numbers (active members; tasks not approved or cancelled, also those of deactivated members) | `401` |
+| `PUT /api/devices` (`{"token", "platform": "ANDROID" \| "IOS"}`), `DELETE /api/devices` (`{"token"}`) | Any logged-in user, for their own device: register the push token (a token used by another user before moves to the caller) or remove it (only the caller's own token) | `401` |
 | `PUT /api/tasks/{id}` | The manager (or administrator, main task) who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `PUT /api/tasks/{id}/requirements/order` (`{"requirementIds": […]}`) | The manager who created the task, while DRAFT / OPEN / ASSIGNED; every requirement exactly once (`400 INVALID_ORDER`) | `403` |
