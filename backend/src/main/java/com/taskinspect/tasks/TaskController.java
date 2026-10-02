@@ -112,6 +112,16 @@ public class TaskController {
         return TaskResponse.from(assignmentService.publish(CurrentUser.from(jwt), id, request.scope()));
     }
 
+    @PostMapping("/{id}/take")
+    @PreAuthorize(Roles.WORKER)
+    @Operation(summary = "Take an open task", description = "OPEN → ASSIGNED; the caller becomes the task's worker. "
+            + "Only a worker the task is open to (its scope EVERYONE, or TEAM and the worker is in the publishing "
+            + "manager's team); 404 otherwise. The first worker wins: the others get 409 TASK_ALREADY_TAKEN. "
+            + "Taking a task the caller already took returns it unchanged.")
+    public TaskResponse take(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return TaskResponse.from(assignmentService.take(CurrentUser.from(jwt), id));
+    }
+
     @PostMapping("/{id}/start")
     @PreAuthorize(Roles.WORKER)
     @Operation(summary = "Start working on a task", description = "The assigned worker only. ASSIGNED → "

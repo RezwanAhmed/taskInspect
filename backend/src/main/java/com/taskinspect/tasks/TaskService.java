@@ -9,6 +9,7 @@ import static com.taskinspect.tasks.TaskSpecifications.hasStatus;
 import static com.taskinspect.tasks.TaskSpecifications.inOrganization;
 import static com.taskinspect.tasks.TaskSpecifications.notAssignedTo;
 import static com.taskinspect.tasks.TaskSpecifications.notInStatus;
+import static com.taskinspect.tasks.TaskSpecifications.openFor;
 
 import com.taskinspect.common.error.ApiException;
 import com.taskinspect.common.error.ErrorCode;
@@ -153,8 +154,8 @@ public class TaskService {
 
     /**
      * Tasks the caller may see, filtered and paged. Administrators and
-     * managers see every task of their organization; workers see only the
-     * tasks assigned to them.
+     * managers see every task of their organization; workers see the tasks
+     * assigned to them and the open tasks they may take.
      */
     @Transactional(readOnly = true)
     public Page<Task> list(CurrentUser caller, TaskFilter filter, Pageable pageable) {
@@ -170,9 +171,12 @@ public class TaskService {
     }
 
     private static Specification<Task> visibleTo(User user) {
-        return canSeeAllTasks(user)
-                ? inOrganization(user.getOrganization().getId())
-                : Specification.allOf(inOrganization(user.getOrganization().getId()), assignedTo(user.getId()));
+        if (canSeeAllTasks(user)) {
+            return inOrganization(user.getOrganization().getId());
+        }
+        Specification<Task> mine = assignedTo(user.getId());
+        return Specification.allOf(inOrganization(user.getOrganization().getId()),
+                user.hasRole(RoleName.WORKER) ? mine.or(openFor(activeTeamManagerId(user))) : mine);
     }
 
     /**
@@ -199,8 +203,29 @@ public class TaskService {
     public Task get(CurrentUser caller, UUID id) {
         User user = userService.requireCaller(caller);
         return taskRepository.findByIdAndOrganizationId(id, user.getOrganization().getId())
-                .filter(task -> canSeeAllTasks(user) || isAssignee(task, user))
+                .filter(task -> canSeeAllTasks(user) || isAssignee(task, user)
+                        || task.getStatus() == TaskStatus.OPEN && mayTake(task.getOpenScope(), task.getCreatedBy(), user))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, TASK_NOT_FOUND, "Task not found"));
+    }
+
+    /**
+     * Whether a task open to {@code scope}, published by {@code publisher},
+     * is open to the user: a worker, and the scope is everyone or the
+     * worker's team (docs/architecture.md, "Open Tasks"). Same rule as
+     * {@link TaskSpecifications#openFor}.
+     */
+    static boolean mayTake(OpenScope scope, User publisher, User user) {
+        if (!user.hasRole(RoleName.WORKER)) {
+            return false;
+        }
+        return scope == OpenScope.EVERYONE
+                || scope == OpenScope.TEAM && publisher.getId().equals(activeTeamManagerId(user));
+    }
+
+    /** The worker's team manager, or {@code null} without a team or when that manager was deactivated (as in {@link #listTeam}). */
+    private static UUID activeTeamManagerId(User user) {
+        User teamManager = user.getTeamManager();
+        return teamManager == null || !teamManager.isActive() ? null : teamManager.getId();
     }
 
     private static boolean isAssignee(Task task, User user) {

@@ -27,6 +27,19 @@ public final class TaskSpecifications {
         return (task, query, cb) -> cb.equal(task.get("assignee").get("teamManager").get("id"), teamManagerId);
     }
 
+    /**
+     * Open tasks a worker may take: those open to everyone, and those open to
+     * the team of {@code teamManagerId} (the manager who published them).
+     * Without a team ({@code null}) only the ones open to everyone.
+     */
+    public static Specification<Task> openFor(UUID teamManagerId) {
+        return (task, query, cb) -> cb.and(cb.equal(task.get("status"), TaskStatus.OPEN), teamManagerId == null
+                ? cb.equal(task.get("openScope"), OpenScope.EVERYONE)
+                : cb.or(cb.equal(task.get("openScope"), OpenScope.EVERYONE),
+                        cb.and(cb.equal(task.get("openScope"), OpenScope.TEAM),
+                                cb.equal(task.get("createdBy").get("id"), teamManagerId))));
+    }
+
     public static Specification<Task> notAssignedTo(UUID userId) {
         return (task, query, cb) -> cb.notEqual(task.get("assignee").get("id"), userId);
     }

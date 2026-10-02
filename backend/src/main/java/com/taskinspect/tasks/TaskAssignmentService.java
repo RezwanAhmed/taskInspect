@@ -12,7 +12,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Assigns draft tasks to workers (DRAFT → ASSIGNED) or publishes them as open tasks (DRAFT → OPEN). */
+/**
+ * Assigns draft tasks to workers (DRAFT → ASSIGNED), publishes them as open
+ * tasks (DRAFT → OPEN), and lets a worker take an open task (OPEN → ASSIGNED).
+ */
 @Service
 public class TaskAssignmentService {
 
@@ -20,6 +23,10 @@ public class TaskAssignmentService {
     static final String TASK_HAS_NO_REQUIREMENTS = "TASK_HAS_NO_REQUIREMENTS";
     static final String REVIEWER_IS_ASSIGNEE = "REVIEWER_IS_ASSIGNEE";
     static final String TEAM_HAS_NO_MEMBERS = "TEAM_HAS_NO_MEMBERS";
+    static final String TASK_ALREADY_TAKEN = "TASK_ALREADY_TAKEN";
+
+    /** History reason of a publish, followed by the scope; {@link #take} reads the scope back after it was cleared. */
+    private static final String OPEN_TO = "open to: ";
 
     private final TaskService taskService;
     private final TaskRepository taskRepository;
@@ -29,11 +36,12 @@ public class TaskAssignmentService {
     private final RequirementService requirementService;
     private final UserService userService;
     private final UserRepository userRepository;
+    private final TaskStatusChangeRepository historyRepository;
 
     public TaskAssignmentService(TaskService taskService, TaskRepository taskRepository,
             TaskAssignmentRepository assignmentRepository, TaskStateMachine stateMachine,
             TaskTransitionService transitions, RequirementService requirementService, UserService userService,
-            UserRepository userRepository) {
+            UserRepository userRepository, TaskStatusChangeRepository historyRepository) {
         this.taskService = taskService;
         this.taskRepository = taskRepository;
         this.assignmentRepository = assignmentRepository;
@@ -42,6 +50,7 @@ public class TaskAssignmentService {
         this.requirementService = requirementService;
         this.userService = userService;
         this.userRepository = userRepository;
+        this.historyRepository = historyRepository;
     }
 
     /**
@@ -87,9 +96,63 @@ public class TaskAssignmentService {
                     "Your team has no active workers; publish the task to everyone instead");
         }
 
-        transitions.apply(task, TaskAction.PUBLISH, userService.requireCaller(caller), "open to: " + scope);
+        transitions.apply(task, TaskAction.PUBLISH, userService.requireCaller(caller), OPEN_TO + scope);
         task.openTo(scope);
         return taskRepository.saveAndFlush(task);
+    }
+
+    /**
+     * A worker takes an open task (OPEN → ASSIGNED); from then on it is their
+     * task. The task's row is locked first, so when two workers take it at
+     * the same time the second one waits and then gets
+     * {@code 409 TASK_ALREADY_TAKEN}. Taking it again after a lost answer
+     * returns the task unchanged. Tasks the caller may not take (now, or
+     * when it was open) answer 404, like any task they cannot see.
+     */
+    @Transactional
+    public Task take(CurrentUser caller, UUID taskId) {
+        taskService.lockForUpdate(taskId);
+        User worker = userService.requireCaller(caller);
+        Task task = taskRepository.findByIdAndOrganizationId(taskId, worker.getOrganization().getId())
+                .orElseThrow(TaskAssignmentService::taskNotFound);
+        if (task.getStatus() != TaskStatus.OPEN) {
+            OpenScope wasOpenTo = scopeWhenPublished(task);
+            if (wasOpenTo == null || task.getAssignee() == null) {
+                throw taskNotFound();
+            }
+            if (task.getAssignee().getId().equals(worker.getId())) {
+                return task;
+            }
+            if (!TaskService.mayTake(wasOpenTo, task.getCreatedBy(), worker)) {
+                throw taskNotFound();
+            }
+            throw new ApiException(HttpStatus.CONFLICT, TASK_ALREADY_TAKEN, "Another worker has already taken this task");
+        }
+        if (!TaskService.mayTake(task.getOpenScope(), task.getCreatedBy(), worker)) {
+            throw taskNotFound();
+        }
+        if (worker.getId().equals(task.getReviewer().getId()) && !worker.getId().equals(task.getCreatedBy().getId())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, REVIEWER_IS_ASSIGNEE,
+                    "You are this task's reviewer, so you cannot also be its worker");
+        }
+
+        task.assignTo(worker);
+        transitions.apply(task, TaskAction.TAKE, worker, null);
+        assignmentRepository.save(new TaskAssignment(task, worker, worker));
+        return taskRepository.saveAndFlush(task);
+    }
+
+    /** Who the task was open to when it was published; {@code null} if it never was. */
+    private OpenScope scopeWhenPublished(Task task) {
+        return historyRepository.findFirstByTaskIdAndToStatusOrderByChangedAtDescIdDesc(task.getId(), TaskStatus.OPEN)
+                .map(TaskStatusChange::getReason)
+                .filter(reason -> reason != null && reason.startsWith(OPEN_TO))
+                .map(reason -> OpenScope.valueOf(reason.substring(OPEN_TO.length())))
+                .orElse(null);
+    }
+
+    private static ApiException taskNotFound() {
+        return new ApiException(HttpStatus.NOT_FOUND, TaskService.TASK_NOT_FOUND, "Task not found");
     }
 
     private void requireRequirements(Task task, String action) {

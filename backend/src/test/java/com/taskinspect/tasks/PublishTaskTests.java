@@ -157,7 +157,7 @@ class PublishTaskTests {
     }
 
     @Test
-    void openTaskCanStillBeEditedButNotByWorkersYet() throws Exception {
+    void openTaskCanStillBeEditedButNotByWorkers() throws Exception {
         publish(manager, task, "TEAM").andExpect(status().isOk());
         long version = taskRepository.findById(task.getId()).orElseThrow().getVersion();
 
@@ -168,8 +168,11 @@ class PublishTaskTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"))
                 .andExpect(jsonPath("$.openScope").value("TEAM"));
-        // Workers see open tasks once they can take them (task 7A.5c).
-        mockMvc.perform(as(worker, get("/api/tasks/{id}", task.getId()))).andExpect(status().isNotFound());
+        mockMvc.perform(as(worker, put("/api/tasks/{id}", task.getId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\": \"Mine now\", \"priority\": \"LOW\", "
+                                + "\"dueDate\": \"2026-10-03T09:00:00Z\", \"version\": " + version + "}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

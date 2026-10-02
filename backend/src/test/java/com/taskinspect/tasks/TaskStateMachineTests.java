@@ -22,6 +22,7 @@ class TaskStateMachineTests {
     private static final Map<String, TaskStatus> ALLOWED = Map.ofEntries(
             Map.entry("DRAFT+ASSIGN", TaskStatus.ASSIGNED),
             Map.entry("DRAFT+PUBLISH", TaskStatus.OPEN),
+            Map.entry("OPEN+TAKE", TaskStatus.ASSIGNED),
             Map.entry("ASSIGNED+START", TaskStatus.IN_PROGRESS),
             Map.entry("IN_PROGRESS+SUBMIT", TaskStatus.SUBMITTED),
             Map.entry("SUBMITTED+APPROVE", TaskStatus.APPROVED),

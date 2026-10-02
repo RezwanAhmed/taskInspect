@@ -5,6 +5,7 @@ public enum TaskAction {
 
     ASSIGN,
     PUBLISH,
+    TAKE,
     START,
     SUBMIT,
     APPROVE,

@@ -35,6 +35,7 @@ public class TaskStateMachine {
     static {
         allow(DRAFT, TaskAction.ASSIGN, ASSIGNED);
         allow(DRAFT, TaskAction.PUBLISH, OPEN);
+        allow(OPEN, TaskAction.TAKE, ASSIGNED);
         allow(ASSIGNED, TaskAction.START, IN_PROGRESS);
         allow(IN_PROGRESS, TaskAction.SUBMIT, SUBMITTED);
         allow(SUBMITTED, TaskAction.APPROVE, APPROVED);

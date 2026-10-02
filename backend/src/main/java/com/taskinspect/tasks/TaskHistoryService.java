@@ -48,7 +48,8 @@ public class TaskHistoryService {
         return switch (change.getToStatus()) {
             case DRAFT -> TaskHistoryEvent.CREATED;
             case OPEN -> TaskHistoryEvent.PUBLISHED;
-            case ASSIGNED -> TaskHistoryEvent.ASSIGNED;
+            case ASSIGNED -> change.getFromStatus() == TaskStatus.OPEN
+                    ? TaskHistoryEvent.TAKEN : TaskHistoryEvent.ASSIGNED;
             case IN_PROGRESS -> change.getFromStatus() == TaskStatus.ASSIGNED
                     ? TaskHistoryEvent.STARTED : TaskHistoryEvent.RESTARTED;
             case SUBMITTED -> submittedBefore ? TaskHistoryEvent.RESUBMITTED : TaskHistoryEvent.SUBMITTED;

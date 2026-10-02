@@ -6,6 +6,8 @@ public enum TaskHistoryEvent {
     /** Published as an open task (Phase 7A). */
     PUBLISHED,
     ASSIGNED,
+    /** A worker took an open task (Phase 7A). */
+    TAKEN,
     STARTED,
     /** Working on the task again after a reject or a correction request. */
     RESTARTED,
