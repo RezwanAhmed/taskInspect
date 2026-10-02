@@ -8,6 +8,7 @@ import 'package:taskinspect/core/synchronization/sync_status_cubit.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/save_draft_task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_list_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/team_task_list_cubit.dart';
 import 'package:taskinspect/features/tasks/presentation/task_filter.dart';
@@ -52,6 +53,14 @@ class TaskListPage extends StatelessWidget {
         length: tabs.length,
         initialIndex: myTasks ? MyTaskTab.of(initialTab).index : initialTab.index,
         child: Scaffold(
+          floatingActionButton: user != null && SaveDraftTask.canCreate(user)
+              ? FloatingActionButton.extended(
+                  key: const Key('new-task'),
+                  onPressed: () => context.push(AppRoutes.newTask),
+                  icon: const Icon(Icons.add),
+                  label: const Text('New task'),
+                )
+              : null,
           appBar: AppBar(
             title: Text(myTasks ? 'My tasks' : 'Tasks'),
             actions: const [_FilterButton()],

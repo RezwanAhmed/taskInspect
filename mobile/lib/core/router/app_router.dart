@@ -9,6 +9,7 @@ import 'package:taskinspect/features/dashboard/presentation/pages/home_page.dart
 import 'package:taskinspect/features/requirements/presentation/pages/execution_page.dart';
 import 'package:taskinspect/features/review/presentation/pages/review_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_details_page.dart';
+import 'package:taskinspect/features/tasks/presentation/pages/task_form_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_history_page.dart';
 import 'package:taskinspect/features/tasks/presentation/pages/task_list_page.dart';
 import 'package:taskinspect/features/tasks/presentation/task_tab.dart';
@@ -26,6 +27,10 @@ abstract final class AppRoutes {
   static String tasksOn(TaskTab tab) => '$tasks?tab=${tab.name}';
 
   static String task(String id) => '$tasks/$id';
+
+  static const newTask = '$tasks/new';
+
+  static String editTask(String id) => '$tasks/$id/edit';
 
   static String execute(String id) => '$tasks/$id/execute';
 
@@ -59,9 +64,15 @@ GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.spl
         path: AppRoutes.tasks,
         builder: (context, state) => TaskListPage(initialTab: TaskTab.parse(state.uri.queryParameters['tab'])),
       ),
+      // Before "/tasks/:id", so "new" is not taken for a task ID.
+      GoRoute(path: AppRoutes.newTask, builder: (context, state) => const TaskFormPage()),
       GoRoute(
         path: '${AppRoutes.tasks}/:id',
         builder: (context, state) => TaskDetailsPage(taskId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '${AppRoutes.tasks}/:id/edit',
+        builder: (context, state) => TaskFormPage(taskId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '${AppRoutes.tasks}/:id/execute',

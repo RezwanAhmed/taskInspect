@@ -10,6 +10,7 @@ import 'package:taskinspect/features/tasks/domain/entities/task.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_enums.dart';
 import 'package:taskinspect/features/tasks/domain/entities/task_review.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/load_sub_tasks.dart';
+import 'package:taskinspect/features/tasks/domain/usecases/save_draft_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/take_task.dart';
 import 'package:taskinspect/features/tasks/presentation/cubit/task_details_cubit.dart';
@@ -54,6 +55,12 @@ class TaskDetailsPage extends StatelessWidget {
             appBar: AppBar(
               title: const Text('Task'),
               actions: [
+                if (task != null && user != null && SaveDraftTask.canEdit(task, user))
+                  IconButton(
+                    tooltip: 'Edit',
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => context.push(AppRoutes.editTask(taskId)),
+                  ),
                 IconButton(
                   tooltip: 'History',
                   icon: const Icon(Icons.history),
