@@ -60,6 +60,7 @@ void main() {
 
     expect(cubit.state.isStarting, isFalse);
     expect(cubit.state.message, isNull);
+    expect(cubit.state.starts, 1);
     expect(cubit.state.task?.status, TaskStatus.inProgress);
     await cubit.close();
   });
@@ -72,6 +73,7 @@ void main() {
 
     expect(cubit.state.isStarting, isFalse);
     expect(cubit.state.message, 'No connection. Starting a task needs the internet for now.');
+    expect(cubit.state.starts, 0);
     expect(cubit.state.task?.status, TaskStatus.assigned);
     await cubit.close();
   });

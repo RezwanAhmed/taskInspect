@@ -75,6 +75,10 @@ class FakeTaskRepository implements TaskRepository {
   /// When set, starting a task waits for it (e.g. until the page is closed).
   Completer<void>? startGate;
 
+  /// When set, a started task reaches the watchers only after start
+  /// returned, like the database on a real device.
+  bool lateStartUpdate = false;
+
   /// The team members' tasks (tiles) on the "device".
   List<TeamTask> teamTasks = [];
 
@@ -145,7 +149,12 @@ class FakeTaskRepository implements TaskRepository {
       version: task.version + 1,
       updatedAt: task.updatedAt,
     );
-    emit([for (final t in current) t.id == taskId ? started : t]);
+    final updated = [for (final t in current) t.id == taskId ? started : t];
+    if (lateStartUpdate) {
+      Timer.run(() => emit(updated));
+    } else {
+      emit(updated);
+    }
     return Ok(started);
   }
 

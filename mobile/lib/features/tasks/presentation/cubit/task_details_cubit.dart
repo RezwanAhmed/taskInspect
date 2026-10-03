@@ -20,6 +20,7 @@ class TaskDetailsState extends Equatable {
     this.isLoading = true,
     this.isStarting = false,
     this.isTaking = false,
+    this.starts = 0,
     this.message,
   });
 
@@ -33,6 +34,10 @@ class TaskDetailsState extends Equatable {
   final bool isStarting;
   final bool isTaking;
 
+  /// How often starting has succeeded; the screen opens the requirements
+  /// on each new start, without waiting for the task from the device.
+  final int starts;
+
   /// A one-off message, e.g. why starting failed.
   final String? message;
 
@@ -43,6 +48,7 @@ class TaskDetailsState extends Equatable {
     bool? isLoading,
     bool? isStarting,
     bool? isTaking,
+    int? starts,
     String? Function()? message,
   }) {
     return TaskDetailsState(
@@ -52,12 +58,13 @@ class TaskDetailsState extends Equatable {
       isLoading: isLoading ?? this.isLoading,
       isStarting: isStarting ?? this.isStarting,
       isTaking: isTaking ?? this.isTaking,
+      starts: starts ?? this.starts,
       message: message != null ? message() : this.message,
     );
   }
 
   @override
-  List<Object?> get props => [task, requirements, review, isLoading, isStarting, isTaking, message];
+  List<Object?> get props => [task, requirements, review, isLoading, isStarting, isTaking, starts, message];
 }
 
 /// Follows one task and its requirements on the device.
@@ -85,6 +92,7 @@ class TaskDetailsCubit extends Cubit<TaskDetailsState> {
     }
     emit(state.copyWith(
       isStarting: false,
+      starts: result is Ok ? state.starts + 1 : null,
       message: () => switch (result) {
         Ok() => null,
         Err(failure: NetworkFailure()) => 'No connection. Starting a task needs the internet for now.',

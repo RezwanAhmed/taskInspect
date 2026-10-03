@@ -35,9 +35,7 @@ class TaskDetailsPage extends StatelessWidget {
       child: BlocConsumer<TaskDetailsCubit, TaskDetailsState>(
         listenWhen: (previous, current) =>
             (current.message != null && previous.message != current.message) ||
-            (previous.task?.status != current.task?.status &&
-                current.task?.status == TaskStatus.inProgress &&
-                previous.isStarting),
+            previous.starts != current.starts,
         listener: (context, state) {
           if (state.message != null) {
             ScaffoldMessenger.of(context)
