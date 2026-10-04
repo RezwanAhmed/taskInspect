@@ -53,6 +53,10 @@ taskinspect:
       path-style: ${S3_PATH_STYLE:false}
       access-key: ${S3_ACCESS_KEY:}
       secret-key: ${S3_SECRET_KEY:}
+  # Push notifications (spec section 21): "log" = only log them (development,
+  # the default until the Firebase project exists, task 8.4)
+  push:
+    type: ${PUSH_TYPE:log}
 
 logging:
   pattern:

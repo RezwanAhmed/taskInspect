@@ -67,7 +67,7 @@ public class LocalFileController {
         if (file == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, FILE_NOT_FOUND, "File not found");
         }
-        MediaType type = MediaTypeFactory.getMediaType(file.getFileName().toString())
+        MediaType type = MediaTypeFactory.getMediaType(String.valueOf(file.getFileName()))
                 .orElse(MediaType.APPLICATION_OCTET_STREAM);
         return ResponseEntity.ok().contentType(type).contentLength(Files.size(file))
                 .body(new FileSystemResource(file));

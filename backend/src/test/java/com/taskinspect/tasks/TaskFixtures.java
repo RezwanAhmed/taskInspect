@@ -13,6 +13,11 @@ public final class TaskFixtures {
         task.makeSubTaskOf(mainTask);
     }
 
+    /** Sets who may take an open task without going through the API. */
+    public static void openTo(Task task, OpenScope scope) {
+        task.openTo(scope);
+    }
+
     /** Sets the task's worker without going through the API. */
     public static void assign(Task task, User worker) {
         task.assignTo(worker);

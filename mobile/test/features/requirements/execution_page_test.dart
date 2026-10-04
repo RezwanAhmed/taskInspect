@@ -23,9 +23,11 @@ const _requirements = [
 void main() {
   tearDown(getIt.reset);
 
-  Future<void> open(WidgetTester tester, {TaskStatus status = TaskStatus.inProgress, String? location}) async {
+  Future<void> open(WidgetTester tester,
+      {TaskStatus status = TaskStatus.inProgress, String? location, bool lateStartUpdate = false}) async {
     registerFakeTasks(FakeTaskRepository([fakeTask('t1', status: status, title: 'Kitchen')])
-      ..requirements = {'t1': _requirements});
+      ..requirements = {'t1': _requirements}
+      ..lateStartUpdate = lateStartUpdate);
     await tester.pumpWidget(TaskInspectApp(authBloc: authBlocWith(FakeAuthRepository(savedUser: testWorker))));
     await tester.pumpAndSettle();
     unawaited(GoRouter.of(tester.element(find.byType(Scaffold).first)).push(location ?? AppRoutes.execute('t1')));
@@ -91,6 +93,15 @@ void main() {
 
   testWidgets('starting a task opens the requirements', (tester) async {
     await open(tester, status: TaskStatus.assigned, location: AppRoutes.task('t1'));
+
+    await tester.tap(find.byKey(const Key('start-task')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Requirement 1 of 3'), findsOneWidget);
+  });
+
+  testWidgets('starting opens the requirements also when the device updates the task later', (tester) async {
+    await open(tester, status: TaskStatus.assigned, location: AppRoutes.task('t1'), lateStartUpdate: true);
 
     await tester.tap(find.byKey(const Key('start-task')));
     await tester.pumpAndSettle();

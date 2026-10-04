@@ -186,13 +186,14 @@ public class SyncService {
             throw invalidPayload("entityId must be the task ID");
         }
         Object version = operation.payload() == null ? null : operation.payload().get("version");
-        if (version != null && !(version instanceof Number)) {
-            throw invalidPayload("version must be a number");
-        }
-        if (version instanceof Number number
-                && number.longValue() != taskService.get(caller, operation.taskId()).getVersion()) {
-            throw new ApiException(HttpStatus.CONFLICT, ErrorCode.VERSION_CONFLICT,
-                    "The task was changed on the server. Reload it and try again.");
+        if (version != null) {
+            if (!(version instanceof Number number)) {
+                throw invalidPayload("version must be a number");
+            }
+            if (number.longValue() != taskService.get(caller, operation.taskId()).getVersion()) {
+                throw new ApiException(HttpStatus.CONFLICT, ErrorCode.VERSION_CONFLICT,
+                        "The task was changed on the server. Reload it and try again.");
+            }
         }
         taskService.start(caller, operation.taskId());
     }

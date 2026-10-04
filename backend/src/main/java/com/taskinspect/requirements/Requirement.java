@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Persistable;
 
 /**
@@ -115,8 +116,9 @@ public class Requirement implements Persistable<UUID> {
         this.position = position;
     }
 
+    /** Set when the object is created, so never null (overrides Spring Data's nullable getId). */
     @Override
-    public UUID getId() {
+    public @NonNull UUID getId() {
         return id;
     }
 

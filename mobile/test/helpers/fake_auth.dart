@@ -25,8 +25,14 @@ class FakeAuthRepository implements AuthRepository {
   int logouts = 0;
   int expiredSessions = 0;
 
+  /// When set, signing in fails with this (e.g. no connection).
+  Failure? loginFailure;
+
   @override
   Future<Result<AuthUser>> login({required String email, required String password}) async {
+    if (loginFailure case final failure?) {
+      return Err(failure);
+    }
     if (email == testWorker.email && password == 'secret') {
       savedUser = testWorker;
       return const Ok(testWorker);

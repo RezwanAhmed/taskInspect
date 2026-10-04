@@ -76,7 +76,8 @@ public class ResponseService {
         return responseRepository.saveAndFlush(response);
     }
 
-    private static void validate(Requirement requirement, SaveResponseRequest request) {
+    /** Checks that the answer fits the requirement type (package-private for the unit tests). */
+    static void validate(Requirement requirement, SaveResponseRequest request) {
         boolean hasBoolean = request.booleanValue() != null;
         boolean hasText = request.textValue() != null && !request.textValue().isBlank();
         boolean hasNumber = request.numberValue() != null;

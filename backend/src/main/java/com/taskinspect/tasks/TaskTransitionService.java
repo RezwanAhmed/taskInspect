@@ -4,13 +4,15 @@ import com.taskinspect.audit.AuditAction;
 import com.taskinspect.audit.AuditService;
 import com.taskinspect.users.User;
 import java.util.Map;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Changes a task's status and records the change in the status history and
  * the audit log in the same transaction, so no status change can go
- * unrecorded.
+ * unrecorded. Each change is also published as a {@link TaskStatusChanged}
+ * event (push notifications listen for it).
  */
 @Service
 public class TaskTransitionService {
@@ -29,12 +31,14 @@ public class TaskTransitionService {
     private final TaskStateMachine stateMachine;
     private final TaskStatusChangeRepository historyRepository;
     private final AuditService auditService;
+    private final ApplicationEventPublisher events;
 
     public TaskTransitionService(TaskStateMachine stateMachine, TaskStatusChangeRepository historyRepository,
-            AuditService auditService) {
+            AuditService auditService, ApplicationEventPublisher events) {
         this.stateMachine = stateMachine;
         this.historyRepository = historyRepository;
         this.auditService = auditService;
+        this.events = events;
     }
 
     /** Records that a new task was created as DRAFT. */
@@ -61,6 +65,8 @@ public class TaskTransitionService {
         historyRepository.save(new TaskStatusChange(task, from, task.getStatus(), by, reason));
         String details = from + " -> " + task.getStatus() + (reason == null ? "" : "; reason: " + reason);
         audit(AUDIT_ACTIONS.get(action), task, by, details);
+        events.publishEvent(new TaskStatusChanged(task.getId(), task.getTitle(), action, by.getId(),
+                task.getAssignee() == null ? null : task.getAssignee().getId(), task.getReviewer().getId()));
     }
 
     private void audit(AuditAction action, Task task, User by, String details) {

@@ -2,6 +2,7 @@ plugins {
     java
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
+    id("com.github.spotbugs") version "6.5.12"
 }
 
 group = "com.taskinspect"
@@ -17,6 +18,13 @@ java {
 repositories {
     mavenCentral()
 }
+
+// Security fixes newer than Spring Boot 4.1.1 manages (found by the image
+// scan, task 10.5a). Remove each line once a Spring Boot update includes
+// the version or a newer one.
+extra["tomcat.version"] = "11.0.25"        // CVE-2026-65182, -65905, -68525 (critical)
+extra["jackson-bom.version"] = "3.1.7"     // CVE-2026-68497, -89407, -89425, -91776, -91777
+extra["jackson-2-bom.version"] = "2.21.7"  // the same CVEs in Jackson 2
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -43,6 +51,28 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+// Only the executable Spring Boot jar is built (the Docker image copies it).
+tasks.jar {
+    enabled = false
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// Static analysis of the application code (task 10.2); part of `check`, so
+// `gradlew build` fails on a finding. Known false positives are listed,
+// with the reason, in config/spotbugs-exclude.xml.
+spotbugs {
+    toolVersion = "4.10.4"
+    excludeFilter = file("config/spotbugs-exclude.xml")
+}
+
+tasks.spotbugsMain {
+    reports.create("html") { required = true }
+}
+
+// Tests are not analysed: mocks and fixtures trigger patterns on purpose.
+tasks.spotbugsTest {
+    enabled = false
 }

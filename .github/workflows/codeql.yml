@@ -1,0 +1,63 @@
+# Code scanning with CodeQL (task 10.5b): looks for security problems in
+# the backend code (injection, unsafe deserialization, ...) and in the
+# GitHub Actions workflows. Findings appear under Security > Code
+# scanning. Dart (the mobile app) is not supported by CodeQL.
+name: CodeQL
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/**"
+  schedule:
+    # Weekly, so new CodeQL queries also check code that has not changed.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+          - language: actions
+    steps:
+      - uses: actions/checkout@v4
+
+      # CodeQL reads the Gradle dependencies with the project's JDK.
+      - uses: actions/setup-java@v4
+        if: matrix.language == 'java-kotlin'
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      # Java is analysed from the sources, without building the project.
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

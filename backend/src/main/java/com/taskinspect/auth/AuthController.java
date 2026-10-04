@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -62,7 +63,8 @@ public class AuthController {
     @Operation(summary = "Who am I?", description = "Returns the user the access token belongs to.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
     public CurrentUserResponse me(@AuthenticationPrincipal Jwt jwt) {
-        return new CurrentUserResponse(UUID.fromString(jwt.getSubject()),
+        // The decoder only accepts tokens issued by this server, which always have a subject.
+        return new CurrentUserResponse(UUID.fromString(Objects.requireNonNull(jwt.getSubject())),
                 jwt.getClaimAsString(JwtService.CLAIM_EMAIL),
                 jwt.getClaimAsStringList(JwtService.CLAIM_ROLES),
                 jwt.getExpiresAt());

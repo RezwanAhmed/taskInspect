@@ -661,6 +661,7 @@ matters, ownership in the service. Tasks a user may not see answer
 | `GET /api/tasks`, `GET /api/tasks/{id}` | Administrators and managers: all tasks of their organization; workers: tasks assigned to them and open tasks they may take (open to everyone, or to their team while its manager is active) | `404` (hidden) |
 | `GET /api/tasks/team` (`?status=`) | Any logged-in user: their team members' tasks as tiles (not their own, no cancelled ones). Empty without a team, when the team's manager is deactivated, and for administrators and managers (they have no team; they see all tasks above) | `401` |
 | `GET /api/teams` | Any logged-in user: every active manager's team in numbers (active members; tasks not approved or cancelled, also those of deactivated members) | `401` |
+| `PUT /api/devices` (`{"token", "platform": "ANDROID" \| "IOS"}`), `DELETE /api/devices` (`{"token"}`) | Any logged-in user, for their own device: register the push token (a token used by another user before moves to the caller) or remove it (only the caller's own token) | `401` |
 | `PUT /api/tasks/{id}` | The manager (or administrator, main task) who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `POST/PUT/DELETE /api/tasks/{id}/requirements…` | The manager who created the task, while DRAFT / OPEN / ASSIGNED | `403` |
 | `PUT /api/tasks/{id}/requirements/order` (`{"requirementIds": […]}`) | The manager who created the task, while DRAFT / OPEN / ASSIGNED; every requirement exactly once (`400 INVALID_ORDER`) | `403` |
@@ -804,8 +805,10 @@ sequenceDiagram
 
 1. **Push.** `POST /api/sync/push` sends pending operations in the order
    they were created. The server records every applied operation ID in
-   `sync_records`; if an ID arrives again (for example after a timeout),
-   it returns the earlier result instead of applying it twice. Each
+   `sync_records`; if an applied ID arrives again (for example after a
+   timeout), it answers `APPLIED` without applying it twice. Rejected
+   operations are not recorded, so they can be sent again after a fix
+   (details: [offline-sync.md](offline-sync.md)). Each
    operation goes through the same services and rules as a normal API
    call — the task state machine, role and ownership checks. Adding a
    photo or PDF is one of these operations: it registers the file
@@ -912,5 +915,5 @@ source of truth for the worker's own unsent answers.
 | Background sync, evidence upload queue | 6.11-6.12 |
 | Sync status UI and tests | 6.13-6.14 |
 
-The full sync API and edge cases are documented in `docs/offline-sync.md`
-(task 11.9).
+The full sync API and edge cases are documented in
+[offline-sync.md](offline-sync.md).

@@ -9,12 +9,11 @@ network connection, then submits it for review. A reviewer approves the task,
 rejects it, or requests a correction, and every step is recorded in the task's
 history.
 
-> **Status:** in development — the backend (Spring Boot, PostgreSQL,
-> Flyway, JWT login, users and roles, task management with requirements,
-> assignment, answers, state machine, history and audit log) and the
-> Flutter app foundation (architecture, theme, routing, API client,
-> secure storage, local database, login with token refresh) are in place;
-> task execution on mobile is next.
+> **Status:** in development. The backend and the Android app work end
+> to end — task management, offline execution with photos and PDFs,
+> background sync, review and correction, teams, open tasks and
+> sub-tasks — with 767 backend and 467 Flutter tests and a CI pipeline.
+> Next: cloud deployment (AWS, Firebase) and the Google Play release.
 
 ## Project Overview
 
@@ -85,7 +84,10 @@ resubmits, and the manager approves. The task history shows the full lifecycle.
 
 ## Features
 
-Planned for the first release:
+Built for the first release. Two parts are ready in the code and wait
+for the cloud setup: push notifications (the backend sends them; the
+app receives them once Firebase is set up) and S3 storage (local file
+storage is used until the AWS bucket exists):
 
 ### Task management
 
@@ -154,15 +156,14 @@ taskInspect/
 ├── infrastructure/    # Docker, deployment and AWS configuration
 ├── docs/              # Architecture, API, database, sync and deployment docs
 │   └── decisions/     # Architecture Decision Records
-├── .github/           # GitHub Actions workflows (planned)
-├── docker-compose.yml # Local PostgreSQL (backend service added later)
+├── .github/           # GitHub Actions workflows (CI)
+├── docker-compose.yml # Local PostgreSQL
+├── CONTRIBUTING.md    # How changes are made
 ├── LICENSE            # All rights reserved
 └── README.md
 ```
 
-Each top-level folder has its own `README.md` describing what it will
-contain. Folders and files marked *planned* are added in the phase that needs
-them (see the roadmap below).
+Each top-level folder has its own `README.md`.
 
 ## Roadmap
 
@@ -174,21 +175,101 @@ The project is built in small steps, one phase at a time.
 | 2  | Backend foundation — Spring Boot, PostgreSQL, Flyway, JWT authentication, users and roles | Done |
 | 3  | Task management (backend) — tasks, requirements, assignment, state machine, audit log | Done |
 | 4  | Flutter foundation — project setup, theme, routing, API client, local database, login | Done |
-| 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo and PDF evidence | Planned |
-| 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Planned |
-| 7  | Review workflow — submit, approve / reject / request correction, resubmit, history | Planned |
-| 8  | Cloud — S3 evidence storage, push notifications, Docker image, cloud deployment | Planned |
-| 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | Planned |
-| 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | Planned |
-| 11 | Production release — signed Android app, Google Play, monitoring, final docs | Planned |
+| 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo and PDF evidence | Done |
+| 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Done |
+| 7  | Review workflow — submit, approve / reject / request correction, resubmit, history; teams, open tasks, sub-tasks, offline drafts | Done |
+| 8  | Cloud — S3 evidence storage, push notifications, Docker image, cloud deployment | In progress (code done; AWS / Firebase setup and deployment open) |
+| 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | In progress (device integration test and end-to-end demo open) |
+| 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | In progress (build, tests, analysis, image scan, CodeQL, secret scan done; image push, deploy, release build open) |
+| 11 | Production release — signed Android app, Google Play, monitoring, final docs | In progress (docs) |
 | 12 | iOS release — iOS build on a cloud Mac, push notifications, TestFlight, App Store | Planned |
 
 Android comes first; the iOS release follows the Google Play release.
 The app is built with both platforms in mind from the start (see
 [ADR-0001](docs/decisions/0001-flutter-for-cross-platform-mobile.md)).
 
-Setup, API, testing and deployment instructions will be added to this README
-as those parts are built.
+## Getting Started
+
+You need **Java 25**, **Docker** (for PostgreSQL) and **Flutter 3.47** with
+the Android SDK (an emulator or a phone).
+
+```bash
+# 1. Settings: copy and fill in (database password, JWT_SECRET of at least
+#    32 characters, ADMIN_EMAIL / ADMIN_PASSWORD for the first administrator)
+cp .env.example .env
+
+# 2. Database
+docker compose up -d
+
+# 3. Backend on http://localhost:8080 (runs the migrations, creates the admin)
+cd backend && ./gradlew bootRun
+
+# 4. App on the Android emulator (talks to http://10.0.2.2:8080)
+cd mobile && flutter pub get && flutter run
+```
+
+Sign in with the administrator from `.env`, create managers and workers,
+and the workflow above is ready to try. More: [backend/README.md](backend/README.md)
+(configuration, health check, Swagger UI at http://localhost:8080/swagger-ui.html)
+and [mobile/README.md](mobile/README.md) (environments, real phones).
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [Architecture](docs/architecture.md) | Components, task lifecycle, teams, mobile and backend architecture, permissions, offline sync concepts |
+| [API](docs/api.md) | Conventions, errors and codes, paging, uploads, every endpoint |
+| [Database](docs/database.md) | PostgreSQL schema and migrations, the app's local database |
+| [Authentication](docs/authentication.md) | Sign in, tokens, roles, the app's session handling |
+| [Offline sync](docs/offline-sync.md) | The sync API and its edge cases |
+| [Testing](docs/testing.md) | Test layers, how to run them, CI |
+| [Decisions](docs/decisions/) | Architecture Decision Records |
+| [Contributing](CONTRIBUTING.md) | Branches, commits, code style, checks |
+
+## Testing
+
+```bash
+cd backend && ./gradlew build    # 767 tests on a real PostgreSQL (Docker) + SpotBugs
+cd mobile && flutter analyze && flutter test    # 467 unit, widget and scenario tests
+```
+
+Details, test layers and the device integration test:
+[docs/testing.md](docs/testing.md).
+
+## CI/CD
+
+GitHub Actions ([.github/workflows](.github/workflows)) on pushes and pull
+requests to `main` and `develop`:
+
+- **Backend** — build, all tests, SpotBugs; then the Docker image is
+  built, scanned for known vulnerabilities (Trivy) and started against
+  PostgreSQL until its health check is up.
+- **Mobile** — `flutter analyze` and all tests.
+- **CodeQL** — code scanning of the backend and the workflows.
+- **Secret scan** — gitleaks over the whole git history.
+
+Publishing the image, deploying and building the signed release app
+follow with the cloud setup.
+
+## Deployment
+
+The backend ships as a Docker image (`backend/Dockerfile`): a small JRE
+image running as a non-root user, configured only through environment
+variables (see `.env.example`), with a health check at
+`/actuator/health`.
+
+```bash
+docker build -t taskinspect-backend backend
+# .env has the dev profile; the image is meant to run with prod (no Swagger, quiet logs).
+# host.docker.internal reaches the database on your computer (Linux: needs --add-host).
+docker run -p 8080:8080 --env-file .env -e SPRING_PROFILES_ACTIVE=prod \
+  -e DB_HOST=host.docker.internal --add-host=host.docker.internal:host-gateway \
+  taskinspect-backend
+```
+
+The production setup on AWS (database, backend hosting, S3, CloudWatch)
+and the Google Play release are being prepared; they will be described
+in `docs/deployment.md`.
 
 ## License
 
