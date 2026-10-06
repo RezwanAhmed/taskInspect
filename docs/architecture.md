@@ -19,9 +19,13 @@ TaskInspect has three parts:
   important action. The mobile app never writes to the database or
   storage directly — it goes through the API.
 - **Data and cloud services** — PostgreSQL is the source of truth for all
-  business data. Evidence files (photos and PDFs) go to AWS S3; the
-  database keeps only their metadata. Firebase Cloud Messaging delivers
-  push notifications, and CloudWatch collects backend logs.
+  business data. Evidence files (photos and PDFs) go to **S3-compatible
+  object storage** (designed for AWS S3; currently **Cloudflare R2**
+  for cost reasons — see ADR-0006); the database keeps only their
+  metadata. Firebase Cloud Messaging delivers push notifications, and
+  backend logs go to the hosting platform's own logging (designed for
+  **AWS CloudWatch**, deferred until either real traffic or a move to
+  AWS — see ADR-0006).
 
 Everything is kept deliberately small: one backend service, one database
 and a few managed cloud services, so that the whole system can be
@@ -46,9 +50,9 @@ flowchart LR
 
     PG[("PostgreSQL<br/>business data")]
     Redis[("Redis<br/>cache, optional")]
-    S3[("AWS S3<br/>evidence files")]
+    S3[("S3-compatible storage<br/>evidence files<br/>(Cloudflare R2 now, AWS S3 later)")]
     FCM["Firebase Cloud<br/>Messaging"]
-    CW["AWS CloudWatch<br/>logs"]
+    CW["Platform logs<br/>(AWS CloudWatch later)"]
 
     UI -->|"REST + JWT"| API
     Sync -->|"REST + JWT<br/>push / pull"| API
@@ -79,9 +83,9 @@ notifications from it).
 | Notification service | Sends notifications for assignment, submission and review results through FCM to the users' registered devices. |
 | PostgreSQL | Users, roles, tasks, requirements, responses, reviews, status history, audit log and evidence metadata. Schema managed with Flyway migrations. |
 | Redis | Optional cache / short-lived data where it clearly helps; the system works without it. |
-| AWS S3 | Stores evidence files (photos and PDF documents). The backend issues a pre-signed upload URL, the app uploads the file directly, and the backend stores the file's metadata (task, requirement, storage key, type, size). |
+| S3-compatible storage (Cloudflare R2 now; AWS S3 is the designed target, see ADR-0006) | Stores evidence files (photos and PDF documents). The backend issues a pre-signed upload URL, the app uploads the file directly, and the backend stores the file's metadata (task, requirement, storage key, type, size). |
 | Firebase Cloud Messaging | Delivers push notifications to the mobile app (foreground, background and tap to open the task). |
-| AWS CloudWatch | Central backend logs, together with Spring Boot Actuator health checks. |
+| Backend logs (AWS CloudWatch is the designed target, deferred — see ADR-0006) | Central backend logs, together with Spring Boot Actuator health checks. |
 
 ## Key Design Principles
 
@@ -556,7 +560,7 @@ the module boundary stays the same.
 | `responses` | Workers' answers to requirements | 3.11 |
 | `reviews` | Submit, approve, reject, request correction, resubmit | 7.1-7.4 |
 | `evidence` | Evidence metadata and upload flow | 5.17, 8.2 |
-| `filestorage` | Wrapper around S3 (pre-signed URLs), replaceable in tests | 8.1-8.2 |
+| `filestorage` | Wrapper around S3-compatible storage (pre-signed URLs), replaceable in tests; configurable endpoint so Cloudflare R2 (now) or AWS S3 (later) both work unchanged — see ADR-0006 | 8.1-8.2 |
 | `sync` | Idempotent push / pull endpoints for the mobile app | 6.4, 6.6 |
 | `notifications` | Device tokens and push notifications through FCM | 8.5-8.6 |
 | `audit` | Audit log of important actions | 3.13 |
@@ -703,7 +707,9 @@ logout, health checks, API docs and signed file URLs answers `401`.
 - **Configuration** — settings and secrets come from environment
   variables (`.env` locally, never committed).
 - **Observability** — structured logs with a request ID on every line,
-  Spring Boot Actuator health checks, and CloudWatch in production.
+  Spring Boot Actuator health checks, and the hosting platform's own
+  logs in production (AWS CloudWatch is the designed target once
+  deployed there; deferred for now — see ADR-0006).
 - **API documentation** — OpenAPI / Swagger UI generated from the
   controllers.
 
@@ -785,7 +791,7 @@ sequenceDiagram
     participant App as App + local DB
     participant SM as SyncManager
     participant API as Backend API
-    participant S3 as AWS S3
+    participant S3 as S3-compatible storage (R2 now, AWS later)
 
     W->>App: Answer, photo, submit (offline)
     App->>App: Save locally + queue operations

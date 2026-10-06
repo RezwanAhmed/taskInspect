@@ -84,3 +84,10 @@ fixed content type, maximum size. The app therefore uses the same
 upload flow for both: register -> upload URL -> `PUT` the file ->
 complete (the backend checks the stored size) -> download URL for
 viewing.
+
+**2026-10-05** — Decision by the project owner: the actual bucket for
+task 8.1 is **Cloudflare R2**, not AWS S3, for cost reasons while the
+project has no production traffic. R2 is S3-compatible and used through
+the same `S3_ENDPOINT`-configurable storage client this ADR already
+describes, so nothing above changes beyond which account the bucket
+lives in. See ADR-0006.

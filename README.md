@@ -13,7 +13,10 @@ history.
 > to end — task management, offline execution with photos and PDFs,
 > background sync, review and correction, teams, open tasks and
 > sub-tasks — with 767 backend and 467 Flutter tests and a CI pipeline.
-> Next: cloud deployment (AWS, Firebase) and the Google Play release.
+> Next: cloud deployment (free-tier providers for now — Cloudflare R2,
+> Neon, Google Cloud Run; AWS stays the designed migration target, see
+> [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md) —
+> and Firebase) and the Google Play release.
 
 ## Project Overview
 
@@ -25,7 +28,9 @@ CRUD demo. It consists of:
   Released on Google Play first, then on the Apple App Store.
 - **Backend API** — Java / Spring Boot REST API with PostgreSQL, which owns the
   business rules: who can do what, and which task state changes are allowed.
-- **Cloud storage** — evidence files (photos, PDFs) are stored in object storage (AWS S3), not in
+- **Cloud storage** — evidence files (photos, PDFs) are stored in S3-compatible object storage
+  (Cloudflare R2 for now, AWS S3-compatible and the designed migration target — see
+  [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md)), not in
   the database.
 
 The same workflow fits many industries — kitchen safety checks, facility
@@ -86,8 +91,10 @@ resubmits, and the manager approves. The task history shows the full lifecycle.
 
 Built for the first release. Two parts are ready in the code and wait
 for the cloud setup: push notifications (the backend sends them; the
-app receives them once Firebase is set up) and S3 storage (local file
-storage is used until the AWS bucket exists):
+app receives them once Firebase is set up) and S3-compatible storage
+(local file storage is used until the bucket exists — Cloudflare R2
+for now, AWS S3-compatible and the designed migration target, see
+[ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md)):
 
 ### Task management
 
@@ -133,7 +140,10 @@ storage is used until the AWS bucket exists):
 - Audit log of important actions (task created, assigned, submitted,
   approved, rejected)
 - Push notifications for assignments, submissions and review results
-- Evidence files (photos, PDFs) stored in AWS S3; only metadata is kept in the database
+- Evidence files (photos, PDFs) stored in S3-compatible object storage (Cloudflare R2 for now,
+  AWS S3-compatible and the designed migration target — see
+  [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md)); only metadata
+  is kept in the database
 
 ## Tech Stack
 
@@ -142,7 +152,7 @@ storage is used until the AWS bucket exists):
 | Mobile   | Flutter, Dart, BLoC, Clean Architecture, Material 3, local database, secure storage, background sync, camera + image compression |
 | Backend  | Java, Spring Boot (Web, Security, Data JPA / Hibernate), JWT, OpenAPI / Swagger |
 | Database | PostgreSQL (Flyway migrations), Redis where useful |
-| Cloud    | AWS S3 (evidence), AWS CloudWatch (logging), Firebase Cloud Messaging (push notifications) |
+| Cloud    | Cloudflare R2 (evidence, S3-compatible), Neon (database hosting), Google Cloud Run (backend hosting), Firebase Cloud Messaging (push notifications) — AWS S3 / RDS / EC2-ECS / CloudWatch is the designed migration target, see [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md) |
 | DevOps   | Docker, Docker Compose, GitHub Actions (build, test, deploy) |
 | Testing  | JUnit, Mockito, Spring Boot Test, Flutter unit / widget / integration tests |
 | Tools    | Git, GitHub, Gradle, Android Studio, IntelliJ IDEA, Xcode (iOS, on a cloud Mac) |
@@ -153,7 +163,7 @@ storage is used until the AWS bucket exists):
 taskInspect/
 ├── mobile/            # Flutter app — BLoC, feature-based Clean Architecture, offline-first
 ├── backend/           # Java / Spring Boot REST API — Security + JWT, JPA, PostgreSQL
-├── infrastructure/    # Docker, deployment and AWS configuration
+├── infrastructure/    # Docker, deployment and cloud provider configuration
 ├── docs/              # Architecture, API, database, sync and deployment docs
 │   └── decisions/     # Architecture Decision Records
 ├── .github/           # GitHub Actions workflows (CI)
@@ -178,7 +188,7 @@ The project is built in small steps, one phase at a time.
 | 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo and PDF evidence | Done |
 | 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Done |
 | 7  | Review workflow — submit, approve / reject / request correction, resubmit, history; teams, open tasks, sub-tasks, offline drafts | Done |
-| 8  | Cloud — S3 evidence storage, push notifications, Docker image, cloud deployment | In progress (code done; AWS / Firebase setup and deployment open) |
+| 8  | Cloud — S3-compatible evidence storage, push notifications, Docker image, cloud deployment | In progress (code done; free-tier providers for now — Cloudflare R2, Neon, Google Cloud Run, see [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md) — and Firebase setup and deployment open) |
 | 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | In progress (device integration test and end-to-end demo open) |
 | 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | In progress (build, tests, analysis, image scan, CodeQL, secret scan done; image push, deploy, release build open) |
 | 11 | Production release — signed Android app, Google Play, monitoring, final docs | In progress (docs) |
@@ -267,8 +277,12 @@ docker run -p 8080:8080 --env-file .env -e SPRING_PROFILES_ACTIVE=prod \
   taskinspect-backend
 ```
 
-The production setup on AWS (database, backend hosting, S3, CloudWatch)
-and the Google Play release are being prepared; they will be described
+The production setup — currently free-tier providers (Neon database,
+Google Cloud Run backend hosting, Cloudflare R2 storage), with AWS
+(RDS, EC2/ECS, S3, CloudWatch) as the designed migration target once
+there's real traffic or a specific reason to move — is being prepared,
+see [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md).
+The Google Play release is also being prepared; both will be described
 in `docs/deployment.md`.
 
 ## License
