@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "577422444566",
+    "project_id": "taskinspect",
+    "storage_bucket": "taskinspect.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:577422444566:android:7ed55e39f75de14a2e4d37",
+        "android_client_info": {
+          "package_name": "com.taskinspect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCfwbN_jzCF4BK4vXcj-tnkJ_i4PeRjHoU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

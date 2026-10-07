@@ -38,6 +38,7 @@ dependencies {
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
     implementation(platform("software.amazon.awssdk:bom:2.55.10"))
     implementation("software.amazon.awssdk:s3")
+    implementation("com.google.firebase:firebase-admin:9.4.3")
     runtimeOnly("org.postgresql:postgresql")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-starter-flyway-test")

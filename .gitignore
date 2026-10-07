@@ -29,6 +29,8 @@ backend/out/
 backend/bin/
 # Local evidence file storage (taskinspect.storage.local.directory)
 backend/data/
+# Firebase service account key (task 8.4); path set by GOOGLE_APPLICATION_CREDENTIALS
+backend/secrets/
 !backend/gradle/wrapper/gradle-wrapper.jar
 
 # ---------- Mobile (Flutter / Dart) ----------
