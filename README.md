@@ -188,7 +188,7 @@ The project is built in small steps, one phase at a time.
 | 5  | Task execution (mobile) — dashboard, task list, requirement inputs, photo and PDF evidence | Done |
 | 6  | Offline synchronization — sync queue, push / pull, retries, conflicts, background sync | Done |
 | 7  | Review workflow — submit, approve / reject / request correction, resubmit, history; teams, open tasks, sub-tasks, offline drafts | Done |
-| 8  | Cloud — S3-compatible evidence storage, push notifications, Docker image, cloud deployment | In progress (code done; free-tier providers for now — Cloudflare R2, Neon, Google Cloud Run, see [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md) — and Firebase setup and deployment open) |
+| 8  | Cloud — S3-compatible evidence storage, push notifications, Docker image, cloud deployment | Done (Cloudflare R2, Neon, Google Cloud Run — free-tier providers, AWS is the designed migration target, see [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md)); CloudWatch-equivalent logging (8.11) deferred |
 | 9  | Testing — backend unit / integration / security tests, Flutter unit / widget / integration tests | In progress (device integration test and end-to-end demo open) |
 | 10 | CI/CD — GitHub Actions for build, test, analysis, Docker images and deployment | In progress (build, tests, analysis, image scan, CodeQL, secret scan done; image push, deploy, release build open) |
 | 11 | Production release — signed Android app, Google Play, monitoring, final docs | In progress (docs) |
@@ -233,6 +233,7 @@ and [mobile/README.md](mobile/README.md) (environments, real phones).
 | [Authentication](docs/authentication.md) | Sign in, tokens, roles, the app's session handling |
 | [Offline sync](docs/offline-sync.md) | The sync API and its edge cases |
 | [Testing](docs/testing.md) | Test layers, how to run them, CI |
+| [Deployment](docs/deployment.md) | Cloud services, environment variables, how to deploy |
 | [Decisions](docs/decisions/) | Architecture Decision Records |
 | [Contributing](CONTRIBUTING.md) | Branches, commits, code style, checks |
 
@@ -277,13 +278,14 @@ docker run -p 8080:8080 --env-file .env -e SPRING_PROFILES_ACTIVE=prod \
   taskinspect-backend
 ```
 
-The production setup — currently free-tier providers (Neon database,
-Google Cloud Run backend hosting, Cloudflare R2 storage), with AWS
+The production backend is deployed: Neon (database), Cloudflare R2
+(evidence storage) and Google Cloud Run (backend hosting), with AWS
 (RDS, EC2/ECS, S3, CloudWatch) as the designed migration target once
-there's real traffic or a specific reason to move — is being prepared,
-see [ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md).
-The Google Play release is also being prepared; both will be described
-in `docs/deployment.md`.
+there's real traffic or a specific reason to move - see
+[ADR-0006](docs/decisions/0006-free-tier-providers-for-initial-deployment.md)
+for why, and [docs/deployment.md](docs/deployment.md) for the services,
+environment variables and how to deploy. The Google Play release is
+still being prepared.
 
 ## License
 
