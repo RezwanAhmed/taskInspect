@@ -109,3 +109,10 @@ Cloud Run's own logs (`gcloud run services logs read backend
 --region=asia-southeast1`) cover this for now. Task 8.11 (an AWS
 CloudWatch equivalent) is deferred per ADR-0006 - revisit once there
 is either real traffic or a move to AWS.
+
+A Cloud Monitoring uptime check (`backend-health`) polls
+`/actuator/health` every 5 minutes from multiple regions (task 11.7).
+No alert notification channel is wired to it yet - that needs the
+`beta` gcloud component (an interactive installer prompt, not run
+here); the check itself and its results are visible in Cloud Console
+under Monitoring -> Uptime checks regardless.
