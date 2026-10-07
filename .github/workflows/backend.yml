@@ -114,3 +114,55 @@ jobs:
       - name: Stop the container
         if: always()
         run: docker rm -f backend || true
+
+  # Pushes the image to Artifact Registry and deploys it to Cloud Run
+  # (tasks 10.4/10.6, ADR-0006/8.10). Only on main (CONTRIBUTING.md:
+  # main changes by PR at phase ends), and only once GCP_SA_KEY exists -
+  # skips cleanly otherwise so this workflow keeps passing until it is
+  # added. Needs a service account key with Artifact Registry Writer +
+  # Cloud Run Admin + "Service Account User" on the runtime service
+  # account, saved as the repository secret GCP_SA_KEY (Settings ->
+  # Secrets and variables -> Actions). Creating that service account is
+  # an IAM change, left for Rezwan to do once (see WORKLOG.md 2026-10-08).
+  deploy:
+    name: Push image and deploy
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check GCP_SA_KEY is set
+        id: check
+        run: echo "has-key=${{ secrets.GCP_SA_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: google-github-actions/auth@v2
+        if: steps.check.outputs.has-key == 'true'
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.check.outputs.has-key == 'true'
+
+      - name: Configure Docker for Artifact Registry
+        if: steps.check.outputs.has-key == 'true'
+        run: gcloud auth configure-docker asia-southeast1-docker.pkg.dev --quiet
+
+      - name: Build and push
+        if: steps.check.outputs.has-key == 'true'
+        run: |
+          docker build -t asia-southeast1-docker.pkg.dev/taskinspect/backend/api:${{ github.sha }} \
+            -t asia-southeast1-docker.pkg.dev/taskinspect/backend/api:latest backend
+          docker push asia-southeast1-docker.pkg.dev/taskinspect/backend/api:${{ github.sha }}
+          docker push asia-southeast1-docker.pkg.dev/taskinspect/backend/api:latest
+
+      # Only the image - environment variables and secrets are managed
+      # separately in Cloud Run itself (gcloud-cloudrun-credentials.txt),
+      # not here, so they are never in a workflow file or log.
+      - name: Deploy to Cloud Run
+        if: steps.check.outputs.has-key == 'true'
+        run: |
+          gcloud run deploy backend --region=asia-southeast1 \
+            --image=asia-southeast1-docker.pkg.dev/taskinspect/backend/api:${{ github.sha }}
