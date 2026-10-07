@@ -44,11 +44,16 @@ abstract final class AppRoutes {
   static String history(String id) => '$tasks/$id/history';
 }
 
+/// Lets code outside the widget tree (a tapped push notification) navigate
+/// without a [BuildContext] of its own - see push_notification_navigation.dart.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Creates the app's router. It follows the [AuthBloc]: while the session
 /// is unknown the splash screen is shown, logged-out users always land on
 /// the login screen, and logged-in users never see splash or login.
 GoRouter createRouter(AuthBloc authBloc, {String initialLocation = AppRoutes.splash}) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: initialLocation,
     refreshListenable: _StreamListenable(authBloc.stream),
     redirect: (context, state) {

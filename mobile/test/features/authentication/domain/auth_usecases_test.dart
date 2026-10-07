@@ -1,6 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
+import 'package:taskinspect/core/network/api_client.dart';
+import 'package:taskinspect/core/notifications/push_notification_service.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
@@ -11,6 +14,9 @@ import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 
+import '../../../helpers/fake_push_notifications.dart';
+import '../../../helpers/fake_server.dart';
+
 const _worker = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'Wendy', roles: {UserRole.worker});
 
 class _FakeRepository implements AuthRepository {
@@ -18,6 +24,9 @@ class _FakeRepository implements AuthRepository {
   bool loggedOut = false;
   bool sessionEnded = false;
   AuthUser? saved = _worker;
+
+  /// Set by a test that cares about the order of events.
+  List<String>? order;
 
   @override
   Future<Result<AuthUser>> login({required String email, required String password}) async {
@@ -29,7 +38,10 @@ class _FakeRepository implements AuthRepository {
   Future<Result<AuthUser?>> restoreSession() async => Ok(saved);
 
   @override
-  Future<void> logout() async => loggedOut = true;
+  Future<void> logout() async {
+    loggedOut = true;
+    order?.add('logout');
+  }
 
   @override
   Future<void> endExpiredSession() async => sessionEnded = true;
@@ -75,9 +87,23 @@ void main() {
   });
 
   test('Logout ends the session', () async {
-    await Logout(repository)();
+    await Logout(repository, PushNotificationService(FakePushTokenSource(), ApiClient(Dio())))();
 
     expect(repository.loggedOut, isTrue);
+  });
+
+  test('Logout removes this device\'s token before ending the session', () async {
+    repository.order = [];
+    final tokenSource = FakePushTokenSource(token: 'tok-1');
+    final apiClient = ApiClient(Dio(BaseOptions(baseUrl: 'http://api.test')));
+    apiClient.dio.httpClientAdapter = FakeServer((request) async {
+      repository.order!.add('unregister');
+      return (204, null);
+    });
+
+    await Logout(repository, PushNotificationService(tokenSource, apiClient))();
+
+    expect(repository.order, ['unregister', 'logout']);
   });
 
   test('roles', () {

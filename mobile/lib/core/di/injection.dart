@@ -1,8 +1,11 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get_it/get_it.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:taskinspect/core/config/app_config.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/network/connectivity_monitor.dart';
+import 'package:taskinspect/core/notifications/push_notification_service.dart';
+import 'package:taskinspect/core/notifications/push_token_source.dart';
 import 'package:taskinspect/core/security/refresh_lock.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
@@ -71,8 +74,10 @@ final GetIt getIt = GetIt.instance;
 /// Registers all dependencies. Called once in `main()` before the app starts.
 ///
 /// Tests can pass [config] and an in-memory [database]; the app reads the
-/// config from the build and opens its database file on the device.
-Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) async {
+/// config from the build and opens its database file on the device. Tests
+/// that resolve the whole graph can pass a fake [pushTokenSource] too - the
+/// real one needs a Firebase app, which main() creates before this runs.
+Future<void> configureDependencies({AppConfig? config, AppDatabase? database, PushTokenSource? pushTokenSource}) async {
   await getIt.reset();
   getIt
     ..registerSingleton<AppConfig>(config ?? AppConfig.fromEnvironment())
@@ -90,6 +95,10 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     })
     ..registerLazySingleton<ConnectivityMonitor>(DeviceConnectivityMonitor.new)
     ..registerLazySingleton<TokenStorage>(SecureTokenStorage.new)
+    ..registerLazySingleton<PushTokenSource>(
+      () => pushTokenSource ?? FirebaseMessagingTokenSource(FirebaseMessaging.instance),
+    )
+    ..registerLazySingleton(() => PushNotificationService(getIt(), getIt()))
     ..registerLazySingleton<AppDatabase>(
       () => database ?? AppDatabase(),
       dispose: (database) => database.close(),
@@ -143,7 +152,7 @@ Future<void> configureDependencies({AppConfig? config, AppDatabase? database}) a
     )
     ..registerFactory(() => Login(getIt()))
     ..registerFactory(() => RestoreSession(getIt()))
-    ..registerFactory(() => Logout(getIt()))
+    ..registerFactory(() => Logout(getIt(), getIt()))
     ..registerFactory(() => EndExpiredSession(getIt()))
     ..registerFactory(() => CheckUnsyncedChanges(getIt()))
     ..registerLazySingleton(

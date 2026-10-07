@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:taskinspect/core/error/failure.dart';
 import 'package:taskinspect/core/error/result.dart';
+import 'package:taskinspect/core/network/api_client.dart';
+import 'package:taskinspect/core/notifications/push_notification_service.dart';
 import 'package:taskinspect/features/authentication/domain/entities/auth_user.dart';
 import 'package:taskinspect/features/authentication/domain/entities/unsynced_changes.dart';
 import 'package:taskinspect/features/authentication/domain/entities/user_role.dart';
@@ -10,6 +13,8 @@ import 'package:taskinspect/features/authentication/domain/usecases/login.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/logout.dart';
 import 'package:taskinspect/features/authentication/domain/usecases/restore_session.dart';
 import 'package:taskinspect/features/authentication/presentation/bloc/auth_bloc.dart';
+
+import 'fake_push_notifications.dart';
 
 const testWorker = AuthUser(id: 'u1', email: 'worker@example.com', fullName: 'Wendy Worker', roles: {UserRole.worker});
 const testManager = AuthUser(id: 'm1', email: 'manager@example.com', fullName: 'Mia Manager', roles: {UserRole.manager});
@@ -62,7 +67,7 @@ class FakeAuthRepository implements AuthRepository {
 AuthBloc authBlocWith(FakeAuthRepository repository) => AuthBloc(
       login: Login(repository),
       restoreSession: RestoreSession(repository),
-      logout: Logout(repository),
+      logout: Logout(repository, PushNotificationService(FakePushTokenSource(), ApiClient(Dio()))),
       endExpiredSession: EndExpiredSession(repository),
       checkUnsyncedChanges: CheckUnsyncedChanges(repository),
     );

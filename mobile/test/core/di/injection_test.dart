@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taskinspect/core/di/injection.dart';
 import 'package:taskinspect/core/network/api_client.dart';
 import 'package:taskinspect/core/network/connectivity_monitor.dart';
+import 'package:taskinspect/core/notifications/push_notification_service.dart';
 import 'package:taskinspect/core/security/token_storage.dart';
 import 'package:taskinspect/core/storage/app_database.dart';
 import 'package:taskinspect/core/synchronization/background_sync.dart';
@@ -23,6 +24,8 @@ import 'package:taskinspect/features/tasks/domain/repositories/task_repository.d
 import 'package:taskinspect/features/tasks/domain/usecases/start_task.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_task_details.dart';
 import 'package:taskinspect/features/tasks/domain/usecases/watch_tasks.dart';
+
+import '../../helpers/fake_push_notifications.dart';
 
 class _FakeService {}
 
@@ -46,11 +49,17 @@ void main() {
 
   test('every dependency of the app can be built', () async {
     // The device database needs the phone's file system; use one in memory.
-    await configureDependencies(database: AppDatabase(NativeDatabase.memory()));
+    // PushTokenSource needs a real Firebase app otherwise - main() creates
+    // one before configureDependencies() runs, a unit test does not.
+    await configureDependencies(
+      database: AppDatabase(NativeDatabase.memory()),
+      pushTokenSource: FakePushTokenSource(),
+    );
 
     expect(getIt<ApiClient>(), isNotNull);
     expect(getIt<ConnectivityMonitor>(), isNotNull);
     expect(getIt<TokenStorage>(), isNotNull);
+    expect(getIt<PushNotificationService>(), isNotNull);
     expect(getIt<SyncQueue>(), isNotNull);
     expect(getIt<SyncManager>(), isNotNull);
     expect(getIt<SyncScheduler>(), isNotNull);
