@@ -10,7 +10,9 @@ spring:
       - optional:file:../.env[.properties]
       - optional:file:.env[.properties]
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskinspect}
+    # "disable" by default (Docker Postgres locally has no SSL configured);
+    # a cloud provider (Neon, task 8.9) needs DB_SSLMODE=require.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskinspect}?sslmode=${DB_SSLMODE:disable}
     username: ${DB_USERNAME:taskinspect}
     password: ${DB_PASSWORD:}
   jpa:
