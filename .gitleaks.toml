@@ -1,0 +1,21 @@
+# Extends gitleaks' default rules (task 10.5c); this file only narrows
+# known false positives, documented below - it never disables a rule
+# project-wide.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Firebase client config (google-services.json, firebase_options.dart,
+GoogleService-Info.plist when it exists): the apiKey these files carry is
+not a secret - it is meant to be embedded in the published app and is
+restricted by Firebase (package name / bundle ID, API restrictions), not
+by being kept private. See https://firebase.google.com/docs/projects/api-keys.
+Flagged as a "Google API Key" by gitleaks' default rules (task 8.4).
+"""
+paths = [
+  '''mobile/android/app/google-services\.json''',
+  '''mobile/lib/firebase_options\.dart''',
+  '''mobile/ios/Runner/GoogleService-Info\.plist''',
+]
